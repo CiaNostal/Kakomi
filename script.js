@@ -53,8 +53,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!isNaN(marginValue) && marginValue >= 0) {
                 editState.marginsPercent[e.target.id.replace('margin', '').toLowerCase()] = marginValue;
             } else { // 無効な値なら0にフォールバック
-                 editState.marginsPercent[e.target.id.replace('margin', '').toLowerCase()] = 0;
-                 e.target.value = 0; // UIも更新
+                editState.marginsPercent[e.target.id.replace('margin', '').toLowerCase()] = 0;
+                e.target.value = 0; // UIも更新
             }
             requestRedraw();
         });
@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         destWidth: img.width,   // 写真自体の描画サイズは元解像度維持
                         destHeight: img.height,
                     };
-                    
+
                     // 初期UI値をeditStateに反映 (ページ読み込み時)
                     editState.marginsPercent = {
                         top: parseFloat(marginTopInput.value) || 0,
@@ -108,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
             previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
         }
     }
-    
+
     // 再描画要求関数 (UI変更時に呼び出す)
     function requestRedraw() {
         if (!editState.image) return;
@@ -160,37 +160,52 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // プレビュー描画 (仕様書v1.4準拠)
+    // プレビュー描画 (仕様書v1.4準拠)
     function drawPreview(currentState, layoutInfo) {
         if (!currentState.image) return;
 
         const img = currentState.image;
         const { sourceX, sourceY, sourceWidth, sourceHeight,
-                destXonOutputCanvas, destYonOutputCanvas,
-                destWidth, destHeight } = layoutInfo.photoDrawConfig;
-        
+            destXonOutputCanvas, destYonOutputCanvas,
+            destWidth, destHeight } = layoutInfo.photoDrawConfig; // 正しいプロパティ名にアクセス
+
         const outputTotalWidth = layoutInfo.outputCanvasConfig.width;
         const outputTotalHeight = layoutInfo.outputCanvasConfig.height;
-        const outputAspectRatio = outputTotalWidth / outputTotalHeight;
 
-        previewCanvas.width = PREVIEW_WIDTH;
-        previewCanvas.height = PREVIEW_WIDTH / outputAspectRatio;
-        
+        // ゼロ除算を避けるため、outputTotalHeightが0の場合はアスペクト比を1とするなど適切に処理
+        const outputAspectRatio = (outputTotalHeight === 0) ? 1 : outputTotalWidth / outputTotalHeight;
+
+        // ★★★ 修正箇所 スタート ★★★
+        // 1. プレビューCanvasの現在の実際の表示幅を取得する
+        //    previewCanvas.clientWidth は、CSSによってレンダリングされた実際の幅をピクセル単位で返す
+        let currentPreviewRenderWidth = previewCanvas.clientWidth;
+
+        // 2. Canvasの描画バッファサイズを、実際の表示幅に合わせる
+        previewCanvas.width = currentPreviewRenderWidth; // これで描画バッファの幅も更新
+        if (outputTotalHeight === 0 || outputTotalWidth === 0) { // アスペクト比が不定の場合
+            previewCanvas.height = currentPreviewRenderWidth; // 例として正方形にするか、適切なデフォルト値を設定
+        } else {
+            previewCanvas.height = currentPreviewRenderWidth / outputAspectRatio;
+        }
+        // ★★★ 修正箇所 エンド ★★★
+
         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
 
-        // プレビューCanvasに対するスケーリングファクター
-        const scale = previewCanvas.width / outputTotalWidth;
+        // プレビューCanvasに対するスケーリングファクター (新しいpreviewCanvas.width基準)
+        // outputTotalWidthが0の場合のゼロ除算を避ける
+        const scale = (outputTotalWidth === 0) ? 0 : previewCanvas.width / outputTotalWidth;
+
 
         // 1. 背景色を描画 (プレビューCanvas全体に)
         previewCtx.fillStyle = currentState.backgroundColor;
         previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
 
         // 2. 写真を描画 (スケール適用)
-        //    出力Canvas上の写真の位置とサイズをプレビュー用にスケーリング
         const previewPhotoX = destXonOutputCanvas * scale;
         const previewPhotoY = destYonOutputCanvas * scale;
         const previewPhotoWidth = destWidth * scale;
         const previewPhotoHeight = destHeight * scale;
-        
+
         previewCtx.drawImage(
             img,
             sourceX, sourceY, sourceWidth, sourceHeight,
@@ -204,9 +219,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const img = currentState.image;
         const { sourceX, sourceY, sourceWidth, sourceHeight,
-                destXonOutputCanvas, destYonOutputCanvas, // これが出力Canvas上の写真の左上座標
-                destWidth, destHeight } = layoutInfo.photoDrawConfig;
-        
+            destXonOutputCanvas, destYonOutputCanvas, // これが出力Canvas上の写真の左上座標
+            destWidth, destHeight } = layoutInfo.photoDrawConfig;
+
         const outputWidth = layoutInfo.outputCanvasConfig.width;
         const outputHeight = layoutInfo.outputCanvasConfig.height;
 
@@ -222,7 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const finalDestY = Math.round(destYonOutputCanvas);
         const finalDestWidth = Math.round(destWidth); // 写真自体のサイズは元解像度なので既に整数のはず
         const finalDestHeight = Math.round(destHeight);
-        
+
         const finalSourceX = Math.round(sourceX);
         const finalSourceY = Math.round(sourceY);
         const finalSourceWidth = Math.round(sourceWidth);
@@ -251,7 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const url = URL.createObjectURL(blob);
                     let baseName = 'image';
                     if (imageLoader.files[0] && imageLoader.files[0].name) {
-                         baseName = imageLoader.files[0].name.substring(0, imageLoader.files[0].name.lastIndexOf('.')) || 'image';
+                        baseName = imageLoader.files[0].name.substring(0, imageLoader.files[0].name.lastIndexOf('.')) || 'image';
                     }
                     const fileName = `${baseName}_framed.jpg`;
 
