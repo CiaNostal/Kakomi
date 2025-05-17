@@ -4,15 +4,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const previewCanvas = document.getElementById('previewCanvas');
     const previewCtx = previewCanvas.getContext('2d');
     const downloadButton = document.getElementById('downloadButton');
-    const canvasContainer = document.querySelector('.canvas-container'); 
+    const canvasContainer = document.querySelector('.canvas-container');
 
-    // 余白と背景色UIの取得
-    const marginTopInput = document.getElementById('marginTop');
-    const marginRightInput = document.getElementById('marginRight');
-    const marginBottomInput = document.getElementById('marginBottom');
-    const marginLeftInput = document.getElementById('marginLeft');
+    // レイアウト設定タブのUI要素
+    const outputAspectRatioSelect = document.getElementById('outputAspectRatio');
+    const baseMarginPercentInput = document.getElementById('baseMarginPercent');
+    const photoZoomSlider = document.getElementById('photoZoom');
+    const photoPosXSlider = document.getElementById('photoPosX');
+    const photoPosYSlider = document.getElementById('photoPosY');
+    const photoZoomValueSpan = document.getElementById('photoZoomValue');
+    const photoPosXValueSpan = document.getElementById('photoPosXValue');
+    const photoPosYValueSpan = document.getElementById('photoPosYValue');
+
+    // 背景編集タブのUI要素 (例)
     const backgroundColorInput = document.getElementById('backgroundColor');
-    // const PREVIEW_WIDTH = 900; // これは.canvas-containerのCSSで制御する形に変更
 
     // タブ関連のDOM要素
     const tabButtons = document.querySelectorAll('.tab-button');
@@ -23,99 +28,122 @@ document.addEventListener('DOMContentLoaded', () => {
         image: null,
         originalWidth: 0,
         originalHeight: 0,
-        photoDrawConfig: { // 元画像からどの部分を、どのサイズで描画するか
-            sourceX: 0,
-            sourceY: 0,
-            sourceWidth: 0,
-            sourceHeight: 0,
-            // destXonPhotoCanvas, destYonPhotoCanvas は calculateLayout で決定 (余白を考慮)
-            destWidth: 0,
-            destHeight: 0
+        photoViewParams: { // 元画像の表示調整パラメータ
+            zoom: 1,
+            posX: 0.5, // 0 (左/上端) to 1 (右/下端), 0.5 = 中央
+            posY: 0.5
         },
-        outputCanvasConfig: { // 最終出力Canvas全体に関する情報
-            width: 0,
-            height: 0,
+        outputTargetAspectRatioString: '1:1',
+        baseMarginPercent: 5,
+        backgroundColor: '#ffffff',
+        // 以下はcalculateLayoutで設定される
+        photoDrawConfig: {
+            sourceX: 0, sourceY: 0, sourceWidth: 0, sourceHeight: 0,
+            destWidth: 0, destHeight: 0,
+            destXonOutputCanvas: 0, destYonOutputCanvas: 0
         },
-        // 余白と背景色の情報を追加
-        marginsPercent: {
-            top: parseFloat(marginTopInput.value) || 0,
-            right: parseFloat(marginRightInput.value) || 0,
-            bottom: parseFloat(marginBottomInput.value) || 0,
-            left: parseFloat(marginLeftInput.value) || 0,
-        },
-        backgroundColor: backgroundColorInput.value || '#ffffff',
+        outputCanvasConfig: { width: 0, height: 0 },
     };
 
-    // イベントリスナー
-    // imageLoader.addEventListener('change', handleImageUpload);
-    // --- イベントリスナー ---
-    imageLoader.addEventListener('change', (event) => { // ★★★ 変更: イベントオブジェクトを渡す ★★★
-        const file = event.target.files[0];
-        if (file) {
-            processImageFile(file); // ★★★ 共通処理関数を呼び出す ★★★
+    // --- 初期UI設定 ---
+    function initializeUIFromState() {
+        if (outputAspectRatioSelect) outputAspectRatioSelect.value = editState.outputTargetAspectRatioString;
+        if (baseMarginPercentInput) baseMarginPercentInput.value = editState.baseMarginPercent;
+        if (photoZoomSlider) photoZoomSlider.value = editState.photoViewParams.zoom;
+        if (photoPosXSlider) photoPosXSlider.value = editState.photoViewParams.posX;
+        if (photoPosYSlider) photoPosYSlider.value = editState.photoViewParams.posY;
+        if (backgroundColorInput) backgroundColorInput.value = editState.backgroundColor;
+        updateSliderValueDisplays();
+    }
+
+    function updateSliderValueDisplays() {
+        if (photoZoomValueSpan) photoZoomValueSpan.textContent = `${parseFloat(editState.photoViewParams.zoom).toFixed(2)}x`;
+        if (photoPosXValueSpan) {
+            const posXDisplay = Math.round((parseFloat(editState.photoViewParams.posX) - 0.5) * 2 * 100); // -100% to 100%
+             photoPosXValueSpan.textContent = posXDisplay === 0 ? '中央' : `${posXDisplay}%`;
         }
+        if (photoPosYValueSpan) {
+            const posYDisplay = Math.round((parseFloat(editState.photoViewParams.posY) - 0.5) * 2 * 100); // -100% to 100%
+            photoPosYValueSpan.textContent = posYDisplay === 0 ? '中央' : `${posYDisplay}%`;
+        }
+    }
+
+
+    // --- イベントリスナー ---
+    if (imageLoader) imageLoader.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (file) processImageFile(file);
     });
     if (downloadButton) downloadButton.addEventListener('click', handleDownload);
 
+    // ドラッグ＆ドロップ
     if (canvasContainer) {
         canvasContainer.addEventListener('dragover', (event) => {
-            event.stopPropagation();
-            event.preventDefault();
-            event.dataTransfer.dropEffect = 'copy'; // UIフィードバック（カーソル形状など）
-            canvasContainer.style.backgroundColor = '#e9e9e9'; // ドラッグ中の背景色変更 (任意)
+            event.stopPropagation(); event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+            canvasContainer.classList.add('dragover');
         });
-
         canvasContainer.addEventListener('dragleave', (event) => {
-            event.stopPropagation();
-            event.preventDefault();
-            canvasContainer.style.backgroundColor = '#f9f9f9'; // 背景色を元に戻す (任意)
+            event.stopPropagation(); event.preventDefault();
+            canvasContainer.classList.remove('dragover');
         });
-
         canvasContainer.addEventListener('drop', (event) => {
-            event.stopPropagation();
-            event.preventDefault();
-            canvasContainer.style.backgroundColor = '#f9f9f9'; // 背景色を元に戻す
-
+            event.stopPropagation(); event.preventDefault();
+            canvasContainer.classList.remove('dragover');
             const files = event.dataTransfer.files;
-            if (files.length > 0) {
-                const file = files[0]; // 最初のファイルのみ処理
-                processImageFile(file); // ★★★ 共通処理関数を呼び出す ★★★
-            }
+            if (files.length > 0) processImageFile(files[0]);
         });
     }
 
-    // タブ切り替えイベントリスナー
-    tabButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            // すべてのボタンとペインからactiveクラスを削除
-            tabButtons.forEach(btn => btn.classList.remove('active'));
-            tabPanes.forEach(pane => pane.classList.remove('active'));
-
-            // クリックされたボタンと対応するペインにactiveクラスを追加
-            button.classList.add('active');
-            const targetTabId = button.getAttribute('data-tab');
-            document.getElementById(targetTabId).classList.add('active');
-        });
+    // レイアウト設定タブのUIイベント
+    if (outputAspectRatioSelect) outputAspectRatioSelect.addEventListener('change', (e) => {
+        editState.outputTargetAspectRatioString = e.target.value;
+        requestRedraw();
+    });
+    if (baseMarginPercentInput) baseMarginPercentInput.addEventListener('input', (e) => {
+        let val = parseInt(e.target.value, 10);
+        if (isNaN(val) || val < 0) val = 0;
+        if (val > 100) val = 100;
+        e.target.value = val; // UIに反映
+        editState.baseMarginPercent = val;
+        requestRedraw();
+    });
+    if (photoZoomSlider) photoZoomSlider.addEventListener('input', (e) => {
+        editState.photoViewParams.zoom = parseFloat(e.target.value);
+        updateSliderValueDisplays();
+        requestRedraw();
+    });
+    if (photoPosXSlider) photoPosXSlider.addEventListener('input', (e) => {
+        editState.photoViewParams.posX = parseFloat(e.target.value);
+        updateSliderValueDisplays();
+        requestRedraw();
+    });
+    if (photoPosYSlider) photoPosYSlider.addEventListener('input', (e) => {
+        editState.photoViewParams.posY = parseFloat(e.target.value);
+        updateSliderValueDisplays();
+        requestRedraw();
     });
 
-    // 余白と背景色UIの変更イベント
-    [marginTopInput, marginRightInput, marginBottomInput, marginLeftInput].forEach(input => {
-        input.addEventListener('change', (e) => {
-            const marginValue = parseFloat(e.target.value);
-            if (!isNaN(marginValue) && marginValue >= 0) {
-                editState.marginsPercent[e.target.id.replace('margin', '').toLowerCase()] = marginValue;
-            } else { // 無効な値なら0にフォールバック
-                editState.marginsPercent[e.target.id.replace('margin', '').toLowerCase()] = 0;
-                e.target.value = 0; // UIも更新
-            }
-            requestRedraw();
-        });
-    });
-    backgroundColorInput.addEventListener('input', (e) => { // 'change'より'input'の方がリアルタイム
+    // 背景色 (tab-background内)
+    if (backgroundColorInput) backgroundColorInput.addEventListener('input', (e) => {
         editState.backgroundColor = e.target.value;
         requestRedraw();
     });
 
+
+    // タブ切り替え
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            tabPanes.forEach(pane => pane.classList.remove('active'));
+            button.classList.add('active');
+            const targetTabId = button.getAttribute('data-tab');
+            const targetPane = document.getElementById(targetTabId);
+            if (targetPane) targetPane.classList.add('active');
+        });
+    });
+
+    // --- 関数 ---
     function processImageFile(file) {
         if (file && file.type.startsWith('image/')) {
             const reader = new FileReader();
@@ -126,40 +154,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     editState.originalWidth = img.width;
                     editState.originalHeight = img.height;
 
-                    editState.photoDrawConfig = {
-                        sourceX: 0,
-                        sourceY: 0,
-                        sourceWidth: img.width,
-                        sourceHeight: img.height,
-                        destWidth: img.width,
-                        destHeight: img.height,
-                    };
-
-                    // UIの初期値をeditStateに反映 (もしあれば)
-                    editState.marginsPercent = {
-                        top: parseFloat(marginTopInput.value) || 0,
-                        right: parseFloat(marginRightInput.value) || 0,
-                        bottom: parseFloat(marginBottomInput.value) || 0,
-                        left: parseFloat(marginLeftInput.value) || 0,
-                    };
-                    editState.backgroundColor = backgroundColorInput.value || '#ffffff';
+                    // 新しい画像が読み込まれたら、表示調整パラメータをデフォルトにリセット
+                    editState.photoViewParams = { zoom: 1, posX: 0.5, posY: 0.5 };
+                    // editState.outputTargetAspectRatioString = '1:1'; // または現在のUIの値
+                    // editState.baseMarginPercent = 5;              // または現在のUIの値
+                    initializeUIFromState(); // UIもリセット後の値に更新
 
                     requestRedraw();
                     if (downloadButton) downloadButton.disabled = false;
-
-                    // imageLoaderの値をリセットして同じファイルを連続で選択/ドロップできるようにする
                     if (imageLoader) imageLoader.value = '';
                 };
-                img.onerror = () => {
-                    alert('画像の読み込みに失敗しました。');
-                    if (imageLoader) imageLoader.value = '';
-                };
+                img.onerror = () => { alert('画像の読み込みに失敗しました。'); if (imageLoader) imageLoader.value = ''; };
                 img.src = e.target.result;
             };
-            reader.onerror = () => {
-                alert('ファイルの読み込みに失敗しました。');
-                if (imageLoader) imageLoader.value = '';
-            };
+            reader.onerror = () => { alert('ファイルの読み込みに失敗しました。'); if (imageLoader) imageLoader.value = ''; };
             reader.readAsDataURL(file);
         } else {
             alert('画像ファイルを選択またはドラッグ＆ドロップしてください。');
@@ -167,95 +175,141 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 再描画要求関数 (UI変更時に呼び出す)
     function requestRedraw() {
         if (!editState.image) return;
         const layoutInfo = calculateLayout(editState);
-        drawPreview(editState, layoutInfo);
+        // layoutInfoをeditStateにも保存（必要なら）
+        editState.photoDrawConfig = layoutInfo.photoDrawConfig;
+        editState.outputCanvasConfig = layoutInfo.outputCanvasConfig;
+        drawPreview(editState /*, layoutInfoを渡す代わりにeditStateから直接参照しても良い*/ );
     }
 
-    // レイアウト計算 (仕様書v1.4準拠)
     function calculateLayout(currentState) {
-        const { photoDrawConfig, marginsPercent } = currentState;
-        const photoWidthPx = photoDrawConfig.destWidth;   // 写真自体の描画幅
-        const photoHeightPx = photoDrawConfig.destHeight; // 写真自体の描画高さ
+        if (!currentState.image) {
+            return {
+                photoDrawConfig: { sourceX: 0, sourceY: 0, sourceWidth: 0, sourceHeight: 0, destWidth: 0, destHeight: 0, destXonOutputCanvas: 0, destYonOutputCanvas: 0 },
+                outputCanvasConfig: { width: 300, height: 200 }
+            };
+        }
 
-        // 「構図調整後の写真の短辺の長さ」が基準
-        const baseLengthForPercentPx = Math.min(photoWidthPx, photoHeightPx);
+        const originalImgWidth = currentState.originalWidth;
+        const originalImgHeight = currentState.originalHeight;
+        const { zoom, posX, posY } = currentState.photoViewParams;
 
-        // %指定の余白をピクセル値に変換
-        const marginPxTop = Math.round(baseLengthForPercentPx * (marginsPercent.top / 100));
-        const marginPxRight = Math.round(baseLengthForPercentPx * (marginsPercent.right / 100));
-        const marginPxBottom = Math.round(baseLengthForPercentPx * (marginsPercent.bottom / 100));
-        const marginPxLeft = Math.round(baseLengthForPercentPx * (marginsPercent.left / 100));
+        // 1. 使用する写真領域の決定 (ズームとパンを適用)
+        const displaySourceWidth = originalImgWidth / zoom;
+        const displaySourceHeight = originalImgHeight / zoom;
+        const sourceX = (originalImgWidth - displaySourceWidth) * posX;
+        const sourceY = (originalImgHeight - displaySourceHeight) * posY;
 
-        // 出力用Canvasの全体寸法を計算
-        const outputCanvasWidthPx = photoWidthPx + marginPxLeft + marginPxRight;
-        const outputCanvasHeightPx = photoHeightPx + marginPxTop + marginPxBottom;
+        const trimmedPhotoWidthPx = displaySourceWidth;
+        const trimmedPhotoHeightPx = displaySourceHeight;
+        const currentPhotoAspectRatio = (trimmedPhotoHeightPx === 0) ? 1 : trimmedPhotoWidthPx / trimmedPhotoHeightPx;
 
-        // 写真の出力用Canvas上の描画開始位置
-        const photoXonCanvasPx = marginPxLeft;
-        const photoYonCanvasPx = marginPxTop;
+        // 2. 基準値の計算
+        const photoShortSidePx = Math.min(trimmedPhotoWidthPx, trimmedPhotoHeightPx);
 
+        // 3. 最小余白の計算
+        const minMarginPx = Math.round(photoShortSidePx * (currentState.baseMarginPercent / 100));
+
+        // 4. 出力Canvasの寸法決定
+        const photoDrawWidthPx = trimmedPhotoWidthPx;
+        const photoDrawHeightPx = trimmedPhotoHeightPx;
+
+        const tempWidthWithMinMargin = photoDrawWidthPx + 2 * minMarginPx;
+        const tempHeightWithMinMargin = photoDrawHeightPx + 2 * minMarginPx;
+        const tempAspectRatio = (tempHeightWithMinMargin === 0) ? 1 : tempWidthWithMinMargin / tempHeightWithMinMargin;
+
+        let outputTargetAspectRatioValue;
+        if (currentState.outputTargetAspectRatioString === 'original_photo') {
+            outputTargetAspectRatioValue = currentPhotoAspectRatio;
+        } else {
+            const parts = currentState.outputTargetAspectRatioString.split(':');
+            outputTargetAspectRatioValue = parseFloat(parts[0]) / parseFloat(parts[1]);
+        }
+        if (isNaN(outputTargetAspectRatioValue) || outputTargetAspectRatioValue <= 0) outputTargetAspectRatioValue = 1;
+
+        let outputCanvasWidthPx;
+        let outputCanvasHeightPx;
+
+        if (tempHeightWithMinMargin <= 0 || outputTargetAspectRatioValue <= 0 || tempWidthWithMinMargin <= 0) {
+            outputCanvasWidthPx = Math.max(1, tempWidthWithMinMargin);
+            outputCanvasHeightPx = Math.max(1, tempHeightWithMinMargin > 0 ? tempHeightWithMinMargin : outputCanvasWidthPx / outputTargetAspectRatioValue );
+             if (outputCanvasHeightPx <= 0) outputCanvasHeightPx = outputCanvasWidthPx; // さらにフォールバック
+        } else if (tempAspectRatio > outputTargetAspectRatioValue) {
+            outputCanvasWidthPx = tempWidthWithMinMargin;
+            outputCanvasHeightPx = Math.round(tempWidthWithMinMargin / outputTargetAspectRatioValue);
+        } else {
+            outputCanvasHeightPx = tempHeightWithMinMargin;
+            outputCanvasWidthPx = Math.round(tempHeightWithMinMargin * outputTargetAspectRatioValue);
+        }
+        
+        outputCanvasWidthPx = Math.max(outputCanvasWidthPx, Math.round(photoDrawWidthPx));
+        outputCanvasHeightPx = Math.max(outputCanvasHeightPx, Math.round(photoDrawHeightPx));
+        if (outputCanvasWidthPx <=0) outputCanvasWidthPx = 1;
+        if (outputCanvasHeightPx <=0) outputCanvasHeightPx = 1;
+
+
+        // 5. 写真の描画位置決定 (常に中央揃え)
+        const photoXonCanvasPx = (outputCanvasWidthPx - photoDrawWidthPx) / 2;
+        const photoYonCanvasPx = (outputCanvasHeightPx - photoDrawHeightPx) / 2;
+        
         return {
-            photoDrawConfig: { // 元のphotoDrawConfigに描画位置情報を追加
-                ...photoDrawConfig,
-                destXonOutputCanvas: photoXonCanvasPx, // 出力Canvas上のX
-                destYonOutputCanvas: photoYonCanvasPx  // 出力Canvas上のY
+            photoDrawConfig: {
+                sourceX: Math.round(sourceX),
+                sourceY: Math.round(sourceY),
+                sourceWidth: Math.round(trimmedPhotoWidthPx),
+                sourceHeight: Math.round(trimmedPhotoHeightPx),
+                destWidth: Math.round(photoDrawWidthPx),
+                destHeight: Math.round(photoDrawHeightPx),
+                destXonOutputCanvas: Math.round(photoXonCanvasPx),
+                destYonOutputCanvas: Math.round(photoYonCanvasPx)
             },
             outputCanvasConfig: {
-                width: outputCanvasWidthPx,
-                height: outputCanvasHeightPx,
-            },
-            marginsPx: { // デバッグや他の描画で使う可能性があるので保持
-                top: marginPxTop,
-                right: marginPxRight,
-                bottom: marginPxBottom,
-                left: marginPxLeft,
-            },
-            baseLengthForPercentPx: baseLengthForPercentPx
+                width: Math.round(outputCanvasWidthPx),
+                height: Math.round(outputCanvasHeightPx),
+            }
         };
     }
 
-
-    // drawPreview 関数の修正 (PREVIEW_WIDTHを使わないようにする)
-    function drawPreview(currentState, layoutInfo) {
-        if (!currentState.image) return;
+    function drawPreview(currentState /*, layoutInfo を使わずcurrentStateから取得 */) {
+        if (!currentState.image) {
+            previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+            return;
+        }
 
         const img = currentState.image;
+        // editStateに保存された最新のレイアウト情報を使用
         const { sourceX, sourceY, sourceWidth, sourceHeight,
-            destXonOutputCanvas, destYonOutputCanvas,
-            destWidth, destHeight } = layoutInfo.photoDrawConfig;
-
-        const outputTotalWidth = layoutInfo.outputCanvasConfig.width;
-        const outputTotalHeight = layoutInfo.outputCanvasConfig.height;
-
+                destXonOutputCanvas, destYonOutputCanvas,
+                destWidth, destHeight } = currentState.photoDrawConfig;
+        
+        const outputTotalWidth = currentState.outputCanvasConfig.width;
+        const outputTotalHeight = currentState.outputCanvasConfig.height;
+        
         const outputAspectRatio = (outputTotalHeight === 0 || outputTotalWidth === 0) ? 1 : outputTotalWidth / outputTotalHeight;
 
-        // previewCanvasの親要素(.canvas-container)のサイズを取得
         const container = previewCanvas.parentElement;
         const containerWidth = container.clientWidth;
         const containerHeight = container.clientHeight;
 
         let canvasRenderWidth, canvasRenderHeight;
-
-        // コンテナのアスペクト比と画像のアスペクト比を比較してサイズ決定
-        if (containerWidth / containerHeight > outputAspectRatio) {
-            // コンテナが横長（または画像が縦長）=> 高さを合わせる
+        if (containerWidth <=0 || containerHeight <=0 ) { // コンテナサイズが取れない場合
+            canvasRenderWidth = 300; canvasRenderHeight = 200; // 適当なデフォルト
+        } else if (containerWidth / containerHeight > outputAspectRatio) {
             canvasRenderHeight = containerHeight;
             canvasRenderWidth = containerHeight * outputAspectRatio;
         } else {
-            // コンテナが縦長（または画像が横長）=> 幅を合わせる
             canvasRenderWidth = containerWidth;
             canvasRenderHeight = containerWidth / outputAspectRatio;
         }
-
-        previewCanvas.width = Math.floor(canvasRenderWidth); // 整数化
-        previewCanvas.height = Math.floor(canvasRenderHeight); // 整数化
-
+        
+        previewCanvas.width = Math.max(1, Math.floor(canvasRenderWidth));
+        previewCanvas.height = Math.max(1, Math.floor(canvasRenderHeight));
+        
         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
 
-        const scale = previewCanvas.width / outputTotalWidth; // outputTotalWidth が 0 の場合のケアはアスペクト比計算時に実施済み
+        const scale = (outputTotalWidth === 0) ? 0 : previewCanvas.width / outputTotalWidth;
 
         previewCtx.fillStyle = currentState.backgroundColor;
         previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
@@ -264,50 +318,44 @@ document.addEventListener('DOMContentLoaded', () => {
         const previewPhotoY = destYonOutputCanvas * scale;
         const previewPhotoWidth = destWidth * scale;
         const previewPhotoHeight = destHeight * scale;
-
-        previewCtx.drawImage(
-            img,
-            sourceX, sourceY, sourceWidth, sourceHeight,
-            previewPhotoX, previewPhotoY, previewPhotoWidth, previewPhotoHeight
-        );
+        
+        if (sourceWidth > 0 && sourceHeight > 0 && destWidth > 0 && destHeight > 0 && previewPhotoWidth > 0 && previewPhotoHeight > 0) {
+            previewCtx.drawImage(
+                img,
+                sourceX, sourceY, sourceWidth, sourceHeight,
+                previewPhotoX, previewPhotoY, previewPhotoWidth, previewPhotoHeight
+            );
+        }
     }
 
-    // 最終レンダリング (仕様書v1.4準拠)
-    function renderFinal(currentState, layoutInfo) {
+    function renderFinal(currentState) {
         if (!currentState.image) return null;
 
         const img = currentState.image;
         const { sourceX, sourceY, sourceWidth, sourceHeight,
-            destXonOutputCanvas, destYonOutputCanvas, // これが出力Canvas上の写真の左上座標
-            destWidth, destHeight } = layoutInfo.photoDrawConfig;
+                destXonOutputCanvas, destYonOutputCanvas,
+                destWidth, destHeight } = currentState.photoDrawConfig;
+        
+        const outputWidth = currentState.outputCanvasConfig.width;
+        const outputHeight = currentState.outputCanvasConfig.height;
 
-        const outputWidth = layoutInfo.outputCanvasConfig.width;
-        const outputHeight = layoutInfo.outputCanvasConfig.height;
+        if (outputWidth <= 0 || outputHeight <= 0 || sourceWidth <= 0 || sourceHeight <= 0 || destWidth <= 0 || destHeight <= 0) {
+            console.error("Render Final: Invalid dimensions for canvas or image.", currentState.outputCanvasConfig, currentState.photoDrawConfig);
+            return null;
+        }
 
         const offscreenCanvas = new OffscreenCanvas(outputWidth, outputHeight);
         const ctx = offscreenCanvas.getContext('2d');
 
-        // 1. 背景色を描画 (出力Canvas全体に)
         ctx.fillStyle = currentState.backgroundColor;
         ctx.fillRect(0, 0, outputWidth, outputHeight);
 
-        // 2. 写真描画: 「数値精度と丸め処理に関するポリシー」に従い、整数化
-        const finalDestX = Math.round(destXonOutputCanvas);
-        const finalDestY = Math.round(destYonOutputCanvas);
-        const finalDestWidth = Math.round(destWidth); // 写真自体のサイズは元解像度なので既に整数のはず
-        const finalDestHeight = Math.round(destHeight);
-
-        const finalSourceX = Math.round(sourceX);
-        const finalSourceY = Math.round(sourceY);
-        const finalSourceWidth = Math.round(sourceWidth);
-        const finalSourceHeight = Math.round(sourceHeight);
-
+        // destX/Y/Width/Height は既に整数化されている想定 (calculateLayoutの戻り値)
         ctx.drawImage(
             img,
-            finalSourceX, finalSourceY, finalSourceWidth, finalSourceHeight,
-            finalDestX, finalDestY, finalDestWidth, finalDestHeight
+            sourceX, sourceY, sourceWidth, sourceHeight,
+            destXonOutputCanvas, destYonOutputCanvas, destWidth, destHeight
         );
-
         return offscreenCanvas;
     }
 
@@ -316,8 +364,9 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('画像が選択されていません。');
             return;
         }
-        const layoutInfo = calculateLayout(editState); // 最新のレイアウト情報を取得
-        const finalCanvas = renderFinal(editState, layoutInfo);
+        // calculateLayoutを再度呼び出すか、editStateに保存された最新のconfigを使う
+        // requestRedrawでeditStateが更新されているので、それを使う
+        const finalCanvas = renderFinal(editState);
 
         if (finalCanvas) {
             finalCanvas.convertToBlob({ type: 'image/jpeg', quality: 1.0 })
@@ -325,9 +374,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     const url = URL.createObjectURL(blob);
                     let baseName = 'image';
                     if (imageLoader.files[0] && imageLoader.files[0].name) {
-                        baseName = imageLoader.files[0].name.substring(0, imageLoader.files[0].name.lastIndexOf('.')) || 'image';
+                         baseName = imageLoader.files[0].name.substring(0, imageLoader.files[0].name.lastIndexOf('.')) || 'image';
                     }
-                    const fileName = `${baseName}_framed.jpg`;
+                    const fileName = `${baseName}_kakomi_framed.jpg`; // 少しファイル名変更
 
                     const a = document.createElement('a');
                     a.href = url;
@@ -337,7 +386,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.body.removeChild(a);
                     URL.revokeObjectURL(url);
                 })
-                .catch(err => console.error('画像のダウンロードに失敗しました:', err));
+                .catch(err => {
+                    console.error('画像のダウンロードに失敗しました:', err);
+                    alert('画像のダウンロードに失敗しました。コンソールを確認してください。');
+                });
+        } else {
+            alert('出力用Canvasの生成に失敗しました。');
         }
+    }
+
+    // 初期化
+    initializeUIFromState();
+    if (tabButtons.length > 0) {
+        tabButtons[0].click(); // 最初のタブをアクティブに
     }
 });

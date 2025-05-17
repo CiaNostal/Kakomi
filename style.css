@@ -6,31 +6,31 @@
 }
 
 body {
-    font-family: sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
     background-color: #f0f2f5;
-    /* 少し落ち着いた背景色 */
-    color: #333;
-    line-height: 1.6;
+    color: #1c1e21; /* Facebook風の濃いグレー */
+    line-height: 1.5; /* 少し広めに */
+    font-size: 14px; /* ベースフォントサイズ */
 }
 
 .app-container {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    /* 画面全体の高さを使う */
 }
 
 .app-header {
-    background-color: #333;
+    background-color: #4267B2; /* Facebook風の青 */
     color: #fff;
-    padding: 1rem;
+    padding: 0.8rem 1rem;
     text-align: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    font-size: 1.2rem;
 }
 
 .main-content {
     display: flex;
     flex: 1;
-    /* ヘッダー以外の残りの高さを全て使う */
     padding: 1rem;
     gap: 1rem;
 }
@@ -40,11 +40,9 @@ body {
     background-color: #fff;
     padding: 1rem;
     border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    width: 500px;
-    /* コントロールエリアの幅を固定 */
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    width: 360px; /* 少し幅を広げる */
     overflow-y: auto;
-    /* 内容が多い場合にスクロール */
     display: flex;
     flex-direction: column;
 }
@@ -52,230 +50,224 @@ body {
 .tab-navigation {
     display: flex;
     margin-bottom: 1rem;
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid #dddfe2; /* Facebook風の区切り線 */
 }
 
 .tab-button {
-    padding: 0.75rem 1rem;
+    flex: 1; /* タブボタンを均等幅に */
+    padding: 0.8rem 0.5rem; /* パディング調整 */
     border: none;
     background-color: transparent;
     cursor: pointer;
     font-size: 0.9rem;
-    color: #555;
+    color: #606770; /* Facebook風の非アクティブタブテキスト色 */
     border-bottom: 3px solid transparent;
-    /* アクティブタブ用の下線スペース */
-    transition: color 0.3s, border-color 0.3s;
+    text-align: center; /* テキスト中央揃え */
+    transition: color 0.2s, border-color 0.2s;
+    font-weight: 600; /* 少し太めに */
 }
 
 .tab-button:hover {
-    color: #007bff;
+    background-color: #f5f6f7; /* ホバー時の背景色 */
+    color: #333;
 }
 
 .tab-button.active {
-    color: #007bff;
-    border-bottom-color: #007bff;
-    font-weight: bold;
+    color: #1877f2; /* Facebook風のアクティブタブ色 */
+    border-bottom-color: #1877f2;
 }
 
 .tab-content-area .tab-pane {
     display: none;
-    /* 非アクティブなタブは隠す */
-    animation: fadeIn 0.5s;
-    /* 簡単なフェードインアニメーション */
+    animation: fadeIn 0.3s;
 }
 
 .tab-content-area .tab-pane.active {
     display: block;
-    /* アクティブなタブのみ表示 */
 }
 
 @keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-
-    to {
-        opacity: 1;
-    }
+    from { opacity: 0; transform: translateY(5px); } /* 少しY移動 */
+    to { opacity: 1; transform: translateY(0); }
 }
 
 fieldset {
-    border: 1px solid #e0e0e0;
-    padding: 0.75rem;
-    border-radius: 5px;
-    margin-bottom: 1rem;
+    border: 1px solid #dddfe2;
+    padding: 1rem; /* パディングを大きく */
+    border-radius: 6px; /* 角丸を少し */
+    margin-bottom: 1.2rem; /* fieldset間のマージン */
 }
 
 fieldset legend {
-    font-weight: bold;
-    color: #333;
+    font-weight: 600; /* 太字 */
+    color: #1c1e21;
     padding: 0 0.5rem;
+    font-size: 1rem; /* 少し大きく */
+    margin-left: 0.2rem; /* 若干左に */
 }
 
 fieldset div {
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.8rem; /* 各設定項目のマージン */
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
+fieldset div:last-child {
+    margin-bottom: 0; /* 最後の要素のマージンをなくす */
+}
 
 fieldset label {
-    margin-right: 0.5rem;
-    font-size: 0.9rem;
+    margin-right: 0.8rem; /* ラベルと入力欄の間隔 */
+    font-size: 0.875rem; /* 少し小さめ */
+    color: #606770;
 }
-
-input[type="number"],
-input[type="color"],
-input[type="file"] {
-    padding: 0.4rem;
-    border-radius: 3px;
-    border: 1px solid #ccc;
-    font-size: 0.9rem;
+input[type="number"], input[type="color"], input[type="file"], select {
+    padding: 0.5rem; /* パディングを統一 */
+    border-radius: 4px;
+    border: 1px solid #ccd0d5; /* Facebook風のボーダー色 */
+    font-size: 0.875rem;
+    flex-grow: 1; /* 入力欄がスペースを埋めるように */
 }
-
-input[type="number"] {
-    width: 70px;
+input[type="range"] {
+    flex-grow: 1;
+    margin: 0 0.5rem; /* スライダーの左右に少しマージン */
 }
+input[type="number"] { width: 80px; flex-grow: 0; } /* numberは幅固定 */
+input[type="color"] { height: 2.2rem; width: 80px; padding: 0.2rem; flex-grow: 0;}
+select { width: auto; } /* selectは内容に合わせるか、flex-grow:1 */
 
-input[type="color"] {
-    height: 2rem;
-    width: 70px;
-    padding: 0.1rem;
+/* 値表示用span */
+fieldset div span {
+    font-size: 0.8rem;
+    color: #606770;
+    min-width: 40px; /* 幅を確保してガタつきを防ぐ */
+    text-align: right;
 }
 
 
 /* 右側のプレビュー＋Exifエリア */
 .preview-exif-area {
     flex: 1;
-    /* 残りの幅を全て使う */
     display: flex;
     flex-direction: column;
     gap: 1rem;
 }
 
-.preview-section,
-.exif-section {
+.preview-section, .exif-section {
     background-color: #fff;
     padding: 1rem;
     border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
-
 .preview-section {
     flex: 3;
-    /* プレビューをExifより大きく取る例 */
     display: flex;
     flex-direction: column;
 }
-
 .exif-section {
     flex: 1;
     overflow-y: auto;
-    /* Exif情報が多い場合にスクロール */
 }
 
-.preview-section h2,
-.exif-section h2 {
-    margin-bottom: 0.75rem;
+.preview-section h2, .exif-section h2 {
+    margin-bottom: 0.8rem;
     font-size: 1.1rem;
-    color: #333;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 0.5rem;
+    color: #1c1e21;
+    border-bottom: 1px solid #dddfe2;
+    padding-bottom: 0.6rem;
 }
 
 .image-loader-container {
     margin-bottom: 1rem;
-    /* Canvasとの間に少しマージン */
-    padding: 0.5rem;
-    border: 2px dashed #ccc;
-    /* ドラッグ＆ドロップエリアっぽく */
-    background-color: #f9f9f9;
+    padding: 0.8rem;
+    border: 2px dashed #ccd0d5;
+    background-color: #f5f6f7;
     text-align: center;
+    border-radius: 6px;
 }
-
 .image-loader-container label {
     display: block;
     margin-bottom: 0.5rem;
     font-size: 0.9rem;
+    color: #606770;
+    font-weight: 600;
 }
+#imageLoader { width: calc(100% - 1rem); margin: 0 auto; }
+
 
 .canvas-container {
     width: 100%;
-    /* 親要素(.preview-section)の幅に合わせる */
-    /* height: 500px; */
-    /* または特定の高さを指定するか、JSでアスペクト比を保つ */
     flex: 1;
-    /* .preview-section の中で残りの高さを全て使う */
     display: flex;
     justify-content: center;
     align-items: center;
-    border: 1px solid #ddd;
-    /* Canvasコンテナの枠線を薄く */
-    background-color: #f9f9f9;
-    /* Canvasコンテナの背景色 */
+    border: 1px solid #dddfe2;
+    background-color: #e9ebee; /* 少し濃い背景色 */
     overflow: hidden;
-    /* Canvasがはみ出ないように */
+    border-radius: 6px; /* Canvasコンテナにも角丸 */
+}
+/* ドラッグオーバー時のスタイル */
+.canvas-container.dragover {
+    background-color: #d0d4d9;
+    border-color: #1877f2;
 }
 
 #previewCanvas {
     display: block;
     max-width: 100%;
-    /* canvas-containerの幅に収まるように */
     max-height: 100%;
-    /* canvas-containerの高さに収まるように */
     object-fit: contain;
-    /* アスペクト比を保って収める */
-    border: 1px solid #000;
-    /* 黒線でみやすくする */
+    border: 1px solid #000; /* ユーザー指定の黒線 */
+    box-shadow: 0 0 5px rgba(0,0,0,0.1); /* Canvasに少し影 */
 }
 
 #downloadButton {
-    /* 出力タブ内に移動したので、スタイル調整が必要なら別途 */
     padding: 0.75rem 1.5rem;
-    background-color: #28a745;
-    /* 緑色系 */
+    background-color: #42b72a; /* Facebook風の緑ボタン */
     color: white;
     border: none;
-    border-radius: 5px;
+    border-radius: 6px;
     cursor: pointer;
     font-size: 1rem;
-    transition: background-color 0.3s;
+    font-weight: 600;
+    transition: background-color 0.2s;
+    width: 100%; /* ボタン幅を100%に */
+    margin-top: 0.5rem;
+}
+#downloadButton:disabled { background-color: #ccd0d5; cursor: not-allowed; }
+#downloadButton:hover:not(:disabled) { background-color: #36a420; }
+
+#exifDataContainer p {
+    font-size: 0.875rem;
+    color: #606770;
 }
 
-#downloadButton:disabled {
-    background-color: #bdc3c7;
-    cursor: not-allowed;
-}
 
-#downloadButton:hover:not(:disabled) {
-    background-color: #218838;
-}
-
-
-/* レスポンシブ対応: 幅が狭い画面では縦積みにする */
+/* レスポンシブ対応 */
 @media (max-width: 1024px) {
-
-    /* このブレークポイントは調整してください */
     .main-content {
         flex-direction: column;
     }
-
     .controls-area {
         width: 100%;
-        /* 幅を100%に */
         margin-bottom: 1rem;
-        max-height: 50vh;
-        /* 高さに制限を設けてスクロールさせるなど */
+        max-height: none; /* 縦積みの場合は高さ制限をなくす */
+        order: 2; /* コントロールを下に */
     }
-
     .preview-exif-area {
         width: 100%;
+        order: 1; /* プレビューを上に */
     }
-
-    .canvas-container {
-        width: 100%;
-        /* 親に追従 */
-        height: 400px;
-        /* 高さを調整 */
+    .preview-section {
+      min-height: 300px; /* スマホでもある程度のプレビュー高さを確保 */
     }
+}
+@media (max-width: 768px) {
+    .app-header { font-size: 1rem; padding: 0.6rem 1rem; }
+    .main-content { padding: 0.5rem; gap: 0.5rem; }
+    .controls-area, .preview-section, .exif-section { padding: 0.8rem; }
+    .tab-button { padding: 0.6rem 0.3rem; font-size: 0.8rem;}
+    fieldset { padding: 0.8rem; }
+    fieldset legend { font-size: 0.9rem; }
+    /* 他の要素も必要に応じてフォントサイズやパディングを調整 */
 }
