@@ -1,101 +1,265 @@
+/* 基本リセットと全体設定 */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
 body {
     font-family: sans-serif;
-    margin: 20px;
-    background-color: #f4f4f4;
+    background-color: #f0f2f5;
+    /* 少し落ち着いた背景色 */
     color: #333;
-    display: flex; /* 全体を横並びに */
-    gap: 20px; /* 要素間のスペース */
+    line-height: 1.6;
 }
 
-.controls { /* 設定項目をまとめるコンテナ */
+.app-container {
     display: flex;
     flex-direction: column;
-    gap: 15px;
-    width: 300px; /* コントロールエリアの幅 */
+    min-height: 100vh;
+    /* 画面全体の高さを使う */
 }
 
-h1, h2 {
-    color: #2c3e50;
-    width: 100%; /* h1はflexアイテムではないので幅指定 */
-}
-/* h1をflexレイアウトの外に出すか、bodyのflex設定を見直すか検討できますが、今回は簡易的に */
-body > h1 {
-    flex-basis: 100%; /* body直下のh1を1行使う */
+.app-header {
+    background-color: #333;
+    color: #fff;
+    padding: 1rem;
+    text-align: center;
 }
 
-
-input[type="file"] {
-    margin-bottom: 10px;
+.main-content {
+    display: flex;
+    flex: 1;
+    /* ヘッダー以外の残りの高さを全て使う */
+    padding: 1rem;
+    gap: 1rem;
 }
 
-fieldset { /* UIグループ化のためのスタイル */
-    border: 1px solid #ccc;
-    padding: 10px;
+/* 左側のコントロールエリア */
+.controls-area {
+    background-color: #fff;
+    padding: 1rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    width: 500px;
+    /* コントロールエリアの幅を固定 */
+    overflow-y: auto;
+    /* 内容が多い場合にスクロール */
+    display: flex;
+    flex-direction: column;
+}
+
+.tab-navigation {
+    display: flex;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid #ddd;
+}
+
+.tab-button {
+    padding: 0.75rem 1rem;
+    border: none;
+    background-color: transparent;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: #555;
+    border-bottom: 3px solid transparent;
+    /* アクティブタブ用の下線スペース */
+    transition: color 0.3s, border-color 0.3s;
+}
+
+.tab-button:hover {
+    color: #007bff;
+}
+
+.tab-button.active {
+    color: #007bff;
+    border-bottom-color: #007bff;
+    font-weight: bold;
+}
+
+.tab-content-area .tab-pane {
+    display: none;
+    /* 非アクティブなタブは隠す */
+    animation: fadeIn 0.5s;
+    /* 簡単なフェードインアニメーション */
+}
+
+.tab-content-area .tab-pane.active {
+    display: block;
+    /* アクティブなタブのみ表示 */
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+fieldset {
+    border: 1px solid #e0e0e0;
+    padding: 0.75rem;
     border-radius: 5px;
-    margin-bottom: 10px;
+    margin-bottom: 1rem;
 }
 
 fieldset legend {
     font-weight: bold;
-    color: #34495e;
+    color: #333;
+    padding: 0 0.5rem;
 }
 
 fieldset div {
-    margin-bottom: 5px;
+    margin-bottom: 0.5rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
 fieldset label {
-    margin-right: 5px;
+    margin-right: 0.5rem;
+    font-size: 0.9rem;
 }
 
-input[type="number"], input[type="color"] {
-    padding: 5px;
+input[type="number"],
+input[type="color"],
+input[type="file"] {
+    padding: 0.4rem;
     border-radius: 3px;
     border: 1px solid #ccc;
+    font-size: 0.9rem;
 }
+
 input[type="number"] {
-    width: 60px; /* number入力の幅 */
+    width: 70px;
+}
+
+input[type="color"] {
+    height: 2rem;
+    width: 70px;
+    padding: 0.1rem;
 }
 
 
-.preview-area { /* プレビューエリアのコンテナ */
+/* 右側のプレビュー＋Exifエリア */
+.preview-exif-area {
+    flex: 1;
+    /* 残りの幅を全て使う */
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.preview-section,
+.exif-section {
+    background-color: #fff;
+    padding: 1rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.preview-section {
+    flex: 3;
+    /* プレビューをExifより大きく取る例 */
     display: flex;
     flex-direction: column;
 }
 
+.exif-section {
+    flex: 1;
+    overflow-y: auto;
+    /* Exif情報が多い場合にスクロール */
+}
+
+.preview-section h2,
+.exif-section h2 {
+    margin-bottom: 0.75rem;
+    font-size: 1.1rem;
+    color: #333;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 0.5rem;
+}
 
 .canvas-container {
-    width: 900px; /* 仕様書v1.4のプレビュー幅目安 */
-    /* margin-bottom: 20px; */ /* bodyのgapで調整 */
-    border: 1px solid #ccc;
-    background-color: #fff;
+    width: 100%;
+    /* 親要素(.preview-section)の幅に合わせる */
+    /* height: 500px; */
+    /* または特定の高さを指定するか、JSでアスペクト比を保つ */
+    flex: 1;
+    /* .preview-section の中で残りの高さを全て使う */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 1px solid #ddd;
+    /* Canvasコンテナの枠線を薄く */
+    background-color: #f9f9f9;
+    /* Canvasコンテナの背景色 */
+    overflow: hidden;
+    /* Canvasがはみ出ないように */
 }
 
 #previewCanvas {
     display: block;
     max-width: 100%;
+    /* canvas-containerの幅に収まるように */
+    max-height: 100%;
+    /* canvas-containerの高さに収まるように */
+    object-fit: contain;
+    /* アスペクト比を保って収める */
+    border: 1px solid #000;
+    /* 黒線でみやすくする */
 }
 
-
-button {
-    padding: 10px 15px;
-    background-color: #3498db;
+#downloadButton {
+    /* 出力タブ内に移動したので、スタイル調整が必要なら別途 */
+    padding: 0.75rem 1.5rem;
+    background-color: #28a745;
+    /* 緑色系 */
     color: white;
     border: none;
     border-radius: 5px;
     cursor: pointer;
-    font-size: 16px;
-    margin-top: 10px; /* ボタンの上のスペース */
+    font-size: 1rem;
+    transition: background-color 0.3s;
 }
 
-button:disabled {
+#downloadButton:disabled {
     background-color: #bdc3c7;
     cursor: not-allowed;
 }
 
-button:hover:not(:disabled) {
-    background-color: #2980b9;
+#downloadButton:hover:not(:disabled) {
+    background-color: #218838;
+}
+
+
+/* レスポンシブ対応: 幅が狭い画面では縦積みにする */
+@media (max-width: 1024px) {
+
+    /* このブレークポイントは調整してください */
+    .main-content {
+        flex-direction: column;
+    }
+
+    .controls-area {
+        width: 100%;
+        /* 幅を100%に */
+        margin-bottom: 1rem;
+        max-height: 50vh;
+        /* 高さに制限を設けてスクロールさせるなど */
+    }
+
+    .preview-exif-area {
+        width: 100%;
+    }
+
+    .canvas-container {
+        width: 100%;
+        /* 親に追従 */
+        height: 400px;
+        /* 高さを調整 */
+    }
 }

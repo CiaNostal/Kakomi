@@ -11,8 +11,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const marginBottomInput = document.getElementById('marginBottom');
     const marginLeftInput = document.getElementById('marginLeft');
     const backgroundColorInput = document.getElementById('backgroundColor');
+    // const PREVIEW_WIDTH = 900; // これは.canvas-containerのCSSで制御する形に変更
 
-    const PREVIEW_WIDTH = 900;
+    // タブ関連のDOM要素
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabPanes = document.querySelectorAll('.tab-pane');
 
     // 編集状態を一元管理するオブジェクト
     let editState = {
@@ -45,6 +48,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // イベントリスナー
     imageLoader.addEventListener('change', handleImageUpload);
     downloadButton.addEventListener('click', handleDownload);
+    // タブ切り替えイベントリスナー
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            // すべてのボタンとペインからactiveクラスを削除
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            tabPanes.forEach(pane => pane.classList.remove('active'));
+
+            // クリックされたボタンと対応するペインにactiveクラスを追加
+            button.classList.add('active');
+            const targetTabId = button.getAttribute('data-tab');
+            document.getElementById(targetTabId).classList.add('active');
+        });
+    });
 
     // 余白と背景色UIの変更イベント
     [marginTopInput, marginRightInput, marginBottomInput, marginLeftInput].forEach(input => {
@@ -159,48 +175,49 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // プレビュー描画 (仕様書v1.4準拠)
-    // プレビュー描画 (仕様書v1.4準拠)
+
+    // drawPreview 関数の修正 (PREVIEW_WIDTHを使わないようにする)
     function drawPreview(currentState, layoutInfo) {
         if (!currentState.image) return;
 
         const img = currentState.image;
         const { sourceX, sourceY, sourceWidth, sourceHeight,
             destXonOutputCanvas, destYonOutputCanvas,
-            destWidth, destHeight } = layoutInfo.photoDrawConfig; // 正しいプロパティ名にアクセス
+            destWidth, destHeight } = layoutInfo.photoDrawConfig;
 
         const outputTotalWidth = layoutInfo.outputCanvasConfig.width;
         const outputTotalHeight = layoutInfo.outputCanvasConfig.height;
 
-        // ゼロ除算を避けるため、outputTotalHeightが0の場合はアスペクト比を1とするなど適切に処理
-        const outputAspectRatio = (outputTotalHeight === 0) ? 1 : outputTotalWidth / outputTotalHeight;
+        const outputAspectRatio = (outputTotalHeight === 0 || outputTotalWidth === 0) ? 1 : outputTotalWidth / outputTotalHeight;
 
-        // ★★★ 修正箇所 スタート ★★★
-        // 1. プレビューCanvasの現在の実際の表示幅を取得する
-        //    previewCanvas.clientWidth は、CSSによってレンダリングされた実際の幅をピクセル単位で返す
-        let currentPreviewRenderWidth = previewCanvas.clientWidth;
+        // previewCanvasの親要素(.canvas-container)のサイズを取得
+        const container = previewCanvas.parentElement;
+        const containerWidth = container.clientWidth;
+        const containerHeight = container.clientHeight;
 
-        // 2. Canvasの描画バッファサイズを、実際の表示幅に合わせる
-        previewCanvas.width = currentPreviewRenderWidth; // これで描画バッファの幅も更新
-        if (outputTotalHeight === 0 || outputTotalWidth === 0) { // アスペクト比が不定の場合
-            previewCanvas.height = currentPreviewRenderWidth; // 例として正方形にするか、適切なデフォルト値を設定
+        let canvasRenderWidth, canvasRenderHeight;
+
+        // コンテナのアスペクト比と画像のアスペクト比を比較してサイズ決定
+        if (containerWidth / containerHeight > outputAspectRatio) {
+            // コンテナが横長（または画像が縦長）=> 高さを合わせる
+            canvasRenderHeight = containerHeight;
+            canvasRenderWidth = containerHeight * outputAspectRatio;
         } else {
-            previewCanvas.height = currentPreviewRenderWidth / outputAspectRatio;
+            // コンテナが縦長（または画像が横長）=> 幅を合わせる
+            canvasRenderWidth = containerWidth;
+            canvasRenderHeight = containerWidth / outputAspectRatio;
         }
-        // ★★★ 修正箇所 エンド ★★★
+
+        previewCanvas.width = Math.floor(canvasRenderWidth); // 整数化
+        previewCanvas.height = Math.floor(canvasRenderHeight); // 整数化
 
         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
 
-        // プレビューCanvasに対するスケーリングファクター (新しいpreviewCanvas.width基準)
-        // outputTotalWidthが0の場合のゼロ除算を避ける
-        const scale = (outputTotalWidth === 0) ? 0 : previewCanvas.width / outputTotalWidth;
+        const scale = previewCanvas.width / outputTotalWidth; // outputTotalWidth が 0 の場合のケアはアスペクト比計算時に実施済み
 
-
-        // 1. 背景色を描画 (プレビューCanvas全体に)
         previewCtx.fillStyle = currentState.backgroundColor;
         previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
 
-        // 2. 写真を描画 (スケール適用)
         const previewPhotoX = destXonOutputCanvas * scale;
         const previewPhotoY = destYonOutputCanvas * scale;
         const previewPhotoWidth = destWidth * scale;
