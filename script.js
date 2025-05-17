@@ -318,6 +318,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const photoXonCanvasPx = movableWidth * offsetX;
         const photoYonCanvasPx = movableHeight * offsetY;
 
+        // デバッグ用
+        console.log('--- calculateLayout ---');
+        console.log('Output Target Aspect Ratio String:', currentState.outputTargetAspectRatioString);
+        console.log('Base Margin Percent:', currentState.baseMarginPercent);
+        console.log('Photo Offset X/Y:', currentState.photoViewParams.offsetX, currentState.photoViewParams.offsetY);
+        console.log('Calculated Photo Draw Config (dest):', {
+            width: Math.round(photoDrawWidthPx), height: Math.round(photoDrawHeightPx),
+            x: Math.round(photoXonCanvasPx), y: Math.round(photoYonCanvasPx)
+        });
+        console.log('Calculated Output Canvas Config:', {
+            width: Math.round(outputCanvasWidthPx), height: Math.round(outputCanvasHeightPx)
+        });
+        //ここまで
+
         return {
             photoDrawConfig: {
                 sourceX: Math.round(sourceX),
@@ -396,10 +410,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // drawPreview, renderFinal, handleDownload 関数は前回提示したものから大きなロジック変更なし
     // (calculateLayoutの戻り値の構造が変わらなければ、そのまま動作するはず)
     function drawPreview(currentState) {
+        if (!currentState.image) { /* ... */ return; }
+        const img = currentState.image;
         if (!currentState.outputCanvasConfig || currentState.outputCanvasConfig.width === 0) { // レイアウト未計算
             previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
             return;
-        } const img = currentState.image;
+        }
         const { sourceX, sourceY, sourceWidth, sourceHeight,
             destXonOutputCanvas, destYonOutputCanvas,
             destWidth, destHeight } = currentState.photoDrawConfig;
@@ -409,12 +425,28 @@ document.addEventListener('DOMContentLoaded', () => {
         const container = previewCanvas.parentElement;
         const containerWidth = container.clientWidth;
         const containerHeight = container.clientHeight;
+
+        // デバッグ
+        console.log('--- drawPreview START ---');
+        console.log('canvasContainer.clientWidth:', container.clientWidth);
+        console.log('canvasContainer.clientHeight:', container.clientHeight);
+        console.log('Output Total Width/Height from state:', currentState.outputCanvasConfig.width, currentState.outputCanvasConfig.height);
+        // ここまで
+
         let canvasRenderWidth, canvasRenderHeight;
         if (containerWidth <= 0 || containerHeight <= 0) { canvasRenderWidth = 300; canvasRenderHeight = 200; }
         else if (containerWidth / containerHeight > outputAspectRatio) { canvasRenderHeight = containerHeight; canvasRenderWidth = containerHeight * outputAspectRatio; }
         else { canvasRenderWidth = containerWidth; canvasRenderHeight = containerWidth / outputAspectRatio; }
         previewCanvas.width = Math.max(1, Math.floor(canvasRenderWidth));
         previewCanvas.height = Math.max(1, Math.floor(canvasRenderHeight));
+
+        //デバッグ
+        console.log('Applied previewCanvas.width:', previewCanvas.width);
+        console.log('Applied previewCanvas.height:', previewCanvas.height);
+        console.log('Output AspectRatio used for preview calc:', outputAspectRatio);
+        // ここまで
+
+
         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
         const scale = (outputTotalWidth === 0) ? 0 : previewCanvas.width / outputTotalWidth;
         previewCtx.fillStyle = currentState.backgroundColor;

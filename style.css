@@ -45,7 +45,7 @@ body {
     padding: 1rem;
     border-radius: 8px;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-    width: 360px;
+    width: 450px;
     /* 少し幅を広げる */
     overflow-y: auto;
     display: flex;
@@ -133,25 +133,88 @@ fieldset legend {
     /* 若干左に */
 }
 
-fieldset div {
+/* fieldset div {
     margin-bottom: 0.8rem;
-    /* 各設定項目のマージン */
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 120px 1fr 60px;
+    gap: 0.5rem;
     align-items: center;
 }
 
 fieldset div:last-child {
     margin-bottom: 0;
-    /* 最後の要素のマージンをなくす */
+} */
+
+
+/* スライダーや3列構成の行のためのスタイル */
+fieldset div.form-row-slider {
+    /* HTML側でスライダーのある行のdivにこのクラスを付与 */
+    margin-bottom: 0.8rem;
+    display: grid;
+    grid-template-columns: 100px 1fr 60px;
+    /* ラベル列 | スライダー列 | 値表示列 */
+    gap: 0.8rem;
+    align-items: center;
+}
+
+/* form-row-slider 内の label, input[type="range"], span のスタイルは前回同様 */
+/* fieldset div.form-row-slider label { */
+/* white-space, overflow, text-overflowなど */
+/* } */
+
+fieldset div.form-row-slider input[type="range"] {
+    width: 100%;
+}
+
+fieldset div.form-row-slider span {
+    text-align: right;
+}
+
+
+/* 「出力フォーマット」のようなシンプルな2列（またはラベル、入力、単位の3列）の行のためのスタイル */
+fieldset div.form-row-simple {
+    margin-bottom: 0.8rem;
+    display: flex;
+    /* シンプルなFlexboxに戻す */
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.8rem;
+    /* 要素間のスペース */
+}
+
+fieldset div.form-row-simple label {
+    /* white-space: nowrap; */
+    /* 必要に応じて */
+    flex-shrink: 0;
+    /* ラベルが縮まないように */
+}
+
+fieldset div.form-row-simple select,
+fieldset div.form-row-simple input[type="number"] {
+    flex-grow: 1;
+    /* 入力要素が残りのスペースを埋める */
+    min-width: 80px;
+    /* 最小幅を確保（selectなどが潰れないように） */
+}
+
+fieldset div.form-row-simple span {
+    /* 「%」などの単位表示用 */
+    flex-shrink: 0;
+    margin-left: 0.3rem;
 }
 
 fieldset label {
-    margin-right: 0.8rem;
+    /* margin-right: 0.8rem; */
     /* ラベルと入力欄の間隔 */
     font-size: 0.875rem;
     /* 少し小さめ */
     color: #606770;
+    white-space: nowrap;
+    overflow: hidden;
+    /* 幅を超える場合は隠す */
+    text-overflow: ellipsis;
+    /* 幅を超える場合は ... で表示 */
+
 }
 
 input[type="number"],
@@ -169,9 +232,12 @@ select {
 }
 
 input[type="range"] {
-    flex-grow: 1;
-    margin: 0 0.5rem;
+    /* flex-grow: 1; */
+    /* margin: 0 0.5rem; */
     /* スライダーの左右に少しマージン */
+    width: 100%;
+    /* ★Gridアイテムとして幅100%を指定 */
+
 }
 
 input[type="number"] {
@@ -223,6 +289,8 @@ fieldset div span {
     flex: 3;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+    /* ★追加 */
 }
 
 .exif-section {
@@ -265,6 +333,9 @@ fieldset div span {
 .canvas-container {
     width: 100%;
     flex: 1;
+    height: 100%;
+    /* ★試してみる */
+
     display: flex;
     justify-content: center;
     align-items: center;
@@ -407,13 +478,4 @@ fieldset div span {
 .hidden {
     display: none !important;
     /* Importantで確実に非表示にする */
-}
-
-/* スライダーの値表示用spanの微調整 (既にあればそちらを優先) */
-fieldset div span {
-    font-size: 0.8rem;
-    color: #606770;
-    min-width: 50px;
-    /* 少し幅を広げてガタつきを防ぐ */
-    text-align: right;
 }

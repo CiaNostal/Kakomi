@@ -28,8 +28,8 @@
                     <div id="tab-layout" class="tab-pane active">
                         <fieldset>
                             <legend>1. 出力フォーマット</legend>
-                            <div>
-                                <label for="outputAspectRatio">出力画像の目標比率:</label>
+                            <div class="form-row-simple">
+                                <label for="outputAspectRatio">アスペクト比:</label>
                                 <select id="outputAspectRatio">
                                     <option value="original_photo">入力写真の比率</option>
                                     <option value="1:1" selected>1:1 (正方形)</option>
@@ -41,7 +41,7 @@
                                     <option value="3:4">3:4</option>
                                 </select>
                             </div>
-                            <div>
+                            <div class="form-row-simple">
                                 <label for="baseMarginPercent">基準余白 (%):</label>
                                 <input type="number" id="baseMarginPercent" value="5" min="0" max="100" step="1"> %
                             </div>
@@ -49,12 +49,12 @@
 
                         <fieldset>
                             <legend>2. 写真の位置調整 (出力枠内)</legend>
-                            <div>
+                            <div class="form-row-slider">
                                 <label for="photoPosX">横位置:</label>
                                 <input type="range" id="photoPosX" min="0" max="1" step="0.01" value="0.5"> <span
                                     id="photoPosXValue">中央</span>
                             </div>
-                            <div>
+                            <div class="form-row-slider">
                                 <label for="photoPosY">縦位置:</label>
                                 <input type="range" id="photoPosY" min="0" max="1" step="0.01" value="0.5"> <span
                                     id="photoPosYValue">中央</span>
@@ -84,22 +84,22 @@
 
                         <fieldset id="imageBlurSettingsContainer" class="hidden">
                             <legend>拡大ぼかし背景 設定</legend>
-                            <div>
+                            <div class="form-row-slider">
                                 <label for="bgScale">拡大倍率:</label>
                                 <input type="range" id="bgScale" min="1" max="5" step="0.1" value="2.0">
                                 <span id="bgScaleValue">2.0x</span>
                             </div>
-                            <div>
+                            <div class="form-row-slider">
                                 <label for="bgBlur">ぼかし強度 (%):</label>
-                                <input type="range" id="bgBlur" min="0" max="20" step="0.5" value="3"> <span
+                                <input type="range" id="bgBlur" min="0.5" max="10" step="0.5" value="3"> <span
                                     id="bgBlurValue">3.0%</span>
                             </div>
-                            <div>
+                            <div class="form-row-slider">
                                 <label for="bgBrightness">明るさ (%):</label>
                                 <input type="range" id="bgBrightness" min="0" max="300" step="1" value="100">
                                 <span id="bgBrightnessValue">100%</span>
                             </div>
-                            <div>
+                            <div class="form-row-slider">
                                 <label for="bgSaturation">彩度 (%):</label>
                                 <input type="range" id="bgSaturation" min="0" max="300" step="1" value="100">
                                 <span id="bgSaturationValue">100%</span>
