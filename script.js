@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const previewCanvas = document.getElementById('previewCanvas');
     const previewCtx = previewCanvas.getContext('2d');
     const downloadButton = document.getElementById('downloadButton');
+    const canvasContainer = document.querySelector('.canvas-container'); 
 
     // 余白と背景色UIの取得
     const marginTopInput = document.getElementById('marginTop');
@@ -46,8 +47,43 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // イベントリスナー
-    imageLoader.addEventListener('change', handleImageUpload);
-    downloadButton.addEventListener('click', handleDownload);
+    // imageLoader.addEventListener('change', handleImageUpload);
+    // --- イベントリスナー ---
+    imageLoader.addEventListener('change', (event) => { // ★★★ 変更: イベントオブジェクトを渡す ★★★
+        const file = event.target.files[0];
+        if (file) {
+            processImageFile(file); // ★★★ 共通処理関数を呼び出す ★★★
+        }
+    });
+    if (downloadButton) downloadButton.addEventListener('click', handleDownload);
+
+    if (canvasContainer) {
+        canvasContainer.addEventListener('dragover', (event) => {
+            event.stopPropagation();
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy'; // UIフィードバック（カーソル形状など）
+            canvasContainer.style.backgroundColor = '#e9e9e9'; // ドラッグ中の背景色変更 (任意)
+        });
+
+        canvasContainer.addEventListener('dragleave', (event) => {
+            event.stopPropagation();
+            event.preventDefault();
+            canvasContainer.style.backgroundColor = '#f9f9f9'; // 背景色を元に戻す (任意)
+        });
+
+        canvasContainer.addEventListener('drop', (event) => {
+            event.stopPropagation();
+            event.preventDefault();
+            canvasContainer.style.backgroundColor = '#f9f9f9'; // 背景色を元に戻す
+
+            const files = event.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0]; // 最初のファイルのみ処理
+                processImageFile(file); // ★★★ 共通処理関数を呼び出す ★★★
+            }
+        });
+    }
+
     // タブ切り替えイベントリスナー
     tabButtons.forEach(button => {
         button.addEventListener('click', () => {
@@ -80,9 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
         requestRedraw();
     });
 
-
-    function handleImageUpload(event) {
-        const file = event.target.files[0];
+    function processImageFile(file) {
         if (file && file.type.startsWith('image/')) {
             const reader = new FileReader();
             reader.onload = (e) => {
@@ -92,17 +126,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     editState.originalWidth = img.width;
                     editState.originalHeight = img.height;
 
-                    // 初期状態では元画像全体を使用 (構図調整なし)
                     editState.photoDrawConfig = {
                         sourceX: 0,
                         sourceY: 0,
                         sourceWidth: img.width,
                         sourceHeight: img.height,
-                        destWidth: img.width,   // 写真自体の描画サイズは元解像度維持
+                        destWidth: img.width,
                         destHeight: img.height,
                     };
 
-                    // 初期UI値をeditStateに反映 (ページ読み込み時)
+                    // UIの初期値をeditStateに反映 (もしあれば)
                     editState.marginsPercent = {
                         top: parseFloat(marginTopInput.value) || 0,
                         right: parseFloat(marginRightInput.value) || 0,
@@ -112,16 +145,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     editState.backgroundColor = backgroundColorInput.value || '#ffffff';
 
                     requestRedraw();
-                    downloadButton.disabled = false;
+                    if (downloadButton) downloadButton.disabled = false;
+
+                    // imageLoaderの値をリセットして同じファイルを連続で選択/ドロップできるようにする
+                    if (imageLoader) imageLoader.value = '';
+                };
+                img.onerror = () => {
+                    alert('画像の読み込みに失敗しました。');
+                    if (imageLoader) imageLoader.value = '';
                 };
                 img.src = e.target.result;
             };
+            reader.onerror = () => {
+                alert('ファイルの読み込みに失敗しました。');
+                if (imageLoader) imageLoader.value = '';
+            };
             reader.readAsDataURL(file);
         } else {
-            alert('画像ファイルを選択してください。');
-            downloadButton.disabled = true;
-            editState.image = null;
-            previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+            alert('画像ファイルを選択またはドラッグ＆ドロップしてください。');
+            if (imageLoader) imageLoader.value = '';
         }
     }
 

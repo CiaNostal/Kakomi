@@ -183,6 +183,22 @@ input[type="color"] {
     padding-bottom: 0.5rem;
 }
 
+.image-loader-container {
+    margin-bottom: 1rem;
+    /* Canvasとの間に少しマージン */
+    padding: 0.5rem;
+    border: 2px dashed #ccc;
+    /* ドラッグ＆ドロップエリアっぽく */
+    background-color: #f9f9f9;
+    text-align: center;
+}
+
+.image-loader-container label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
 .canvas-container {
     width: 100%;
     /* 親要素(.preview-section)の幅に合わせる */
