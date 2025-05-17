@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kakomi Prototype v1.4 - 余白追加</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>Kakomi Prototype (v1.4 base) - 余白追加</h1>
+
+    <div class="controls">
+        <div>
+            <label for="imageLoader">画像を選択してください:</label>
+            <input type="file" id="imageLoader" accept="image/*">
+        </div>
+
+        <fieldset>
+            <legend>余白設定 (写真の短辺に対する %)</legend>
+            <div>
+                <label for="marginTop">上:</label>
+                <input type="number" id="marginTop" value="5" min="0" step="0.1"> %
+            </div>
+            <div>
+                <label for="marginRight">右:</label>
+                <input type="number" id="marginRight" value="5" min="0" step="0.1"> %
+            </div>
+            <div>
+                <label for="marginBottom">下:</label>
+                <input type="number" id="marginBottom" value="5" min="0" step="0.1"> %
+            </div>
+            <div>
+                <label for="marginLeft">左:</label>
+                <input type="number" id="marginLeft" value="5" min="0" step="0.1"> %
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>背景色設定</legend>
+            <div>
+                <label for="backgroundColor">背景色:</label>
+                <input type="color" id="backgroundColor" value="#ffffff">
+            </div>
+        </fieldset>
+    </div>
+
+    <h2>プレビュー</h2>
+    <div class="canvas-container">
+        <canvas id="previewCanvas"></canvas>
+    </div>
+
+    <button id="downloadButton" disabled>JPEGとしてダウンロード</button>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,101 @@
+body {
+    font-family: sans-serif;
+    margin: 20px;
+    background-color: #f4f4f4;
+    color: #333;
+    display: flex; /* 全体を横並びに */
+    gap: 20px; /* 要素間のスペース */
+}
+
+.controls { /* 設定項目をまとめるコンテナ */
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    width: 300px; /* コントロールエリアの幅 */
+}
+
+h1, h2 {
+    color: #2c3e50;
+    width: 100%; /* h1はflexアイテムではないので幅指定 */
+}
+/* h1をflexレイアウトの外に出すか、bodyのflex設定を見直すか検討できますが、今回は簡易的に */
+body > h1 {
+    flex-basis: 100%; /* body直下のh1を1行使う */
+}
+
+
+input[type="file"] {
+    margin-bottom: 10px;
+}
+
+fieldset { /* UIグループ化のためのスタイル */
+    border: 1px solid #ccc;
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+}
+
+fieldset legend {
+    font-weight: bold;
+    color: #34495e;
+}
+
+fieldset div {
+    margin-bottom: 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+fieldset label {
+    margin-right: 5px;
+}
+
+input[type="number"], input[type="color"] {
+    padding: 5px;
+    border-radius: 3px;
+    border: 1px solid #ccc;
+}
+input[type="number"] {
+    width: 60px; /* number入力の幅 */
+}
+
+
+.preview-area { /* プレビューエリアのコンテナ */
+    display: flex;
+    flex-direction: column;
+}
+
+
+.canvas-container {
+    width: 900px; /* 仕様書v1.4のプレビュー幅目安 */
+    /* margin-bottom: 20px; */ /* bodyのgapで調整 */
+    border: 1px solid #ccc;
+    background-color: #fff;
+}
+
+#previewCanvas {
+    display: block;
+    max-width: 100%;
+}
+
+
+button {
+    padding: 10px 15px;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-top: 10px; /* ボタンの上のスペース */
+}
+
+button:disabled {
+    background-color: #bdc3c7;
+    cursor: not-allowed;
+}
+
+button:hover:not(:disabled) {
+    background-color: #2980b9;
+}
