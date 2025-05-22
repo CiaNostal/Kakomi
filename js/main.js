@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 /**
  * main.js
  * Kakomiアプリケーションのメインエントリーポイント
@@ -631,3 +632,83 @@ function renderFinal(currentState) {
     
     return offscreenCanvas;
 } 
+=======
+// js/main.js
+// アプリケーションのエントリーポイント。各モジュールをインポートし、初期化処理を行います。
+
+import { editState, updateEditState, resetEditStateToDefault } from './state.js';
+import { uiElements, initializeUIFromState, setupEventListeners } from './uiController.js';
+import { calculateLayout } from './layoutEngine.js';
+import { drawPreview } from './canvasRenderer.js';
+import { processImageFile, handleDownload } from './fileManager.js';
+import { initializeTabs } from './tabManager.js';
+
+// グローバルで requestRedraw を定義 (uiControllerなどから呼ばれるため)
+// または、イベント駆動型にして、状態変更イベントを各モジュールが購読する形も考えられる
+export function requestRedraw() {
+    if (!editState.image) return;
+    const layoutInfo = calculateLayout(editState);
+
+    // 計算結果をeditStateに保存 (これにより各モジュールが最新のレイアウト情報を参照できる)
+    updateEditState({
+        photoDrawConfig: layoutInfo.photoDrawConfig,
+        outputCanvasConfig: layoutInfo.outputCanvasConfig
+    });
+    // console.log("Updated editState with layoutInfo:", editState); // デバッグ用
+
+    drawPreview(editState, uiElements.previewCanvas, uiElements.previewCtx);
+}
+
+
+// DOMContentLoadedイベントでアプリケーションを初期化
+document.addEventListener('DOMContentLoaded', () => {
+    // previewCtxの初期化
+    if (uiElements.previewCanvas) {
+        uiElements.previewCtx = uiElements.previewCanvas.getContext('2d');
+    } else {
+        console.error("Preview canvas element not found!");
+        return;
+    }
+
+    initializeUIFromState(); // editStateの初期値に基づいてUIをセットアップ
+    setupEventListeners();   // UI要素にイベントリスナーを設定
+    initializeTabs();        // タブ機能を初期化
+
+    // ファイル選択とダウンロードボタンのイベントリスナーはuiController.js内で設定しても良いし、
+    // fileManager.jsからエクスポートされた関数をここで直接紐づけても良い。
+    // 今回はfileManager.jsから直接インポートしてここで紐づける。
+    if (uiElements.imageLoader) {
+        uiElements.imageLoader.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) processImageFile(file);
+        });
+    }
+
+    if (uiElements.downloadButton) {
+        uiElements.downloadButton.addEventListener('click', handleDownload);
+    }
+
+    // ドラッグ＆ドロップイベントリスナー (fileManager.jsに移動しても良い)
+    if (uiElements.canvasContainer) {
+        uiElements.canvasContainer.addEventListener('dragover', (event) => {
+            event.stopPropagation(); event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+            uiElements.canvasContainer.classList.add('dragover');
+        });
+        uiElements.canvasContainer.addEventListener('dragleave', (event) => {
+            event.stopPropagation(); event.preventDefault();
+            uiElements.canvasContainer.classList.remove('dragover');
+        });
+        uiElements.canvasContainer.addEventListener('drop', (event) => {
+            event.stopPropagation(); event.preventDefault();
+            uiElements.canvasContainer.classList.remove('dragover');
+            const files = event.dataTransfer.files;
+            if (files.length > 0) processImageFile(files[0]);
+        });
+    }
+
+    // 初期描画 (もしeditStateに画像がプリロードされている場合など、通常は不要)
+    // requestRedraw();
+    console.log("Kakomi App Initialized");
+});
+>>>>>>> Stashed changes

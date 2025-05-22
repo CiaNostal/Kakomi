@@ -4,8 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kakomi (v1.5) - レイアウト最終調整</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Kakomi (v1.5) - ファイル分割</title> <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
@@ -113,6 +112,14 @@
                         <p>（文字入力の設定項目）</p>
                     </div>
                     <div id="tab-output" class="tab-pane">
+                        <fieldset>
+                            <legend>出力設定</legend>
+                            <div class="form-row-slider">
+                                <label for="jpgQuality">JPG画質 (1-100):</label>
+                                <input type="range" id="jpgQuality" min="1" max="100" step="1" value="100">
+                                <span id="jpgQualityValue">100</span>
+                            </div>
+                        </fieldset>
                         <button id="downloadButton" disabled>JPEGとしてダウンロード</button>
                         <p>（ここに他の出力関連項目）</p>
                     </div>
@@ -139,7 +146,11 @@
             </section>
         </main>
     </div>
+<<<<<<< Updated upstream
     <script type="module" src="js/main.js"></script>
+=======
+    <script src="js/main.js" type="module"></script>
+>>>>>>> Stashed changes
 </body>
 
 </html>
