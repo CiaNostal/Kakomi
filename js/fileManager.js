@@ -1,40 +1,74 @@
 // js/fileManager.js
 import { editState, updateEditState, resetEditStateToDefault } from './state.js';
-import { initializeUIFromState, uiElements } from './uiController.js';
+import { initializeUIFromState, uiElements, displayExifDataInHtml } from './uiController.js';
 import { renderFinal } from './canvasRenderer.js';
 // redrawCallback は main.js から渡される
 
 export function processImageFile(file, redrawCallback) {
     if (file && file.type.startsWith('image/')) {
         const reader = new FileReader();
+
         reader.onload = (e) => {
+            const imageDataUrl = e.target.result;
+            let parsedExifData = {}; // reader.onload スコープで宣言
+
+            try {
+                // piexif.js はグローバルスコープに piexif オブジェクトを公開する
+                if (typeof piexif !== 'undefined' && imageDataUrl.startsWith('data:image/jpeg')) {
+                    const exifObj = piexif.load(imageDataUrl);
+                    if (exifObj["0th"]) {
+                        if (exifObj["0th"][piexif.TAGS.Image.Make]) parsedExifData.Make = exifObj["0th"][piexif.TAGS.Image.Make];
+                        if (exifObj["0th"][piexif.TAGS.Image.Model]) parsedExifData.Model = exifObj["0th"][piexif.TAGS.Image.Model];
+                    }
+                    if (exifObj["Exif"]) {
+                        if (exifObj["Exif"][piexif.TAGS.Exif.DateTimeOriginal]) parsedExifData.DateTimeOriginal = exifObj["Exif"][piexif.TAGS.Exif.DateTimeOriginal];
+                        if (exifObj["Exif"][piexif.TAGS.Exif.FNumber]) parsedExifData.FNumber = exifObj["Exif"][piexif.TAGS.Exif.FNumber];
+                        if (exifObj["Exif"][piexif.TAGS.Exif.ExposureTime]) parsedExifData.ExposureTime = exifObj["Exif"][piexif.TAGS.Exif.ExposureTime];
+                        if (exifObj["Exif"][piexif.TAGS.Exif.ISOSpeedRatings]) parsedExifData.ISOSpeedRatings = exifObj["Exif"][piexif.TAGS.Exif.ISOSpeedRatings];
+                        if (exifObj["Exif"][piexif.TAGS.Exif.FocalLength]) parsedExifData.FocalLength = exifObj["Exif"][piexif.TAGS.Exif.FocalLength];
+                    }
+                    console.log('[FileMan] EXIF data loaded:', parsedExifData);
+                } else {
+                    console.log('[FileMan] piexif.js not loaded or image is not JPEG, skipping EXIF extraction.');
+                }
+            } catch (error) {
+                console.warn("[FileMan] Error loading EXIF data:", error);
+                parsedExifData = {}; // エラー時は空にする
+            }
+
             const img = new Image();
             img.onload = () => {
-                // 画像情報を保持しつつ、他の設定はデフォルトに戻す
-                resetEditStateToDefault(true);
+                resetEditStateToDefault(true); // 画像情報を保持しつつ、他の設定はデフォルトに戻す
 
-                // 新しい画像情報をeditStateに設定
-                updateEditState({
+                updateEditState({ // 新しい画像情報とExifデータを設定
                     image: img,
                     originalWidth: img.width,
                     originalHeight: img.height,
-                    // 他のプロパティ(photoViewParams, outputTargetAspectRatioStringなど)は
-                    // resetEditStateToDefaultによってdefaultEditStateの値にリセットされている。
+                    exifData: parsedExifData // img.onload のスコープで parsedExifData を使用
                 });
 
-                // UIをリセットされたeditStateに基づいて完全に更新
-                initializeUIFromState();
+                initializeUIFromState(); // UIをリセットされたeditStateに基づいて完全に更新
+                // displayExifDataInHtml は initializeUIFromState の中で呼ばれる
 
-                // 再描画を要求
-                redrawCallback();
+                redrawCallback(); // 再描画を要求
 
                 if (uiElements.downloadButton) uiElements.downloadButton.disabled = false;
-                if (uiElements.imageLoader) uiElements.imageLoader.value = ''; // 同じファイルを選択できるように値をクリア
+                if (uiElements.imageLoader) uiElements.imageLoader.value = '';
             };
-            img.onerror = () => { alert('画像の読み込みに失敗しました。'); if (uiElements.imageLoader) uiElements.imageLoader.value = ''; };
-            img.src = e.target.result;
+            img.onerror = () => {
+                alert('画像の読み込みに失敗しました。ファイルが破損しているか、サポートされていない形式の可能性があります。');
+                if (uiElements.imageLoader) uiElements.imageLoader.value = '';
+                // エラー時にもExif表示をクリアするなど
+                updateEditState({ image: null, originalWidth: 0, originalHeight: 0, exifData: {} });
+                displayExifDataInHtml({});
+                redrawCallback(); // プレビューをクリア
+            };
+            img.src = imageDataUrl; // Exif読み取り後に画像ソースを設定
         };
-        reader.onerror = () => { alert('ファイルの読み込みに失敗しました。'); if (uiElements.imageLoader) uiElements.imageLoader.value = ''; };
+        reader.onerror = () => {
+            alert('ファイルの読み込みに失敗しました。');
+            if (uiElements.imageLoader) uiElements.imageLoader.value = '';
+        };
         reader.readAsDataURL(file);
     } else {
         alert('画像ファイルを選択またはドラッグ＆ドロップしてください。');

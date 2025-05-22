@@ -1,37 +1,26 @@
-// js/main.js
-// アプリケーションのエントリーポイント。各モジュールをインポートし、初期化処理を行います。
-
 import { editState, updateEditState, resetEditStateToDefault } from './state.js';
-import { uiElements, initializeUIFromState, setupEventListeners } from './uiController.js';
+import { uiElements, initializeUIFromState, setupEventListeners, displayExifDataInHtml } from './uiController.js'; // displayExifDataInHtml をインポート
 import { calculateLayout } from './layoutEngine.js';
 import { drawPreview } from './canvasRenderer.js';
 import { processImageFile, handleDownload } from './fileManager.js';
 import { initializeTabs } from './tabManager.js';
 
-/**
- * プレビューの再描画を要求します。
- * editStateが更新された後や、UIの変更がプレビューに影響する場合に呼び出されます。
- */
 export function requestRedraw() {
     if (!editState.image) {
-        // 画像がない場合、プレビューをクリアする
         if (uiElements.previewCtx && uiElements.previewCanvas) {
             uiElements.previewCtx.clearRect(0, 0, uiElements.previewCanvas.width, uiElements.previewCanvas.height);
-            // 必要であれば、プレビューCanvasのサイズもデフォルトに戻す
-            // uiElements.previewCanvas.width = 300; // 例
-            // uiElements.previewCanvas.height = 200; // 例
+        }
+        // 画像がない場合、Exif表示もクリアする
+        if (uiElements.exifDataContainer) {
+            displayExifDataInHtml({}); // 空のデータを渡して初期メッセージ表示
         }
         return;
     }
-    const layoutInfo = calculateLayout(editState); // 現在の状態でレイアウトを計算
-
-    // 計算結果をeditStateに保存
+    const layoutInfo = calculateLayout(editState);
     updateEditState({
         photoDrawConfig: layoutInfo.photoDrawConfig,
         outputCanvasConfig: layoutInfo.outputCanvasConfig
     });
-
-    // プレビューを描画
     if (uiElements.previewCanvas && uiElements.previewCtx) {
         drawPreview(editState, uiElements.previewCanvas, uiElements.previewCtx);
     } else {
@@ -39,7 +28,6 @@ export function requestRedraw() {
     }
 }
 
-// DOMContentLoadedイベントでアプリケーションを初期化
 document.addEventListener('DOMContentLoaded', () => {
     console.log("[Main] DOMContentLoaded: Initializing application...");
 
@@ -50,46 +38,49 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    initializeUIFromState();    // editStateの初期値に基づいてUIの属性と値を設定
-    setupEventListeners(requestRedraw); // UI要素にイベントリスナーを設定し、redrawCallbackを渡す
-    initializeTabs();           // タブ機能を初期化
+    initializeUIFromState();
+    setupEventListeners(requestRedraw);
+    initializeTabs();
 
-    // ファイルローダーのイベントリスナー
     if (uiElements.imageLoader) {
         uiElements.imageLoader.addEventListener('change', (event) => {
             const file = event.target.files[0];
             if (file) {
                 console.log("[Main] Image selected via input:", file.name);
-                processImageFile(file, requestRedraw); // redrawCallbackを渡す
+                processImageFile(file, requestRedraw);
             }
         });
     }
 
-    // ダウンロードボタンのイベントリスナー
     if (uiElements.downloadButton) {
         uiElements.downloadButton.addEventListener('click', handleDownload);
     }
-    
-    // ドラッグ＆ドロップのイベントリスナー
-    if (uiElements.canvasContainer) {
-        uiElements.canvasContainer.addEventListener('dragover', (event) => {
+
+    const dragDropTarget = document.querySelector('.preview-section.drag-drop-target');
+    if (dragDropTarget) {
+        dragDropTarget.addEventListener('dragover', (event) => {
             event.stopPropagation(); event.preventDefault();
             event.dataTransfer.dropEffect = 'copy';
-            uiElements.canvasContainer.classList.add('dragover');
+            // dragDropTarget のスタイルを変更してフィードバックを与える (例: .dragover クラスを追加)
+            dragDropTarget.classList.add('dragover-active'); // CSSで .dragover-active スタイルを定義
         });
-        uiElements.canvasContainer.addEventListener('dragleave', (event) => {
+        dragDropTarget.addEventListener('dragleave', (event) => {
             event.stopPropagation(); event.preventDefault();
-            uiElements.canvasContainer.classList.remove('dragover');
+            dragDropTarget.classList.remove('dragover-active');
         });
-        uiElements.canvasContainer.addEventListener('drop', (event) => {
+        dragDropTarget.addEventListener('drop', (event) => {
             event.stopPropagation(); event.preventDefault();
-            uiElements.canvasContainer.classList.remove('dragover');
+            dragDropTarget.classList.remove('dragover-active');
             const files = event.dataTransfer.files;
             if (files.length > 0) {
                 console.log("[Main] Image dropped:", files[0].name);
-                processImageFile(files[0], requestRedraw); // redrawCallbackを渡す
+                processImageFile(files[0], requestRedraw);
             }
         });
+    } else {
+        console.warn("Drag and drop target element (.preview-section.drag-drop-target) not found.");
     }
-    console.log("[Main] Kakomi App Initialized and Refactored.");
+    // 初期状態では画像がないので、Exif表示エリアを初期メッセージにする
+    displayExifDataInHtml({});
+    console.log("[Main] Kakomi App Initialized with Exif functionality base.");
 });

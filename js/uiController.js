@@ -13,6 +13,8 @@ export const uiElements = {
     previewCtx: null, // main.jsで初期化
     downloadButton: document.getElementById('downloadButton'),
     canvasContainer: document.querySelector('.canvas-container'),
+    exifDataContainer: document.getElementById('exifDataContainer'),
+
 
     // レイアウト設定タブ
     outputAspectRatioSelect: document.getElementById('outputAspectRatio'),
@@ -90,6 +92,8 @@ export function initializeUIFromState() {
 
     toggleBackgroundSettingsVisibility(); // ラジオボタンの状態に基づいて表示切替
     updateSliderValueDisplays(); // 全てのスライダーの隣のテキスト表示を更新
+    displayExifDataInHtml(state.exifData);
+    console.log('[UI] Initialized from state.');
 }
 
 /**
@@ -248,4 +252,53 @@ export function setupEventListeners(redrawCallback) {
             updateSliderValueDisplays(); // スライダー横のテキスト表示を更新 (再描画は不要)
         });
     }
+}
+
+export function displayExifDataInHtml(exifData) {
+    if (!uiElements.exifDataContainer) return;
+
+    if (Object.keys(exifData).length === 0 && !editState.image) { // 画像がなく、Exifデータもない場合
+        uiElements.exifDataContainer.innerHTML = '<p>画像を選択するとここにExif情報が表示されます。</p>';
+        return;
+    }
+    if (Object.keys(exifData).length === 0 && editState.image) { // 画像はあるがExifデータがない場合
+        uiElements.exifDataContainer.innerHTML = '<p>この画像にはExif情報が含まれていないか、読み取れませんでした。</p>';
+        return;
+    }
+
+    let html = '<ul>';
+    // 表示したいExif項目を定義
+    const displayItems = {
+        'Make': 'メーカー',
+        'Model': '機種',
+        'DateTimeOriginal': '撮影日時',
+        'FNumber': 'F値',
+        'ExposureTime': 'シャッタースピード',
+        'ISOSpeedRatings': 'ISO感度',
+        'FocalLength': '焦点距離',
+        // 必要に応じて他の項目も追加
+    };
+
+    for (const key in displayItems) {
+        if (Object.prototype.hasOwnProperty.call(exifData, key) && exifData[key] !== undefined) {
+            let value = exifData[key];
+            // F値やシャッタースピードは特殊な形式で格納されていることがあるので整形
+            if (key === 'FNumber' && Array.isArray(value)) {
+                value = value[0] / value[1];
+                value = `F/${value.toFixed(1)}`;
+            } else if (key === 'ExposureTime' && Array.isArray(value)) {
+                value = `${value[0]}/${value[1]} 秒`;
+                if (value[0] / value[1] < 1) { // 1秒未満の場合
+                    value = `1/${Math.round(value[1] / value[0])} 秒`;
+                } else {
+                    value = `${value[0] / value[1]} 秒`;
+                }
+            } else if (key === 'FocalLength' && Array.isArray(value)) {
+                value = `${value[0] / value[1]} mm`;
+            }
+            html += `<li><strong>${displayItems[key]}:</strong> ${value}</li>`;
+        }
+    }
+    html += '</ul>';
+    uiElements.exifDataContainer.innerHTML = html;
 }
