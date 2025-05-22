@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kakomi (v1.5) - レイアウト最終調整</title>
+    <title>Kakomi (v1.5) - Refactor</title>
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -32,7 +32,7 @@
                                 <label for="outputAspectRatio">アスペクト比:</label>
                                 <select id="outputAspectRatio">
                                     <option value="original_photo">入力写真の比率</option>
-                                    <option value="1:1" selected>1:1 (正方形)</option>
+                                    <option value="1:1">1:1 (正方形)</option>
                                     <option value="4:5">4:5 (Instagram縦)</option>
                                     <option value="1.91:1">1.91:1 (Instagram横)</option>
                                     <option value="16:9">16:9 (ワイド)</option>
@@ -43,7 +43,7 @@
                             </div>
                             <div class="form-row-simple">
                                 <label for="baseMarginPercent">基準余白 (%):</label>
-                                <input type="number" id="baseMarginPercent" value="5" min="0" max="100" step="1"> %
+                                <input type="number" id="baseMarginPercent"> %
                             </div>
                         </fieldset>
 
@@ -51,13 +51,11 @@
                             <legend>2. 写真の位置調整 (出力枠内)</legend>
                             <div class="form-row-slider">
                                 <label for="photoPosX">横位置:</label>
-                                <input type="range" id="photoPosX" min="0" max="1" step="0.01" value="0.5"> <span
-                                    id="photoPosXValue">中央</span>
+                                <input type="range" id="photoPosX"> <span id="photoPosXValue">中央</span>
                             </div>
                             <div class="form-row-slider">
                                 <label for="photoPosY">縦位置:</label>
-                                <input type="range" id="photoPosY" min="0" max="1" step="0.01" value="0.5"> <span
-                                    id="photoPosYValue">中央</span>
+                                <input type="range" id="photoPosY"> <span id="photoPosYValue">中央</span>
                             </div>
                         </fieldset>
                     </div>
@@ -65,7 +63,7 @@
                         <fieldset>
                             <legend>背景タイプ</legend>
                             <div class="radio-group">
-                                <input type="radio" id="bgTypeColor" name="backgroundType" value="color" checked>
+                                <input type="radio" id="bgTypeColor" name="backgroundType" value="color">
                                 <label for="bgTypeColor">単色背景</label>
                             </div>
                             <div class="radio-group">
@@ -78,7 +76,7 @@
                             <legend>背景色設定</legend>
                             <div>
                                 <label for="backgroundColor">背景色:</label>
-                                <input type="color" id="backgroundColor" value="#ffffff">
+                                <input type="color" id="backgroundColor">
                             </div>
                         </fieldset>
 
@@ -86,22 +84,21 @@
                             <legend>拡大ぼかし背景 設定</legend>
                             <div class="form-row-slider">
                                 <label for="bgScale">拡大倍率:</label>
-                                <input type="range" id="bgScale" min="1" max="5" step="0.1" value="2.0">
+                                <input type="range" id="bgScale">
                                 <span id="bgScaleValue">2.0x</span>
                             </div>
                             <div class="form-row-slider">
                                 <label for="bgBlur">ぼかし強度 (%):</label>
-                                <input type="range" id="bgBlur" min="0.5" max="10" step="0.5" value="3"> <span
-                                    id="bgBlurValue">3.0%</span>
+                                <input type="range" id="bgBlur"> <span id="bgBlurValue">3.0%</span>
                             </div>
                             <div class="form-row-slider">
                                 <label for="bgBrightness">明るさ (%):</label>
-                                <input type="range" id="bgBrightness" min="0" max="300" step="1" value="100">
+                                <input type="range" id="bgBrightness">
                                 <span id="bgBrightnessValue">100%</span>
                             </div>
                             <div class="form-row-slider">
                                 <label for="bgSaturation">彩度 (%):</label>
-                                <input type="range" id="bgSaturation" min="0" max="300" step="1" value="100">
+                                <input type="range" id="bgSaturation">
                                 <span id="bgSaturationValue">100%</span>
                             </div>
                         </fieldset>
@@ -113,8 +110,15 @@
                         <p>（文字入力の設定項目）</p>
                     </div>
                     <div id="tab-output" class="tab-pane">
+                        <fieldset>
+                            <legend>出力設定</legend>
+                            <div class="form-row-slider">
+                                <label for="jpgQuality">JPG画質 (1-100):</label>
+                                <input type="range" id="jpgQuality">
+                                <span id="jpgQualityValue">100</span>
+                            </div>
+                        </fieldset>
                         <button id="downloadButton" disabled>JPEGとしてダウンロード</button>
-                        <p>（ここに他の出力関連項目）</p>
                     </div>
                 </div>
             </aside>
@@ -139,7 +143,7 @@
             </section>
         </main>
     </div>
-    <script src="script.js"></script>
+    <script src="js/main.js" type="module"></script>
 </body>
 
 </html>
