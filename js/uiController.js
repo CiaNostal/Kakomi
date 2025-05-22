@@ -1,13 +1,12 @@
 // js/uiController.js
-// DOM要素の取得、UI表示の更新、UIイベントリスナーの設定などを行います。
-import { editState, updateEditState, resetEditStateToDefault } from './state.js';
-import { requestRedraw } from './main.js'; // main.jsからrequestRedrawをインポート (循環参照に注意、後述)
+import { editState, updateEditState } from './state.js';
+import { controlsConfig } from './config.js';
+// requestRedraw は main.js からコールバックとして渡される
 
-// DOM要素の参照 (一元管理)
 export const uiElements = {
     imageLoader: document.getElementById('imageLoader'),
     previewCanvas: document.getElementById('previewCanvas'),
-    previewCtx: null, // main.jsで初期化
+    previewCtx: null,
     downloadButton: document.getElementById('downloadButton'),
     canvasContainer: document.querySelector('.canvas-container'),
     outputAspectRatioSelect: document.getElementById('outputAspectRatio'),
@@ -29,139 +28,151 @@ export const uiElements = {
     bgBlurValueSpan: document.getElementById('bgBlurValue'),
     bgBrightnessValueSpan: document.getElementById('bgBrightnessValue'),
     bgSaturationValueSpan: document.getElementById('bgSaturationValue'),
-    jpgQualitySlider: document.getElementById('jpgQuality'), // 出力タブ
-    jpgQualityValueSpan: document.getElementById('jpgQualityValue'), // 出力タブ
+    jpgQualitySlider: document.getElementById('jpgQuality'),
+    jpgQualityValueSpan: document.getElementById('jpgQualityValue'),
 };
 
-// UI初期化関数
 export function initializeUIFromState() {
-    const state = editState; // 直接参照 (getEditState()でも良い)
+    const state = editState;
+
+    // --- スライダーと数値入力の属性設定と値設定 ---
+    const setupInput = (element, configKey, stateValue) => {
+        if (element && controlsConfig[configKey]) {
+            const config = controlsConfig[configKey];
+            if (element.type === 'range' || element.type === 'number') {
+                if (config.min !== undefined) element.min = config.min;
+                if (config.max !== undefined) element.max = config.max;
+                if (config.step !== undefined) element.step = config.step;
+            }
+            element.value = stateValue;
+        }
+    };
+
+    setupInput(uiElements.baseMarginPercentInput, 'baseMarginPercent', state.baseMarginPercent);
+    setupInput(uiElements.photoPosXSlider, 'photoPosX', state.photoViewParams.offsetX);
+    setupInput(uiElements.photoPosYSlider, 'photoPosY', state.photoViewParams.offsetY);
+    setupInput(uiElements.bgScaleSlider, 'bgScale', state.imageBlurBackgroundParams.scale);
+    setupInput(uiElements.bgBlurSlider, 'bgBlur', state.imageBlurBackgroundParams.blurAmountPercent);
+    setupInput(uiElements.bgBrightnessSlider, 'bgBrightness', state.imageBlurBackgroundParams.brightness);
+    setupInput(uiElements.bgSaturationSlider, 'bgSaturation', state.imageBlurBackgroundParams.saturation);
+    setupInput(uiElements.jpgQualitySlider, 'jpgQuality', Math.round(state.outputJpgQuality * 100));
+
+    // --- その他のUI要素の値設定 ---
     if (uiElements.outputAspectRatioSelect) uiElements.outputAspectRatioSelect.value = state.outputTargetAspectRatioString;
-    if (uiElements.baseMarginPercentInput) uiElements.baseMarginPercentInput.value = state.baseMarginPercent;
-    if (uiElements.photoPosXSlider) uiElements.photoPosXSlider.value = state.photoViewParams.offsetX;
-    if (uiElements.photoPosYSlider) uiElements.photoPosYSlider.value = state.photoViewParams.offsetY;
     if (uiElements.backgroundColorInput) uiElements.backgroundColorInput.value = state.backgroundColor;
     if (uiElements.bgTypeColorRadio) uiElements.bgTypeColorRadio.checked = (state.backgroundType === 'color');
     if (uiElements.bgTypeImageBlurRadio) uiElements.bgTypeImageBlurRadio.checked = (state.backgroundType === 'imageBlur');
-    if (uiElements.bgScaleSlider) uiElements.bgScaleSlider.value = state.imageBlurBackgroundParams.scale;
-    if (uiElements.bgBlurSlider) uiElements.bgBlurSlider.value = state.imageBlurBackgroundParams.blurAmountPercent;
-    if (uiElements.bgBrightnessSlider) uiElements.bgBrightnessSlider.value = state.imageBlurBackgroundParams.brightness;
-    if (uiElements.bgSaturationSlider) uiElements.bgSaturationSlider.value = state.imageBlurBackgroundParams.saturation;
-    if (uiElements.jpgQualitySlider) uiElements.jpgQualitySlider.value = Math.round(state.outputJpgQuality * 100);
 
     toggleBackgroundSettingsVisibility();
     updateSliderValueDisplays();
 }
 
-// スライダーの値表示更新関数
 export function updateSliderValueDisplays() {
     const state = editState;
-    if (uiElements.photoPosXValueSpan) {
-        const posXDisplay = Math.round((parseFloat(state.photoViewParams.offsetX) - 0.5) * 2 * 100);
-        uiElements.photoPosXValueSpan.textContent = posXDisplay === 0 ? '中央' : `${posXDisplay}%`;
+    if (uiElements.photoPosXValueSpan && uiElements.photoPosXSlider) {
+        const val = parseFloat(uiElements.photoPosXSlider.value); // スライダーの現在の値から表示を生成
+        const displayVal = Math.round((val - 0.5) * 2 * 100);
+        uiElements.photoPosXValueSpan.textContent = displayVal === 0 ? '中央' : `${displayVal}%`;
     }
-    if (uiElements.photoPosYValueSpan) {
-        const posYDisplay = Math.round((parseFloat(state.photoViewParams.offsetY) - 0.5) * 2 * 100);
-        uiElements.photoPosYValueSpan.textContent = posYDisplay === 0 ? '中央' : `${posYDisplay}%`;
+    if (uiElements.photoPosYValueSpan && uiElements.photoPosYSlider) {
+        const val = parseFloat(uiElements.photoPosYSlider.value);
+        const displayVal = Math.round((val - 0.5) * 2 * 100);
+        uiElements.photoPosYValueSpan.textContent = displayVal === 0 ? '中央' : `${displayVal}%`;
     }
-    if (uiElements.bgScaleValueSpan) uiElements.bgScaleValueSpan.textContent = `${parseFloat(state.imageBlurBackgroundParams.scale).toFixed(1)}x`;
-    if (uiElements.bgBlurValueSpan) uiElements.bgBlurValueSpan.textContent = `${parseFloat(state.imageBlurBackgroundParams.blurAmountPercent).toFixed(1)}%`;
-    if (uiElements.bgBrightnessValueSpan) uiElements.bgBrightnessValueSpan.textContent = `${state.imageBlurBackgroundParams.brightness}%`;
-    if (uiElements.bgSaturationValueSpan) uiElements.bgSaturationValueSpan.textContent = `${state.imageBlurBackgroundParams.saturation}%`;
+    if (uiElements.bgScaleValueSpan && uiElements.bgScaleSlider) {
+        uiElements.bgScaleValueSpan.textContent = `${parseFloat(uiElements.bgScaleSlider.value).toFixed(1)}x`;
+    }
+    if (uiElements.bgBlurValueSpan && uiElements.bgBlurSlider) {
+        uiElements.bgBlurValueSpan.textContent = `${parseFloat(uiElements.bgBlurSlider.value).toFixed(1)}%`;
+    }
+    if (uiElements.bgBrightnessValueSpan && uiElements.bgBrightnessSlider) {
+        uiElements.bgBrightnessValueSpan.textContent = `${uiElements.bgBrightnessSlider.value}%`;
+    }
+    if (uiElements.bgSaturationValueSpan && uiElements.bgSaturationSlider) {
+        uiElements.bgSaturationValueSpan.textContent = `${uiElements.bgSaturationSlider.value}%`;
+    }
     if (uiElements.jpgQualityValueSpan && uiElements.jpgQualitySlider) {
-        uiElements.jpgQualityValueSpan.textContent = `${Math.round(state.outputJpgQuality * 100)}`;
+        uiElements.jpgQualityValueSpan.textContent = `${uiElements.jpgQualitySlider.value}`;
     }
 }
 
-// 背景設定の表示/非表示を切り替える関数
 export function toggleBackgroundSettingsVisibility() {
+    if (!uiElements.bgColorSettingsContainer || !uiElements.imageBlurSettingsContainer) return;
     if (editState.backgroundType === 'color') {
-        if (uiElements.bgColorSettingsContainer) uiElements.bgColorSettingsContainer.classList.remove('hidden');
-        if (uiElements.imageBlurSettingsContainer) uiElements.imageBlurSettingsContainer.classList.add('hidden');
+        uiElements.bgColorSettingsContainer.classList.remove('hidden');
+        uiElements.imageBlurSettingsContainer.classList.add('hidden');
     } else if (editState.backgroundType === 'imageBlur') {
-        if (uiElements.bgColorSettingsContainer) uiElements.bgColorSettingsContainer.classList.add('hidden');
-        if (uiElements.imageBlurSettingsContainer) uiElements.imageBlurSettingsContainer.classList.remove('hidden');
+        uiElements.bgColorSettingsContainer.classList.add('hidden');
+        uiElements.imageBlurSettingsContainer.classList.remove('hidden');
     }
 }
 
-// UIイベントリスナーの設定
-export function setupEventListeners() {
-    // レイアウト設定タブ
-    if (uiElements.outputAspectRatioSelect) uiElements.outputAspectRatioSelect.addEventListener('change', (e) => {
-        updateEditState({ outputTargetAspectRatioString: e.target.value });
-        requestRedraw();
-    });
-    if (uiElements.baseMarginPercentInput) uiElements.baseMarginPercentInput.addEventListener('input', (e) => {
-        let val = parseInt(e.target.value, 10);
-        if (isNaN(val) || val < 0) val = 0; if (val > 100) val = 100;
-        e.target.value = val; // UIに反映
-        updateEditState({ baseMarginPercent: val });
-        requestRedraw();
-    });
-    if (uiElements.photoPosXSlider) uiElements.photoPosXSlider.addEventListener('input', (e) => {
-        const newOffsetX = parseFloat(e.target.value);
-        updateEditState({ photoViewParams: { ...editState.photoViewParams, offsetX: newOffsetX } });
-        updateSliderValueDisplays();
-        requestRedraw();
-    });
-    if (uiElements.photoPosYSlider) uiElements.photoPosYSlider.addEventListener('input', (e) => {
-        const newOffsetY = parseFloat(e.target.value);
-        updateEditState({ photoViewParams: { ...editState.photoViewParams, offsetY: newOffsetY } });
-        updateSliderValueDisplays();
-        requestRedraw();
-    });
+export function setupEventListeners(redrawCallback) {
+    const addInputListener = (element, configKey, stateKey, isNested = false, nestedKey = '') => {
+        if (element) {
+            element.addEventListener('input', (e) => {
+                let value = (element.type === 'range' || element.type === 'number') ? parseFloat(e.target.value) : e.target.value;
+                const config = controlsConfig[configKey];
 
-    // 背景編集タブ
-    if (uiElements.bgTypeColorRadio) uiElements.bgTypeColorRadio.addEventListener('change', () => {
-        if (uiElements.bgTypeColorRadio.checked) {
-            updateEditState({ backgroundType: 'color' });
-            toggleBackgroundSettingsVisibility();
-            requestRedraw();
-        }
-    });
-    if (uiElements.bgTypeImageBlurRadio) uiElements.bgTypeImageBlurRadio.addEventListener('change', () => {
-        if (uiElements.bgTypeImageBlurRadio.checked) {
-            updateEditState({ backgroundType: 'imageBlur' });
-            toggleBackgroundSettingsVisibility();
-            requestRedraw();
-        }
-    });
-    if (uiElements.backgroundColorInput) uiElements.backgroundColorInput.addEventListener('input', (e) => {
-        updateEditState({ backgroundColor: e.target.value });
-        if (editState.backgroundType === 'color') requestRedraw();
-    });
-    if (uiElements.bgScaleSlider) uiElements.bgScaleSlider.addEventListener('input', (e) => {
-        const newScale = parseFloat(e.target.value);
-        updateEditState({ imageBlurBackgroundParams: { ...editState.imageBlurBackgroundParams, scale: newScale } });
-        updateSliderValueDisplays();
-        if (editState.backgroundType === 'imageBlur') requestRedraw();
-    });
-    // bgBlur, bgBrightness, bgSaturation も同様にリスナーを設定...
-    if (uiElements.bgBlurSlider) uiElements.bgBlurSlider.addEventListener('input', (e) => {
-        const newBlur = parseFloat(e.target.value);
-        updateEditState({ imageBlurBackgroundParams: { ...editState.imageBlurBackgroundParams, blurAmountPercent: newBlur } });
-        updateSliderValueDisplays();
-        if (editState.backgroundType === 'imageBlur') requestRedraw();
-    });
-    if (uiElements.bgBrightnessSlider) uiElements.bgBrightnessSlider.addEventListener('input', (e) => {
-        const newBrightness = parseInt(e.target.value, 10);
-        updateEditState({ imageBlurBackgroundParams: { ...editState.imageBlurBackgroundParams, brightness: newBrightness } });
-        updateSliderValueDisplays();
-        if (editState.backgroundType === 'imageBlur') requestRedraw();
-    });
-    if (uiElements.bgSaturationSlider) uiElements.bgSaturationSlider.addEventListener('input', (e) => {
-        const newSaturation = parseInt(e.target.value, 10);
-        updateEditState({ imageBlurBackgroundParams: { ...editState.imageBlurBackgroundParams, saturation: newSaturation } });
-        updateSliderValueDisplays();
-        if (editState.backgroundType === 'imageBlur') requestRedraw();
-    });
+                if (config && (element.type === 'range' || element.type === 'number')) {
+                    if (isNaN(value)) value = config.defaultValue;
+                    value = Math.max(config.min, Math.min(config.max, value));
+                    e.target.value = value; // バリデーション後の値をUIに反映
+                }
 
-    // 出力タブ
+                if (isNested && nestedKey) {
+                    updateEditState({ [stateKey]: { ...editState[stateKey], [nestedKey]: value } });
+                } else {
+                    updateEditState({ [stateKey]: value });
+                }
+                updateSliderValueDisplays();
+                redrawCallback();
+            });
+        }
+    };
+
+    const addChangeListener = (element, stateKey, isRadio = false, radioValue = '', needsRedraw = true) => {
+        if (element) {
+            element.addEventListener('change', (e) => {
+                if (isRadio) {
+                    if (e.target.checked) {
+                        updateEditState({ [stateKey]: radioValue });
+                        if (stateKey === 'backgroundType') toggleBackgroundSettingsVisibility();
+                    }
+                } else {
+                    updateEditState({ [stateKey]: e.target.value });
+                }
+                if (needsRedraw) redrawCallback();
+            });
+        }
+    };
+
+    // レイアウト設定
+    addChangeListener(uiElements.outputAspectRatioSelect, 'outputTargetAspectRatioString');
+    addInputListener(uiElements.baseMarginPercentInput, 'baseMarginPercent', 'baseMarginPercent');
+    addInputListener(uiElements.photoPosXSlider, 'photoPosX', 'photoViewParams', true, 'offsetX');
+    addInputListener(uiElements.photoPosYSlider, 'photoPosY', 'photoViewParams', true, 'offsetY');
+
+    // 背景設定
+    addChangeListener(uiElements.bgTypeColorRadio, 'backgroundType', true, 'color');
+    addChangeListener(uiElements.bgTypeImageBlurRadio, 'backgroundType', true, 'imageBlur');
+    if (uiElements.backgroundColorInput) { // inputイベントの方がリアルタイム性が高い
+        uiElements.backgroundColorInput.addEventListener('input', (e) => {
+            updateEditState({ backgroundColor: e.target.value });
+            if (editState.backgroundType === 'color') redrawCallback();
+        });
+    }
+    addInputListener(uiElements.bgScaleSlider, 'bgScale', 'imageBlurBackgroundParams', true, 'scale');
+    addInputListener(uiElements.bgBlurSlider, 'bgBlur', 'imageBlurBackgroundParams', true, 'blurAmountPercent');
+    addInputListener(uiElements.bgBrightnessSlider, 'bgBrightness', 'imageBlurBackgroundParams', true, 'brightness');
+    addInputListener(uiElements.bgSaturationSlider, 'bgSaturation', 'imageBlurBackgroundParams', true, 'saturation');
+
+    // 出力設定
     if (uiElements.jpgQualitySlider) {
         uiElements.jpgQualitySlider.addEventListener('input', (e) => {
             const qualityValueUI = parseInt(e.target.value, 10);
             updateEditState({ outputJpgQuality: qualityValueUI / 100 });
-            updateSliderValueDisplays(); // span表示も更新
+            updateSliderValueDisplays(); // span表示も更新 (redrawCallback は不要)
         });
     }
 }
