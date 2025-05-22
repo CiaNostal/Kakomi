@@ -10,17 +10,23 @@ export function processImageFile(file, redrawCallback) {
         reader.onload = (e) => {
             const img = new Image();
             img.onload = () => {
-                resetEditStateToDefault(true); // 画像情報を保持しつつ、他の設定はデフォルトに戻す
+                // 画像情報を保持しつつ、他の設定はデフォルトに戻す
+                resetEditStateToDefault(true);
 
-                updateEditState({ // 新しい画像情報を設定
+                // 新しい画像情報をeditStateに設定
+                updateEditState({
                     image: img,
                     originalWidth: img.width,
                     originalHeight: img.height,
+                    // 他のプロパティ(photoViewParams, outputTargetAspectRatioStringなど)は
+                    // resetEditStateToDefaultによってdefaultEditStateの値にリセットされている。
                 });
-                // この時点でeditStateは新しい画像情報とデフォルト設定になっている
 
-                initializeUIFromState(); // UIをリセットされたeditStateに基づいて更新
-                redrawCallback(); // 再描画を要求
+                // UIをリセットされたeditStateに基づいて完全に更新
+                initializeUIFromState();
+
+                // 再描画を要求
+                redrawCallback();
 
                 if (uiElements.downloadButton) uiElements.downloadButton.disabled = false;
                 if (uiElements.imageLoader) uiElements.imageLoader.value = ''; // 同じファイルを選択できるように値をクリア
@@ -36,9 +42,10 @@ export function processImageFile(file, redrawCallback) {
     }
 }
 
+// handleDownload は変更なし
 export function handleDownload() {
     if (!editState.image) { alert('画像が選択されていません。'); return; }
-    const finalCanvas = renderFinal(editState);
+    const finalCanvas = renderFinal(editState); // editState を渡す
     if (finalCanvas) {
         const blobPromise = finalCanvas instanceof OffscreenCanvas ?
             finalCanvas.convertToBlob({ type: 'image/jpeg', quality: editState.outputJpgQuality }) :
