@@ -1,10 +1,10 @@
 // js/main.js
 // アプリケーションのエントリーポイント。各モジュールをインポートし、初期化処理を行います。
 
-import { editState, updateEditState, resetEditStateToDefault } from './state.js';
+import { getState, updateState, addStateChangeListener } from './stateManager.js'; // CHANGED: Import from stateManager
 import { uiElements, initializeUIFromState, setupEventListeners } from './uiController.js';
-import { calculateLayout } from './layoutEngine.js';
-import { drawPreview } from './canvasRenderer.js';
+import { calculateLayout } from './layoutEngine.js'; // This will be replaced later
+import { drawPreview } from './canvasRenderer.js'; // This will be refactored later
 import { processImageFile, handleDownload } from './fileManager.js';
 import { initializeTabs } from './tabManager.js';
 
@@ -13,7 +13,9 @@ import { initializeTabs } from './tabManager.js';
  * editStateが更新された後や、UIの変更がプレビューに影響する場合に呼び出されます。
  */
 export function requestRedraw() {
-    if (!editState.image) {
+    const currentState = getState(); // CHANGED: Use getState()
+
+    if (!currentState.image) {
         // 画像がない場合、プレビューをクリアする
         if (uiElements.previewCtx && uiElements.previewCanvas) {
             uiElements.previewCtx.clearRect(0, 0, uiElements.previewCanvas.width, uiElements.previewCanvas.height);
@@ -23,17 +25,22 @@ export function requestRedraw() {
         }
         return;
     }
-    const layoutInfo = calculateLayout(editState); // 現在の状態でレイアウトを計算
+    const layoutInfo = calculateLayout(currentState); // CHANGED: Pass currentState
 
     // 計算結果をeditStateに保存
-    updateEditState({
+    // CHANGED: Use updateState from stateManager.js
+    updateState({
         photoDrawConfig: layoutInfo.photoDrawConfig,
         outputCanvasConfig: layoutInfo.outputCanvasConfig
     });
+    // updateStateがリスナーを呼び出すので、もしrequestRedrawがリスナー登録されていれば
+    // ここで再度requestRedrawが呼ばれることになる。
+    // 現状はuiControllerが直接requestRedrawを呼ぶので、drawPreviewは別途呼び出す。
 
     // プレビューを描画
     if (uiElements.previewCanvas && uiElements.previewCtx) {
-        drawPreview(editState, uiElements.previewCanvas, uiElements.previewCtx);
+        // drawPreviewに渡すのも最新のcurrentState (updateState後だが、今回はlayoutInfoの結果なので変わらないはず)
+        drawPreview(getState(), uiElements.previewCanvas, uiElements.previewCtx); // CHANGED: Pass latest state
     } else {
         console.error("[Main] Preview canvas or context not available for redraw.");
     }
@@ -41,7 +48,7 @@ export function requestRedraw() {
 
 // DOMContentLoadedイベントでアプリケーションを初期化
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("[Main] DOMContentLoaded: Initializing application...");
+    console.log("[Main] DOMContentLoaded: Initializing application with new StateManager...");
 
     if (uiElements.previewCanvas) {
         uiElements.previewCtx = uiElements.previewCanvas.getContext('2d');
@@ -50,9 +57,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    initializeUIFromState();    // editStateの初期値に基づいてUIの属性と値を設定
-    setupEventListeners(requestRedraw); // UI要素にイベントリスナーを設定し、redrawCallbackを渡す
+    // initializeUIFromState は uiController 内で getState() を使うように修正済み
+    initializeUIFromState();    
+    // setupEventListeners は uiController 内で updateState() を使うように修正済み
+    // requestRedraw をコールバックとして渡す
+    setupEventListeners(requestRedraw); 
     initializeTabs();           // タブ機能を初期化
+
+    // (オプション) stateManagerのリスナーとしてrequestRedrawを登録する場合
+    // addStateChangeListener(requestRedraw);
+    // この場合、uiController内の各イベントリスナーはredrawCallbackを呼ばずにupdateStateのみ行う
 
     // ファイルローダーのイベントリスナー
     if (uiElements.imageLoader) {
@@ -60,13 +74,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const file = event.target.files[0];
             if (file) {
                 console.log("[Main] Image selected via input:", file.name);
-                processImageFile(file, requestRedraw); // redrawCallbackを渡す
+                // processImageFile は fileManager 内で stateManager の setImage を使うように修正済み
+                processImageFile(file, requestRedraw); 
             }
         });
     }
 
     // ダウンロードボタンのイベントリスナー
     if (uiElements.downloadButton) {
+        // handleDownload は fileManager 内で getState を使うように修正済み
         uiElements.downloadButton.addEventListener('click', handleDownload);
     }
     
@@ -87,9 +103,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const files = event.dataTransfer.files;
             if (files.length > 0) {
                 console.log("[Main] Image dropped:", files[0].name);
-                processImageFile(files[0], requestRedraw); // redrawCallbackを渡す
+                processImageFile(files[0], requestRedraw);
             }
         });
     }
-    console.log("[Main] Kakomi App Initialized and Refactored.");
+    console.log("[Main] Kakomi App Initialized (hopefully with new StateManager working).");
+    
+    // 初期描画（画像がもしあれば。通常はファイル選択後に描画される）
+    // requestRedraw(); // 必要に応じて最初の描画をトリガー
 });
