@@ -152,14 +152,37 @@ function updateState(updates) {
     notifyStateChange();
 }
 
-// js/stateManager.js に戻す getState() の内容
+/**
+ * 現在の編集状態のコピーを取得する
+ * @returns {Object} 現在の編集状態のディープコピー
+ */
 function getState() {
-    const stateCopy = JSON.parse(JSON.stringify(editState));
-    if (editState.image) {
-        stateCopy.image = editState.image;
+    const originalImage = editState.image;
+    let stateCopy;
+
+    if (typeof structuredClone === 'function') {
+        // HTMLImageElement は structuredClone で問題が発生したため、一時的に除外
+        editState.image = null;
+        try {
+            stateCopy = structuredClone(editState);
+        } catch (e) {
+            // structuredClone が他の理由で失敗した場合のフォールバック
+            console.warn("[StateManager] structuredClone failed, falling back to JSON.parse/stringify for non-image properties.", e);
+            stateCopy = JSON.parse(JSON.stringify(editState));
+        }
+        editState.image = originalImage; // 元の editState の image を復元
+        stateCopy.image = originalImage; // コピーにも image の参照をセット
+    } else {
+        // structuredClone が利用できない場合のフォールバック
+        console.warn("[StateManager] structuredClone is not available. Using JSON.parse/stringify with manual image handling.");
+        // image を除外する必要はない（JSON.stringifyが適切に処理しないため、後で上書きする）
+        stateCopy = JSON.parse(JSON.stringify(editState));
+        stateCopy.image = originalImage; // image の参照をコピー
     }
+
     return stateCopy;
 }
+
 
 /**
  * 初期状態にリセットする
