@@ -8,7 +8,7 @@ let editState = {
     image: null,
     originalWidth: 0,
     originalHeight: 0,
-    photoViewParams: { 
+    photoViewParams: {
         offsetX: 0.5, // 0 (左端) to 1 (右端), 0.5 = 中央
         offsetY: 0.5  // 0 (上端) to 1 (下端), 0.5 = 中央
     },
@@ -23,18 +23,18 @@ let editState = {
         saturation: 100     // %
     },
     photoDrawConfig: {
-        sourceX: 0, 
-        sourceY: 0, 
-        sourceWidth: 0, 
+        sourceX: 0,
+        sourceY: 0,
+        sourceWidth: 0,
         sourceHeight: 0,
-        destWidth: 0, 
+        destWidth: 0,
         destHeight: 0,
-        destXonOutputCanvas: 0, 
+        destXonOutputCanvas: 0,
         destYonOutputCanvas: 0
     },
-    outputCanvasConfig: { 
-        width: 0, 
-        height: 0 
+    outputCanvasConfig: {
+        width: 0,
+        height: 0
     },
     // フレーム加工関連の設定を追加
     frameSettings: {
@@ -147,7 +147,7 @@ function updateState(updates) {
 
     // 状態を更新
     deepMerge(editState, updates);
-    
+
     // 変更を通知
     notifyStateChange();
 }
@@ -157,7 +157,18 @@ function updateState(updates) {
  * @returns {Object} 現在の編集状態のディープコピー
  */
 function getState() {
-    return JSON.parse(JSON.stringify(editState));
+    // JSON.stringify/parse で大部分をディープコピー
+    const stateCopy = JSON.parse(JSON.stringify(editState));
+
+    // HTMLImageElement は JSON.stringify で適切にシリアライズされないため、
+    // 元の editState から image オブジェクトへの参照を stateCopy に再設定する。
+    if (editState.image) {
+        stateCopy.image = editState.image;
+    }
+
+    // 将来的に他のシリアライズ不可能なオブジェクトを editState に追加した場合、
+    // 同様の手動での再割り当てが必要になる可能性がある。
+    return stateCopy;
 }
 
 /**
@@ -169,7 +180,7 @@ function resetState() {
     const originalWidthBackup = editState.originalWidth;
     const originalHeightBackup = editState.originalHeight;
     const exifDataBackup = editState.exifData;
-    
+
     editState = {
         image: imageBackup,
         originalWidth: originalWidthBackup,
@@ -242,7 +253,7 @@ function resetState() {
         },
         exifData: exifDataBackup
     };
-    
+
     notifyStateChange();
 }
 
@@ -257,15 +268,15 @@ function setImage(img, exifData = null) {
     editState.originalWidth = img.width;
     editState.originalHeight = img.height;
     editState.exifData = exifData;
-    
+
     // 画像関連の設定をリセット
     editState.photoViewParams = { offsetX: 0.5, offsetY: 0.5 };
     editState.backgroundType = 'color'; // 新規画像読み込み時は単色背景をデフォルトに
-    editState.imageBlurBackgroundParams = { 
-        scale: 2.0, 
-        blurAmountPercent: 3, 
-        brightness: 100, 
-        saturation: 100 
+    editState.imageBlurBackgroundParams = {
+        scale: 2.0,
+        blurAmountPercent: 3,
+        brightness: 100,
+        saturation: 100
     };
     editState.cropSettings = {
         aspectRatio: 'original',
@@ -273,7 +284,7 @@ function setImage(img, exifData = null) {
         offsetX: 0.5,
         offsetY: 0.5
     };
-    
+
     notifyStateChange();
 }
 
