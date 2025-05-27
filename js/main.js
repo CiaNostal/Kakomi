@@ -2,8 +2,10 @@
 // アプリケーションのエントリーポイント。各モジュールをインポートし、初期化処理を行います。
 
 import { getState, updateState, addStateChangeListener } from './stateManager.js'; // CHANGED: Import from stateManager
-import { uiElements, initializeUIFromState, setupEventListeners } from './uiController.js';
-import { calculateLayout } from './layoutEngine.js'; // This will be replaced later
+// import { uiElements, initializeUIFromState, setupEventListeners } from './uiController.js';
+// import { calculateLayout } from './layoutEngine.js'; // This will be replaced later
+import { uiElements, initializeUIFromState, setupEventListeners } from './uiController.js'; // CHANGED: Import from layoutCalculator.js
+import { calculateLayout } from './layoutCalculator.js'; // This will be replaced later
 import { drawPreview } from './canvasRenderer.js'; // This will be refactored later
 import { processImageFile, handleDownload } from './fileManager.js';
 import { initializeTabs } from './tabManager.js';
@@ -58,10 +60,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // initializeUIFromState は uiController 内で getState() を使うように修正済み
-    initializeUIFromState();    
+    initializeUIFromState();
     // setupEventListeners は uiController 内で updateState() を使うように修正済み
     // requestRedraw をコールバックとして渡す
-    setupEventListeners(requestRedraw); 
+    setupEventListeners(requestRedraw);
     initializeTabs();           // タブ機能を初期化
 
     // (オプション) stateManagerのリスナーとしてrequestRedrawを登録する場合
@@ -75,7 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (file) {
                 console.log("[Main] Image selected via input:", file.name);
                 // processImageFile は fileManager 内で stateManager の setImage を使うように修正済み
-                processImageFile(file, requestRedraw); 
+                processImageFile(file, requestRedraw);
             }
         });
     }
@@ -85,7 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // handleDownload は fileManager 内で getState を使うように修正済み
         uiElements.downloadButton.addEventListener('click', handleDownload);
     }
-    
+
     // ドラッグ＆ドロップのイベントリスナー
     if (uiElements.canvasContainer) {
         uiElements.canvasContainer.addEventListener('dragover', (event) => {
@@ -108,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     console.log("[Main] Kakomi App Initialized (hopefully with new StateManager working).");
-    
+
     // 初期描画（画像がもしあれば。通常はファイル選択後に描画される）
     // requestRedraw(); // 必要に応じて最初の描画をトリガー
 });
