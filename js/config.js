@@ -5,7 +5,7 @@
  * 各UIコントロールの設定値 (min, max, step, defaultValue)
  * これにより、HTMLからこれらの値を分離し、JavaScriptで一元管理します。
  */
-export const controlsConfig = {
+const controlsConfig_toBeMoved = { // このブロックは uiDefinitions.js に移動されます
     // レイアウト設定タブ
     outputAspectRatio: { defaultValue: '1:1' }, // select要素のデフォルト選択値
     baseMarginPercent: { defaultValue: 5, min: 0, max: 100, step: 1 }, // number input
@@ -28,11 +28,12 @@ export const controlsConfig = {
  * アプリケーションの編集状態のデフォルト値。
  * controlsConfigのdefaultValueを参照して生成します。
  */
+// 注意: 以下の defaultEditState は、新しい stateManager.js の初期状態定義に取って代わられます。
+// controlsConfig も新しい uiDefinitions.js を参照するようになります。
 export const defaultEditState = {
     image: null,            // アップロードされたImageオブジェクト
     originalWidth: 0,       // 元画像の幅
     originalHeight: 0,      // 元画像の高さ
-
     // レイアウト設定
     photoViewParams: {      // 出力枠内での写真の表示パラメータ
         offsetX: controlsConfig.photoPosX.defaultValue, // 0 (左端) to 1 (右端), 0.5 = 中央

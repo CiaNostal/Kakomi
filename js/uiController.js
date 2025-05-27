@@ -1,6 +1,6 @@
 // js/uiController.js
-import { editState, updateEditState } from './state.js';
-import { controlsConfig } from './config.js';
+import { getState, updateState } from './stateManager.js'; // CHANGED: Import from stateManager
+import { controlsConfig } from './uiDefinitions.js'; // CHANGED: Import from uiDefinitions
 // requestRedraw は main.js からコールバックとして渡される
 
 /**
@@ -46,7 +46,7 @@ export const uiElements = {
  * editStateの現在の値に基づいて、HTMLのUI要素の属性（min, max, step, value, checkedなど）を初期化・設定します。
  */
 export function initializeUIFromState() {
-    const state = editState; // 直接参照（変更はしない前提）
+    const state = getState(); // CHANGED: Use getState()
 
     /**
      * input要素（range, number）の属性と値を設定するヘルパー関数。
@@ -86,7 +86,9 @@ export function initializeUIFromState() {
     setupInputAttributesAndValue(uiElements.bgSaturationSlider, 'bgSaturation', state.imageBlurBackgroundParams.saturation);
 
     // 出力設定
-    setupInputAttributesAndValue(uiElements.jpgQualitySlider, 'jpgQuality', Math.round(state.outputJpgQuality * 100));
+    // stateManager.js の editState 構造に合わせて outputSettings.quality を参照
+    setupInputAttributesAndValue(uiElements.jpgQualitySlider, 'jpgQuality', Math.round(state.outputSettings.quality * 100));
+
 
     toggleBackgroundSettingsVisibility(); // ラジオボタンの状態に基づいて表示切替
     updateSliderValueDisplays(); // 全てのスライダーの隣のテキスト表示を更新
@@ -96,7 +98,7 @@ export function initializeUIFromState() {
  * 各スライダーの現在の値を隣の<span>要素に表示します。
  */
 export function updateSliderValueDisplays() {
-    const state = editState; // 表示は現在のeditStateに基づいて行う
+    const state = getState(); // CHANGED: Use getState()
 
     // 各span要素が存在するか確認してからtextContentを設定
     if (uiElements.photoPosXValueSpan && uiElements.photoPosXSlider) {
@@ -122,7 +124,8 @@ export function updateSliderValueDisplays() {
         uiElements.bgSaturationValueSpan.textContent = `${state.imageBlurBackgroundParams.saturation}%`;
     }
     if (uiElements.jpgQualityValueSpan && uiElements.jpgQualitySlider) {
-        uiElements.jpgQualityValueSpan.textContent = `${Math.round(state.outputJpgQuality * 100)}`;
+        // stateManager.js の editState 構造に合わせて outputSettings.quality を参照
+        uiElements.jpgQualityValueSpan.textContent = `${Math.round(state.outputSettings.quality * 100)}`;
     }
 }
 
@@ -131,10 +134,11 @@ export function updateSliderValueDisplays() {
  */
 export function toggleBackgroundSettingsVisibility() {
     if (!uiElements.bgColorSettingsContainer || !uiElements.imageBlurSettingsContainer) return;
-    if (editState.backgroundType === 'color') {
+    const currentBackgroundType = getState().backgroundType; // CHANGED: Use getState()
+    if (currentBackgroundType === 'color') {
         uiElements.bgColorSettingsContainer.classList.remove('hidden');
         uiElements.imageBlurSettingsContainer.classList.add('hidden');
-    } else if (editState.backgroundType === 'imageBlur') {
+    } else if (currentBackgroundType === 'imageBlur') {
         uiElements.bgColorSettingsContainer.classList.add('hidden');
         uiElements.imageBlurSettingsContainer.classList.remove('hidden');
     }
@@ -171,9 +175,13 @@ export function setupEventListeners(redrawCallback) {
                 e.target.value = String(value); // UIにもバリデーション後の値を反映
 
                 if (isNested && nestedKey) {
-                    updateEditState({ [stateKey]: { ...editState[stateKey], [nestedKey]: value } });
+                    // stateManager.js の updateState はディープマージを行う
+                    // ネストしたオブジェクトの特定プロパティを更新する場合、
+                    // 現在のそのブランチの状態を取得し、更新したいキーの値を変更してオブジェクトごと渡す
+                    const currentStateBranch = getState()[stateKey] || {};
+                    updateState({ [stateKey]: { ...currentStateBranch, [nestedKey]: value } });
                 } else {
-                    updateEditState({ [stateKey]: value });
+                    updateState({ [stateKey]: value });
                 }
                 updateSliderValueDisplays(); // スライダー横のテキスト表示を更新
                 redrawCallback(); // プレビュー再描画
@@ -194,7 +202,7 @@ export function setupEventListeners(redrawCallback) {
             element.addEventListener('change', (e) => {
                 if (isRadio) {
                     if (e.target.checked) {
-                        updateEditState({ [stateKey]: radioValue });
+                        updateState({ [stateKey]: radioValue });
                         if (stateKey === 'backgroundType') { // 背景タイプ変更時のみ特別なUI更新
                             toggleBackgroundSettingsVisibility();
                         }
@@ -202,7 +210,7 @@ export function setupEventListeners(redrawCallback) {
                         return; // チェックが外れたラジオボタンのイベントは無視
                     }
                 } else { // select要素など
-                    updateEditState({ [stateKey]: e.target.value });
+                    updateState({ [stateKey]: e.target.value });
                 }
                 if (needsRedraw) redrawCallback();
             });
@@ -222,8 +230,8 @@ export function setupEventListeners(redrawCallback) {
     addOptionChangeListener(uiElements.bgTypeImageBlurRadio, 'backgroundType', true, 'imageBlur');
     if (uiElements.backgroundColorInput) { // カラーピッカーはinputイベントでリアルタイムに
         uiElements.backgroundColorInput.addEventListener('input', (e) => {
-            updateEditState({ backgroundColor: e.target.value });
-            if (editState.backgroundType === 'color') { // 単色背景選択中のみ即時再描画
+            updateState({ backgroundColor: e.target.value });
+            if (getState().backgroundType === 'color') { // 単色背景選択中のみ即時再描画
                 redrawCallback();
             }
         });
@@ -244,7 +252,10 @@ export function setupEventListeners(redrawCallback) {
             validatedQualityUI = Math.max(config.min, Math.min(config.max, validatedQualityUI));
             e.target.value = String(validatedQualityUI); // UIに反映
 
-            updateEditState({ outputJpgQuality: validatedQualityUI / 100 });
+            // stateManager.js の editState 構造に合わせて outputSettings.quality を更新
+            updateState({ 
+                outputSettings: { ...getState().outputSettings, quality: validatedQualityUI / 100 } 
+            });
             updateSliderValueDisplays(); // スライダー横のテキスト表示を更新 (再描画は不要)
         });
     }
