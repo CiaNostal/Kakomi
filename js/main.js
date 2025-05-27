@@ -1,14 +1,12 @@
 // js/main.js
 // アプリケーションのエントリーポイント。各モジュールをインポートし、初期化処理を行います。
 
-import { getState, updateState, addStateChangeListener } from './stateManager.js'; // CHANGED: Import from stateManager
-// import { uiElements, initializeUIFromState, setupEventListeners } from './uiController.js';
-// import { calculateLayout } from './layoutEngine.js'; // This will be replaced later
-import { uiElements, initializeUIFromState, setupEventListeners } from './uiController.js'; // CHANGED: Import from layoutCalculator.js
-import { calculateLayout } from './layoutCalculator.js'; // This will be replaced later
-import { drawPreview } from './canvasRenderer.js'; // This will be refactored later
+import { getState, updateState, addStateChangeListener } from './stateManager.js';
+import { uiElements, initializeUIFromState, setupEventListeners } from './uiController.js';
+import { calculateLayout } from './layoutCalculator.js'; // 正しいレイアウト計算モジュール
+import { drawPreview } from './canvasRenderer.js';     // 現在の描画モジュール
 import { processImageFile, handleDownload } from './fileManager.js';
-import { displayExifInfo } from './exifHandler.js'; // ADDED: Import for Exif display
+import { displayExifInfo } from './exifHandler.js';   // Exif表示用
 import { initializeTabs } from './tabManager.js';
 
 /**
@@ -16,61 +14,45 @@ import { initializeTabs } from './tabManager.js';
  * editStateが更新された後や、UIの変更がプレビューに影響する場合に呼び出されます。
  */
 export function requestRedraw() {
-    const currentState = getState(); // Get state once at the beginning
+    const currentState = getState(); // 状態を一度だけ取得
 
     if (!currentState.image) {
-        // 画像がない場合、プレビューをクリアする
         if (uiElements.previewCtx && uiElements.previewCanvas) {
             uiElements.previewCtx.clearRect(0, 0, uiElements.previewCanvas.width, uiElements.previewCanvas.height);
-
+        }
+        // Exif表示もクリア（または「画像がありません」等の表示）
+        if (uiElements.exifDataContainer) {
+            displayExifInfo(null, uiElements.exifDataContainer);
         }
         return;
     }
-    const layoutInfo = calculateLayout(currentState); // Use captured currentState
 
-    // 計算結果をeditStateに保存
+    const layoutInfo = calculateLayout(currentState);
 
     updateState({
         photoDrawConfig: layoutInfo.photoDrawConfig,
         outputCanvasConfig: layoutInfo.outputCanvasConfig
     });
-    // updateStateがリスナーを呼び出すので、もしrequestRedrawがリスナー登録されていれば
-    // ここで再度requestRedrawが呼ばれることになる。
-    // drawPreview needs the state *after* the above updateState if it relies on photoDrawConfig/outputCanvasConfig being in the global state.
-    // However, drawPreview receives `currentState` which is from *before* this specific updateState.
-    // For consistency, let's pass the state that was used for layout calculation,
-    // assuming drawPreview primarily uses photoDrawConfig and outputCanvasConfig from the state,
-    // and these are now also in layoutInfo.
-    // A cleaner way would be for drawPreview to accept layoutInfo directly if possible.
-    // For now, to reflect the updateState call, it might be better to get the LATEST state for drawing.
-    // Let's reconsider: the updateState above *mutates* the internal editState.
-    // The `currentState` variable here holds a *copy* from the beginning of the function.
-    // So, to draw with the updated config, we should use getState() again, OR pass layoutInfo to drawPreview.
-    // Given our goal is to reduce getState calls, passing layoutInfo might be better long-term.
-    // But for minimal change right now, let's ensure drawPreview gets up-to-date configs.
-    // The most straightforward way with current drawPreview signature, after updateState, is to get fresh state.
-    // This re-introduces a getState(), but only one extra, and ensures correctness.
+
+    // updateStateにより内部のeditStateは更新された。
+    // 描画やExif表示には、この最新の状態（特にphotoDrawConfigとoutputCanvasConfigが反映されたもの）を使いたい。
+    // getState()はコピーを返すため、再度呼び出すことで最新のコピーを取得する。
     const freshStateForDraw = getState();
 
-    // プレビューを描画
     if (uiElements.previewCanvas && uiElements.previewCtx) {
         drawPreview(freshStateForDraw, uiElements.previewCanvas, uiElements.previewCtx);
-
     } else {
         console.error("[Main] Preview canvas or context not available for redraw.");
     }
 
-    // Display Exif Info
-    if (uiElements.exifDataContainer && freshStateForDraw.exifData) {
-        // currentState.exifData comes from stateManager
-        // displayExifInfo is from exifHandler
+    if (uiElements.exifDataContainer) {
         displayExifInfo(freshStateForDraw.exifData, uiElements.exifDataContainer);
     }
 }
 
 // DOMContentLoadedイベントでアプリケーションを初期化
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("[Main] DOMContentLoaded: Initializing application with new StateManager...");
+    console.log("[Main] DOMContentLoaded: Initializing application...");
 
     if (uiElements.previewCanvas) {
         uiElements.previewCtx = uiElements.previewCanvas.getContext('2d');
@@ -79,36 +61,30 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    // initializeUIFromState は uiController 内で getState() を使うように修正済み
     initializeUIFromState();
-    // setupEventListeners は uiController 内で updateState() を使うように修正済み
-    // requestRedraw をコールバックとして渡す
-    setupEventListeners(requestRedraw);
-    initializeTabs();           // タブ機能を初期化
+    setupEventListeners(requestRedraw); // requestRedrawをコールバックとして渡す
+    initializeTabs();
 
-    // (オプション) stateManagerのリスナーとしてrequestRedrawを登録する場合
+    // (オプション) stateManagerのリスナーとしてrequestRedrawを登録する場合の検討:
     // addStateChangeListener(requestRedraw);
-    // この場合、uiController内の各イベントリスナーはredrawCallbackを呼ばずにupdateStateのみ行う
+    // この場合、uiController内の各イベントリスナーはredrawCallbackを呼ばず、updateStateのみを行う形になる。
+    // これにより、状態変更が一元的にrequestRedrawをトリガーするようになるが、
+    // updateStateがrequestRedraw内で呼ばれる場合（現状photoDrawConfigなどの保存で発生）の
+    // 無限ループや不要な再描画を防ぐ工夫が必要になる場合がある。現状はコールバック方式を維持。
 
-    // ファイルローダーのイベントリスナー
     if (uiElements.imageLoader) {
         uiElements.imageLoader.addEventListener('change', (event) => {
             const file = event.target.files[0];
             if (file) {
-                console.log("[Main] Image selected via input:", file.name);
-                // processImageFile は fileManager 内で stateManager の setImage を使うように修正済み
                 processImageFile(file, requestRedraw);
             }
         });
     }
 
-    // ダウンロードボタンのイベントリスナー
     if (uiElements.downloadButton) {
-        // handleDownload は fileManager 内で getState を使うように修正済み
         uiElements.downloadButton.addEventListener('click', handleDownload);
     }
-
-    // ドラッグ＆ドロップのイベントリスナー
+    
     if (uiElements.canvasContainer) {
         uiElements.canvasContainer.addEventListener('dragover', (event) => {
             event.stopPropagation(); event.preventDefault();
@@ -124,13 +100,9 @@ document.addEventListener('DOMContentLoaded', () => {
             uiElements.canvasContainer.classList.remove('dragover');
             const files = event.dataTransfer.files;
             if (files.length > 0) {
-                console.log("[Main] Image dropped:", files[0].name);
                 processImageFile(files[0], requestRedraw);
             }
         });
     }
-    console.log("[Main] Kakomi App Initialized (hopefully with new StateManager working).");
-
-    // 初期描画（画像がもしあれば。通常はファイル選択後に描画される）
-    // requestRedraw(); // 必要に応じて最初の描画をトリガー
+    console.log("[Main] Kakomi App Initialized.");
 });

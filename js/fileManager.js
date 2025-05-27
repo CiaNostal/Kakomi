@@ -2,43 +2,48 @@
 import { getState, setImage } from './stateManager.js';
 import { initializeUIFromState, uiElements } from './uiController.js';
 import { renderFinal } from './canvasRenderer.js';
-import { extractExifFromFile, embedExifToJpeg } from './exifHandler.js'; // ADDED: Import for Exif extraction
-import { canvasToJpegBlob, blobToDataURL, dataURLToBlob } from './utils/canvasUtils.js'; // canvasToJpegBlobと新しいヘルパーをインポート
+import { extractExifFromFile, embedExifToJpeg } from './exifHandler.js';
+import { canvasToJpegBlob, blobToDataURL, dataURLToBlob } from './utils/canvasUtils.js';
 // redrawCallback は main.js から渡される
 
-export async function processImageFile(file, redrawCallback) { // CHANGED: Made async
-
+export async function processImageFile(file, redrawCallback) {
     if (file && file.type.startsWith('image/')) {
-        const originalFileName = file.name; // Get filename from the File object
+        const originalFileName = file.name;
         const reader = new FileReader();
-        reader.onload = async (e) => { // CHANGED: Made async
+        
+        reader.onload = async (e) => {
             const img = new Image();
-            img.onload = async () => { // CHANGED: Made async
+            img.onload = async () => {
                 let exifData = null;
                 try {
-                    // Attempt to extract Exif data
                     exifData = await extractExifFromFile(file);
-                } catch (exifError) { // extractExifFromFileがnullを返すので、ここではcatchされない想定
-                    console.warn("Exifデータの抽出に失敗しました:", exifError);
+                } catch (exifError) {
+                    console.warn("Exifデータの抽出に失敗しました (processImageFile):", exifError);
                 }
-                // Set image, Exif data, and original filename in state
-                setImage(img, exifData, originalFileName);
-
-                initializeUIFromState();
-
-                redrawCallback();
+                
+                setImage(img, exifData, originalFileName); // stateManagerのsetImageを呼び出し
+                
+                initializeUIFromState(); // uiControllerを使ってUIを最新の状態に更新
+                redrawCallback();      // main.jsのrequestRedrawを呼び出し
 
                 if (uiElements.downloadButton) uiElements.downloadButton.disabled = false;
                 if (uiElements.imageLoader) uiElements.imageLoader.value = '';
             };
-            img.onerror = () => { alert('画像の読み込みに失敗しました。'); if (uiElements.imageLoader) uiElements.imageLoader.value = ''; };
+            img.onerror = () => { 
+                alert('画像の読み込みに失敗しました。'); 
+                if (uiElements.imageLoader) uiElements.imageLoader.value = ''; 
+            };
             if (e.target && typeof e.target.result === 'string') {
                 img.src = e.target.result;
             } else {
                 alert('ファイルの読み込み結果が不正です。');
+                if (uiElements.imageLoader) uiElements.imageLoader.value = '';
             }
         };
-        reader.onerror = () => { alert('ファイルの読み込みに失敗しました。'); if (uiElements.imageLoader) uiElements.imageLoader.value = ''; };
+        reader.onerror = () => { 
+            alert('ファイルの読み込みに失敗しました。'); 
+            if (uiElements.imageLoader) uiElements.imageLoader.value = ''; 
+        };
         reader.readAsDataURL(file);
     } else {
         alert('画像ファイルを選択またはドラッグ＆ドロップしてください。');
@@ -46,25 +51,24 @@ export async function processImageFile(file, redrawCallback) { // CHANGED: Made 
     }
 }
 
-export async function handleDownload() { // async に変更
+export async function handleDownload() {
     const currentState = getState();
 
     if (!currentState.image) {
-        alert('画像が選択されていません。');
-        return;
+        alert('画像が選択されていません。'); 
+        return; 
     }
-
-    const finalCanvas = renderFinal(currentState);
+    
+    const finalCanvas = renderFinal(currentState); 
 
     if (finalCanvas) {
         const uiQualityValue = currentState.outputSettings.quality;
         const blobQuality = Math.max(0.01, Math.min(1.0, uiQualityValue / 100));
 
         try {
-            let finalBlob = await canvasToJpegBlob(finalCanvas, blobQuality); // canvasUtilsから取得
+            let finalBlob = await canvasToJpegBlob(finalCanvas, blobQuality);
             if (!finalBlob) throw new Error('初期Blobの生成に失敗しました。');
 
-            // Exifを埋め込むかどうかの設定とExifデータの存在を確認
             if (currentState.outputSettings.preserveExif && currentState.exifData) {
                 console.log("Exifの埋め込みを試みます...");
                 const jpegDataUrl = await blobToDataURL(finalBlob);
@@ -79,12 +83,12 @@ export async function handleDownload() { // async に変更
                             console.warn("Exif埋め込み後のBlob変換に失敗しました。元の画像を使用します。");
                         }
                     } else if (newJpegDataUrlWithExif === jpegDataUrl) {
-                        console.log("Exifデータが存在しないか、埋め込みが不要と判断されました。元の画像を使用します。");
-                    } else {
-                        console.warn("Exif埋め込み処理でエラーが発生しました。元の画像を使用します。");
+                         console.log("Exifデータが存在しないか、埋め込み処理がスキップされました。元の画像を使用します。");
+                    } else { // newJpegDataUrlWithExif が null の場合など
+                        console.warn("Exif埋め込み処理でエラーまたは変更なし。元の画像を使用します。");
                     }
                 } else {
-                    console.warn("BlobからDataURLへの変換に失敗しました。Exifは埋め込まれません。");
+                     console.warn("BlobからDataURLへの変換に失敗しました。Exifは埋め込まれません。");
                 }
             } else {
                 console.log("Exifを保持する設定でないか、Exifデータが存在しないため、埋め込みは行いません。");
@@ -92,11 +96,11 @@ export async function handleDownload() { // async に変更
 
             const url = URL.createObjectURL(finalBlob);
             let baseName = 'image';
-            // Use stored originalFileName from state
             if (currentState.originalFileName) {
                 baseName = currentState.originalFileName.substring(0, currentState.originalFileName.lastIndexOf('.')) || 'image';
             }
-            const fileName = `${baseName}_kakomi_framed.jpg`; // 仕様書では「(読み込んだ元写真のファイル名)_framed.jpg」となっています
+            // 仕様書では「_framed.jpg」。 現在は "_kakomi_framed.jpg" を維持。
+            const fileName = `${baseName}_kakomi_framed.jpg`; 
             const a = document.createElement('a');
             a.href = url; a.download = fileName;
             document.body.appendChild(a); a.click();
