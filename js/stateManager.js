@@ -58,7 +58,7 @@ let editState = {
     // 文字表示関連の設定を追加
     textSettings: {
         date: {
-            enabled: false,
+            enabled: true,
             format: 'YYYY/MM/DD', // 日付表示形式
             font: 'Arial',
             size: 3,          // サイズ (%)
@@ -68,7 +68,7 @@ let editState = {
             offsetY: 0        // Y方向オフセット (%)
         },
         exif: {
-            enabled: false,
+            enabled: true,
             items: ['make', 'model', 'fNumber', 'exposureTime', 'iso', 'focalLength'],
             font: 'Arial',
             size: 2,          // サイズ (%)

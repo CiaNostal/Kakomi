@@ -1,7 +1,7 @@
 // js/canvasRenderer.js
-// drawPreview, renderFinal, drawOrRenderBackground 関数をここに配置します。
 import { drawBackground } from './backgroundRenderer.js'; // ADDED: backgroundRenderer.jsからdrawBackgroundをインポート
-
+import { applyFrameEffects } from './frameRenderer.js'; // ADDED: frameRenderer.js から applyFrameEffects をインポート
+import { drawText } from './textRenderer.js'; // ADDED: textRenderer.js から drawText をインポート (loadGoogleFontsは別途検討)
 
 // REMOVED: drawOrRenderBackground 関数は backgroundRenderer.js に移管されました。
 
@@ -41,6 +41,8 @@ export function drawPreview(currentState, previewCanvas, previewCtx) {
 
     // CHANGED: インポートした drawBackground 関数を使用
     drawBackground(previewCtx, previewCanvas.width, previewCanvas.height, currentState);
+
+    // 写真本体の描画 (現在のdrawImage呼び出し)
     if (img) {
         const scale = (outputTotalWidth === 0) ? 0 : previewCanvas.width / outputTotalWidth;
         const previewPhotoX = destXonOutputCanvas * scale;
@@ -49,7 +51,21 @@ export function drawPreview(currentState, previewCanvas, previewCtx) {
         const previewPhotoHeight = destHeight * scale;
         if (sourceWidth > 0 && sourceHeight > 0 && destWidth > 0 && destHeight > 0 && previewPhotoWidth > 0 && previewPhotoHeight > 0) {
             previewCtx.drawImage(img, sourceX, sourceY, sourceWidth, sourceHeight, previewPhotoX, previewPhotoY, previewPhotoWidth, previewPhotoHeight);
+
+            // 写真描画後にフレーム効果を適用 (プレビュー用なので、座標と寸法はスケーリングされたもの)
+            // 注意: applyFrameEffectsの内部実装（特に影の扱い）によっては、
+            // この呼び出し順序では期待通りにならない可能性がある (影が写真の上になるなど)。
+            // また、photoX, photoY, photoWidth, photoHeight は Canvas全体に対する写真の描画位置・サイズ。
+            // スケーリングされた値を渡す必要がある。
+            applyFrameEffects(previewCtx, currentState, previewPhotoX, previewPhotoY, previewPhotoWidth, previewPhotoHeight);
         }
+    }
+
+    // テキストを描画 (フレームの後)
+    // drawText はCanvas全体の幅と高さを期待する
+    // Google Fonts のロードは別途考慮 (drawTextをasyncにするか、事前にロード完了を待つ)
+    if (currentState.textSettings.date.enabled || currentState.textSettings.exif.enabled) {
+        drawText(previewCtx, currentState, previewCanvas.width, previewCanvas.height);
     }
 }
 
@@ -79,6 +95,21 @@ export function renderFinal(currentState) {
 
     // CHANGED: インポートした drawBackground 関数を使用
     drawBackground(ctx, outputWidth, outputHeight, currentState); (ctx, outputWidth, outputHeight, currentState);
+
+    // 写真本体の描画
     ctx.drawImage(img, sourceX, sourceY, sourceWidth, sourceHeight, destXonOutputCanvas, destYonOutputCanvas, destWidth, destHeight);
+
+    // 写真描画後にフレーム効果を適用 (出力用なので、オリジナルの描画座標と寸法)
+    // 注意: こちらも影の描画順序に注意。
+    // currentState.photoDrawConfig の destXonOutputCanvas などが Canvas 全体における写真の位置とサイズ。
+    applyFrameEffects(ctx, currentState, destXonOutputCanvas, destYonOutputCanvas, destWidth, destHeight);
+
+    // テキストを描画 (フレームの後)
+    // Google Fonts のロードは別途考慮
+    if (currentState.textSettings.date.enabled || currentState.textSettings.exif.enabled) {
+        drawText(ctx, currentState, outputWidth, outputHeight);
+    }
+
+
     return finalCanvas;
 }
