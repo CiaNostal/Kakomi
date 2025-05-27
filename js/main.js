@@ -16,43 +16,55 @@ import { initializeTabs } from './tabManager.js';
  * editStateが更新された後や、UIの変更がプレビューに影響する場合に呼び出されます。
  */
 export function requestRedraw() {
-    const currentState = getState(); // CHANGED: Use getState()
+    const currentState = getState(); // Get state once at the beginning
 
     if (!currentState.image) {
         // 画像がない場合、プレビューをクリアする
         if (uiElements.previewCtx && uiElements.previewCanvas) {
             uiElements.previewCtx.clearRect(0, 0, uiElements.previewCanvas.width, uiElements.previewCanvas.height);
-            // 必要であれば、プレビューCanvasのサイズもデフォルトに戻す
-            // uiElements.previewCanvas.width = 300; // 例
-            // uiElements.previewCanvas.height = 200; // 例
+
         }
         return;
     }
-    const layoutInfo = calculateLayout(currentState); // CHANGED: Pass currentState
+    const layoutInfo = calculateLayout(currentState); // Use captured currentState
 
     // 計算結果をeditStateに保存
-    // CHANGED: Use updateState from stateManager.js
+
     updateState({
         photoDrawConfig: layoutInfo.photoDrawConfig,
         outputCanvasConfig: layoutInfo.outputCanvasConfig
     });
     // updateStateがリスナーを呼び出すので、もしrequestRedrawがリスナー登録されていれば
     // ここで再度requestRedrawが呼ばれることになる。
-    // 現状はuiControllerが直接requestRedrawを呼ぶので、drawPreviewは別途呼び出す。
+    // drawPreview needs the state *after* the above updateState if it relies on photoDrawConfig/outputCanvasConfig being in the global state.
+    // However, drawPreview receives `currentState` which is from *before* this specific updateState.
+    // For consistency, let's pass the state that was used for layout calculation,
+    // assuming drawPreview primarily uses photoDrawConfig and outputCanvasConfig from the state,
+    // and these are now also in layoutInfo.
+    // A cleaner way would be for drawPreview to accept layoutInfo directly if possible.
+    // For now, to reflect the updateState call, it might be better to get the LATEST state for drawing.
+    // Let's reconsider: the updateState above *mutates* the internal editState.
+    // The `currentState` variable here holds a *copy* from the beginning of the function.
+    // So, to draw with the updated config, we should use getState() again, OR pass layoutInfo to drawPreview.
+    // Given our goal is to reduce getState calls, passing layoutInfo might be better long-term.
+    // But for minimal change right now, let's ensure drawPreview gets up-to-date configs.
+    // The most straightforward way with current drawPreview signature, after updateState, is to get fresh state.
+    // This re-introduces a getState(), but only one extra, and ensures correctness.
+    const freshStateForDraw = getState();
 
     // プレビューを描画
     if (uiElements.previewCanvas && uiElements.previewCtx) {
-        // drawPreviewに渡すのも最新のcurrentState (updateState後だが、今回はlayoutInfoの結果なので変わらないはず)
-        drawPreview(getState(), uiElements.previewCanvas, uiElements.previewCtx); // CHANGED: Pass latest state
+        drawPreview(freshStateForDraw, uiElements.previewCanvas, uiElements.previewCtx);
+
     } else {
         console.error("[Main] Preview canvas or context not available for redraw.");
     }
 
     // Display Exif Info
-    if (uiElements.exifDataContainer) {
+    if (uiElements.exifDataContainer && freshStateForDraw.exifData) {
         // currentState.exifData comes from stateManager
         // displayExifInfo is from exifHandler
-        displayExifInfo(currentState.exifData, uiElements.exifDataContainer);
+        displayExifInfo(freshStateForDraw.exifData, uiElements.exifDataContainer);
     }
 }
 

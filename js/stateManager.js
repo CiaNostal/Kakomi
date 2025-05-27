@@ -152,22 +152,12 @@ function updateState(updates) {
     notifyStateChange();
 }
 
-/**
- * 現在の編集状態のコピーを取得する
- * @returns {Object} 現在の編集状態のディープコピー
- */
+// js/stateManager.js に戻す getState() の内容
 function getState() {
-    // JSON.stringify/parse で大部分をディープコピー
     const stateCopy = JSON.parse(JSON.stringify(editState));
-
-    // HTMLImageElement は JSON.stringify で適切にシリアライズされないため、
-    // 元の editState から image オブジェクトへの参照を stateCopy に再設定する。
     if (editState.image) {
         stateCopy.image = editState.image;
     }
-
-    // 将来的に他のシリアライズ不可能なオブジェクトを editState に追加した場合、
-    // 同様の手動での再割り当てが必要になる可能性がある。
     return stateCopy;
 }
 

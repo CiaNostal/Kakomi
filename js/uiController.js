@@ -141,8 +141,9 @@ export function setupEventListeners(redrawCallback) {
                 e.target.value = String(value);
 
                 if (isNested && nestedKey) {
-                    const currentStateBranch = getState()[stateKey] || {};
-                    updateState({ [stateKey]: { ...currentStateBranch, [nestedKey]: value } });
+                    // → deepMergeを信頼し、ペイロードを簡略化
+                    // updateState({ [stateKey]: { ...getState()[stateKey], [nestedKey]: value } }); // 旧
+                    updateState({ [stateKey]: { [nestedKey]: value } }); // NEW: Relies on deepMerge in stateManager
                 } else {
                     updateState({ [stateKey]: value });
                 }
@@ -207,9 +208,8 @@ export function setupEventListeners(redrawCallback) {
             e.target.value = String(validatedQualityUI);
 
             // CORRECTED: state.outputSettings.quality is 1-100
-            updateState({
-                outputSettings: { ...getState().outputSettings, quality: validatedQualityUI }
-            });
+            // NEW: Relies on deepMerge in stateManager for nested update
+            updateState({ outputSettings: { quality: validatedQualityUI } });
             updateSliderValueDisplays();
         });
     }
