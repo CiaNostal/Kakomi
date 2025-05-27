@@ -18,8 +18,8 @@ export const controlsConfig = {
     backgroundColor: { defaultValue: '#ffffff' }, // color input
     bgScale: { defaultValue: 2.0, min: 1, max: 5, step: 0.1 }, // range input
     bgBlur: { defaultValue: 3, min: 0, max: 20, step: 0.5 },  // range input
-    bgBrightness: { defaultValue: 100, min: 0, max: 300, step: 1 }, // range input
-    bgSaturation: { defaultValue: 100, min: 0, max: 300, step: 1 }, // range input
+    bgBrightness: { defaultValue: 100, min: 0, max: 150, step: 1 }, // range input
+    bgSaturation: { defaultValue: 100, min: 0, max: 150, step: 1 }, // range input
     // 出力タブ
     jpgQuality: { defaultValue: 100, min: 1, max: 100, step: 1 }, // range input (UI表示用1-100)
 };
