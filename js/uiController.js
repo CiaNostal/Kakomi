@@ -142,7 +142,7 @@ export function initializeUIFromState() {
     if (uiElements.frameBorderStyleSelect) uiElements.frameBorderStyleSelect.value = fs.border.style;
 
     toggleBackgroundSettingsVisibility();
-    updateFrameSettingsVisibility();
+    updateFrameSettingsVisibility(); // 初期表示のために呼び出し
     updateSliderValueDisplays();
 }
 
@@ -218,7 +218,7 @@ function updateFrameSettingsVisibility() {
     if (uiElements.frameShadowSettingsContainer) {
         uiElements.frameShadowSettingsContainer.style.display = frameState.shadowEnabled ? '' : 'none';
     }
-    // 影が有効な場合のみ、影タイプごとの設定コンテナを制御
+    
     if (frameState.shadowEnabled) {
         if (uiElements.frameDropShadowSettingsContainer) {
             uiElements.frameDropShadowSettingsContainer.style.display = frameState.shadowType === 'drop' ? '' : 'none';
@@ -226,7 +226,7 @@ function updateFrameSettingsVisibility() {
         if (uiElements.frameInnerShadowSettingsContainer) {
             uiElements.frameInnerShadowSettingsContainer.style.display = frameState.shadowType === 'inner' ? '' : 'none';
         }
-    } else { // 影が無効なら、ドロップシャドウとインナーシャドウの設定も隠す
+    } else { 
         if (uiElements.frameDropShadowSettingsContainer) uiElements.frameDropShadowSettingsContainer.style.display = 'none';
         if (uiElements.frameInnerShadowSettingsContainer) uiElements.frameInnerShadowSettingsContainer.style.display = 'none';
     }
@@ -249,14 +249,14 @@ export function setupEventListeners(redrawCallback) {
                 if (config.min !== undefined) value = Math.max(config.min, value);
                 if (config.max !== undefined) value = Math.min(config.max, value);
             }
-            e.target.value = String(value);
+            e.target.value = String(value); 
 
             let updatePayload;
-            if (subNestedKey && nestedKey) { // e.g., frameSettings.dropShadow.offsetX
+            if (subNestedKey && nestedKey) { 
                 updatePayload = { [stateKey]: { [nestedKey]: { [subNestedKey]: value } } };
-            } else if (nestedKey) { // e.g., frameSettings.cornerRadiusPercent or photoViewParams.offsetX
+            } else if (nestedKey) { 
                 updatePayload = { [stateKey]: { [nestedKey]: value } };
-            } else { // e.g., baseMarginPercent
+            } else { 
                 updatePayload = { [stateKey]: value };
             }
             updateState(updatePayload);
@@ -266,50 +266,61 @@ export function setupEventListeners(redrawCallback) {
     };
 
     // 汎用選択肢変更リスナー (ラジオボタン、セレクトボックス、チェックボックス)
-    const addOptionChangeListener = (element, stateKey, val1, val2, val3) => {
-        // val1: isRadio ? radioValue : nestedKey (for checkbox & select)
-        // val2: isRadio ? nestedKey : subNestedKey (for select)
-        // val3: isRadio ? subNestedKey : (not used for select)
+    // 引数の意味:
+    // element: 対象のHTML要素
+    // stateKey: editStateのトップレベルのキー (例: 'frameSettings')
+    // keyOrRadioValue:
+    //   - チェックボックスの場合: nestedKey (例: 'shadowEnabled', 'borderEnabled')
+    //   - ラジオボタンの場合: このラジオボタンが示す値 (例: 'rounded', 'drop')
+    //   - セレクトボックスの場合: nestedKey (例: 'border')
+    // nestedKeyForRadioOrSelectSubKey:
+    //   - ラジオボタンの場合: nestedKey (例: 'cornerStyle', 'shadowType')
+    //   - セレクトボックスの場合: subNestedKey (例: 'style' for border.style)
+    // subNestedKeyForRadio:
+    //   - ラジオボタンの場合: subNestedKey (現在は未使用だが将来の3階層ラジオのため)
+    const addOptionChangeListener = (element, stateKey, keyOrRadioValue, nestedKeyForRadioOrSelectSubKey = '', subNestedKeyForRadio = '') => {
         if (!element) return;
         const eventType = (element.type === 'checkbox' || element.type === 'radio') ? 'change' : 'change';
 
         element.addEventListener(eventType, (e) => {
             let valueToSet;
             let updatePayload;
-            let isRadio = (element.type === 'radio');
             
-            let pNestedKey = '';
-            let pSubNestedKey = '';
+            let actualNestedKey = '';
+            let actualSubNestedKey = '';
 
             if (element.type === 'checkbox') {
                 valueToSet = e.target.checked;
-                pNestedKey = val1; // For checkbox, val1 is nestedKey
-            } else if (isRadio) {
+                actualNestedKey = keyOrRadioValue; // e.g., 'shadowEnabled' or 'borderEnabled'
+            } else if (element.type === 'radio') {
                 if (!e.target.checked) return;
-                valueToSet = val1; // For radio, val1 is radioValue
-                pNestedKey = val2; // For radio, val2 is nestedKey
-                pSubNestedKey = val3; // For radio, val3 is subNestedKey
+                valueToSet = keyOrRadioValue; // e.g., 'rounded' or 'drop'
+                actualNestedKey = nestedKeyForRadioOrSelectSubKey; // e.g., 'cornerStyle' or 'shadowType'
+                actualSubNestedKey = subNestedKeyForRadio; // 通常は空
             } else { // select
                 valueToSet = e.target.value;
-                pNestedKey = val1; // For select, val1 is nestedKey
-                pSubNestedKey = val2; // For select, val2 is subNestedKey
+                actualNestedKey = keyOrRadioValue; // e.g., 'border'
+                actualSubNestedKey = nestedKeyForRadioOrSelectSubKey; // e.g., 'style'
             }
 
-            if (pSubNestedKey && pNestedKey) {
-                updatePayload = { [stateKey]: { [pNestedKey]: { [pSubNestedKey]: valueToSet } } };
-            } else if (pNestedKey) {
-                updatePayload = { [stateKey]: { [pNestedKey]: valueToSet } };
+            if (actualSubNestedKey && actualNestedKey) {
+                updatePayload = { [stateKey]: { [actualNestedKey]: { [actualSubNestedKey]: valueToSet } } };
+            } else if (actualNestedKey) {
+                updatePayload = { [stateKey]: { [actualNestedKey]: valueToSet } };
             } else {
-                updatePayload = { [stateKey]: valueToSet };
+                updatePayload = { [stateKey]: valueToSet }; // トップレベルのstateKey (例: backgroundType)
             }
+            
+            console.log("Updating state with payload:", JSON.stringify(updatePayload)); // ★デバッグ用ログ
             updateState(updatePayload);
 
             // UI表示切替判定
             if (stateKey === 'backgroundType') {
                 toggleBackgroundSettingsVisibility();
             } else if (stateKey === 'frameSettings' && 
-                       (pNestedKey === 'cornerStyle' || pNestedKey === 'shadowEnabled' || 
-                        pNestedKey === 'shadowType' || pNestedKey === 'borderEnabled')) {
+                       (actualNestedKey === 'cornerStyle' || actualNestedKey === 'shadowEnabled' || 
+                        actualNestedKey === 'shadowType' || actualNestedKey === 'borderEnabled')) {
+                console.log("Calling updateFrameSettingsVisibility because actualNestedKey is:", actualNestedKey); // ★デバッグ用ログ
                 updateFrameSettingsVisibility();
             }
             updateSliderValueDisplays();
@@ -336,15 +347,15 @@ export function setupEventListeners(redrawCallback) {
     };
 
     // --- レイアウト設定タブ ---
-    addOptionChangeListener(uiElements.outputAspectRatioSelect, 'outputTargetAspectRatioString'); // select
-    addNumericInputListener(uiElements.baseMarginPercentInput, 'baseMarginPercent', 'baseMarginPercent'); // top-level state
-    addNumericInputListener(uiElements.photoPosXSlider, 'photoPosX', 'photoViewParams', 'offsetX'); // nested
-    addNumericInputListener(uiElements.photoPosYSlider, 'photoPosY', 'photoViewParams', 'offsetY'); // nested
+    addOptionChangeListener(uiElements.outputAspectRatioSelect, 'outputTargetAspectRatioString'); // select (トップレベル)
+    addNumericInputListener(uiElements.baseMarginPercentInput, 'baseMarginPercent', 'baseMarginPercent'); // numeric (トップレベル)
+    addNumericInputListener(uiElements.photoPosXSlider, 'photoPosX', 'photoViewParams', 'offsetX'); // numeric (ネスト1階層)
+    addNumericInputListener(uiElements.photoPosYSlider, 'photoPosY', 'photoViewParams', 'offsetY'); // numeric (ネスト1階層)
 
     // --- 背景編集タブ ---
-    addOptionChangeListener(uiElements.bgTypeColorRadio, 'backgroundType', 'color'); // radio, value='color', no nestedKey
-    addOptionChangeListener(uiElements.bgTypeImageBlurRadio, 'backgroundType', 'imageBlur'); // radio, value='imageBlur', no nestedKey
-    addColorInputListener(uiElements.backgroundColorInput, 'backgroundColor'); // top-level state
+    addOptionChangeListener(uiElements.bgTypeColorRadio, 'backgroundType', 'color'); // radio (トップレベル)
+    addOptionChangeListener(uiElements.bgTypeImageBlurRadio, 'backgroundType', 'imageBlur'); // radio (トップレベル)
+    addColorInputListener(uiElements.backgroundColorInput, 'backgroundColor'); // color (トップレベル)
     addNumericInputListener(uiElements.bgScaleSlider, 'bgScale', 'imageBlurBackgroundParams', 'scale');
     addNumericInputListener(uiElements.bgBlurSlider, 'bgBlur', 'imageBlurBackgroundParams', 'blurAmountPercent');
     addNumericInputListener(uiElements.bgBrightnessSlider, 'bgBrightness', 'imageBlurBackgroundParams', 'brightness');
@@ -355,7 +366,7 @@ export function setupEventListeners(redrawCallback) {
 
     // --- フレーム加工タブ ---
     // 角のスタイル (ラジオボタン)
-    addOptionChangeListener(uiElements.frameCornerStyleNoneRadio, 'frameSettings', 'none', 'cornerStyle'); // radio, value='none', nestedKey='cornerStyle'
+    addOptionChangeListener(uiElements.frameCornerStyleNoneRadio, 'frameSettings', 'none', 'cornerStyle'); // radio, val1=radioValue, val2=nestedKey
     addOptionChangeListener(uiElements.frameCornerStyleRoundedRadio, 'frameSettings', 'rounded', 'cornerStyle');
     addOptionChangeListener(uiElements.frameCornerStyleSuperellipseRadio, 'frameSettings', 'superellipse', 'cornerStyle');
     // 角丸設定 (スライダー)
@@ -364,9 +375,9 @@ export function setupEventListeners(redrawCallback) {
     addNumericInputListener(uiElements.frameSuperellipseNSlider, 'frameSuperellipseN', 'frameSettings', 'superellipseN');
 
     // 影
-    addOptionChangeListener(uiElements.frameShadowEnabledCheckbox, 'frameSettings', 'shadowEnabled'); // checkbox, nestedKey='shadowEnabled'
-    addOptionChangeListener(uiElements.frameShadowTypeDropRadio, 'frameSettings', 'drop', 'shadowType'); // radio, value='drop', nestedKey='shadowType'
-    addOptionChangeListener(uiElements.frameShadowTypeInnerRadio, 'frameSettings', 'inner', 'shadowType'); // radio, value='inner', nestedKey='shadowType'
+    addOptionChangeListener(uiElements.frameShadowEnabledCheckbox, 'frameSettings', 'shadowEnabled'); // checkbox, val1=nestedKey
+    addOptionChangeListener(uiElements.frameShadowTypeDropRadio, 'frameSettings', 'drop', 'shadowType'); // radio
+    addOptionChangeListener(uiElements.frameShadowTypeInnerRadio, 'frameSettings', 'inner', 'shadowType'); // radio
     // ドロップシャドウ詳細設定
     addNumericInputListener(uiElements.frameDropShadowOffsetXSlider, 'frameDropShadowOffsetX', 'frameSettings', 'dropShadow', 'offsetX');
     addNumericInputListener(uiElements.frameDropShadowOffsetYSlider, 'frameDropShadowOffsetY', 'frameSettings', 'dropShadow', 'offsetY');
@@ -379,8 +390,11 @@ export function setupEventListeners(redrawCallback) {
     addColorInputListener(uiElements.frameInnerShadowColorInput, 'frameSettings', 'innerShadow', 'color');
 
     // 縁取り
-    addOptionChangeListener(uiElements.frameBorderEnabledCheckbox, 'frameSettings', 'borderEnabled'); // checkbox, nestedKey='borderEnabled'
+    addOptionChangeListener(uiElements.frameBorderEnabledCheckbox, 'frameSettings', 'borderEnabled'); // checkbox, val1=nestedKey (これは frameSettings.borderEnabled を更新する)
+                                                                                                 // 正しくは frameSettings.border.enabled を更新すべき。
+                                                                                                 // → addOptionChangeListener(uiElements.frameBorderEnabledCheckbox, 'frameSettings', 'border', 'enabled');
+
     addNumericInputListener(uiElements.frameBorderWidthSlider, 'frameBorderWidth', 'frameSettings', 'border', 'width');
     addColorInputListener(uiElements.frameBorderColorInput, 'frameSettings', 'border', 'color');
-    addOptionChangeListener(uiElements.frameBorderStyleSelect, 'frameSettings', 'border', 'style'); // select, nestedKey='border', subNestedKey='style'
+    addOptionChangeListener(uiElements.frameBorderStyleSelect, 'frameSettings', 'border', 'style'); // select, val1=nestedKey, val2=subNestedKey
 }
