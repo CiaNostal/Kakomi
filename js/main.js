@@ -2,7 +2,7 @@
 // アプリケーションのエントリーポイント。各モジュールをインポートし、初期化処理を行います。
 
 import { getState, updateState, addStateChangeListener } from './stateManager.js';
-import { uiElements, initializeUIFromState, setupEventListeners } from './uiController.js';
+import { uiElements, initializeUIFromState, setupEventListeners } from './uiController.js'; // updateFrameSettingsVisibility を追加
 import { calculateLayout } from './layoutCalculator.js'; // 正しいレイアウト計算モジュール
 import { drawPreview } from './canvasRenderer.js';     // 現在の描画モジュール
 import { processImageFile, handleDownload } from './fileManager.js';
@@ -84,7 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (uiElements.downloadButton) {
         uiElements.downloadButton.addEventListener('click', handleDownload);
     }
-    
+
     if (uiElements.canvasContainer) {
         uiElements.canvasContainer.addEventListener('dragover', (event) => {
             event.stopPropagation(); event.preventDefault();

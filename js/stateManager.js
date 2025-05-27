@@ -166,7 +166,6 @@ function updateState(updates) {
         }
         return target;
     }
-
     // 状態を更新
     deepMerge(editState, updates);
 
