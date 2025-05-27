@@ -105,7 +105,136 @@
                         </fieldset>
                     </div>
                     <div id="tab-frame" class="tab-pane">
-                        <p>（フレーム加工の設定項目）</p>
+                        <fieldset>
+                            <legend>角のスタイル</legend>
+                            <div class="form-row-simple">
+                                <div class="radio-group">
+                                    <input type="radio" id="frameCornerStyleNone" name="frameCornerStyle" value="none">
+                                    <label for="frameCornerStyleNone">なし</label>
+                                </div>
+                                <div class="radio-group">
+                                    <input type="radio" id="frameCornerStyleRounded" name="frameCornerStyle"
+                                        value="rounded">
+                                    <label for="frameCornerStyleRounded">角丸</label>
+                                </div>
+                                <div class="radio-group">
+                                    <input type="radio" id="frameCornerStyleSuperellipse" name="frameCornerStyle"
+                                        value="superellipse">
+                                    <label for="frameCornerStyleSuperellipse">超楕円</label>
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        <fieldset id="frameCornerRoundedSettingsContainer">
+                            <legend>角丸 設定</legend>
+                            <div class="form-row-slider">
+                                <label for="frameCornerRadiusPercent">半径 (%):</label>
+                                <input type="range" id="frameCornerRadiusPercent">
+                                <span id="frameCornerRadiusPercentValue">0%</span>
+                            </div>
+                        </fieldset>
+
+                        <fieldset id="frameCornerSuperellipseSettingsContainer">
+                            <legend>超楕円 設定</legend>
+                            <div class="form-row-slider">
+                                <label for="frameSuperellipseN">次数 n (3-20):</label>
+                                <input type="range" id="frameSuperellipseN">
+                                <span id="frameSuperellipseNValue">4</span>
+                            </div>
+                        </fieldset>
+
+                        <fieldset>
+                            <legend>影</legend>
+                            <div class="form-row-simple">
+                                <label for="frameShadowEnabled">影を有効にする:</label>
+                                <input type="checkbox" id="frameShadowEnabled">
+                            </div>
+                            <div id="frameShadowSettingsContainer">
+                                <div class="form-row-simple">
+                                    <label>影のタイプ:</label>
+                                    <div class="radio-group">
+                                        <input type="radio" id="frameShadowTypeDrop" name="frameShadowType"
+                                            value="drop">
+                                        <label for="frameShadowTypeDrop">外側</label>
+                                    </div>
+                                    <div class="radio-group">
+                                        <input type="radio" id="frameShadowTypeInner" name="frameShadowType"
+                                            value="inner">
+                                        <label for="frameShadowTypeInner">内側</label>
+                                    </div>
+                                </div>
+
+                                <div id="frameDropShadowSettingsContainer">
+                                    <div class="form-row-slider">
+                                        <label for="frameDropShadowOffsetX">オフセットX (%):</label>
+                                        <input type="range" id="frameDropShadowOffsetX">
+                                        <span id="frameDropShadowOffsetXValue">2%</span>
+                                    </div>
+                                    <div class="form-row-slider">
+                                        <label for="frameDropShadowOffsetY">オフセットY (%):</label>
+                                        <input type="range" id="frameDropShadowOffsetY">
+                                        <span id="frameDropShadowOffsetYValue">2%</span>
+                                    </div>
+                                    <div class="form-row-slider">
+                                        <label for="frameDropShadowBlur">ぼかし (%):</label>
+                                        <input type="range" id="frameDropShadowBlur">
+                                        <span id="frameDropShadowBlurValue">5%</span>
+                                    </div>
+                                    <div class="form-row-slider">
+                                        <label for="frameDropShadowSpread">広がり (%):</label>
+                                        <input type="range" id="frameDropShadowSpread">
+                                        <span id="frameDropShadowSpreadValue">0%</span>
+                                    </div>
+                                    <div class="form-row-simple">
+                                        <label for="frameDropShadowColor">色:</label>
+                                        <input type="color" id="frameDropShadowColor">
+                                    </div>
+                                </div>
+
+                                <div id="frameInnerShadowSettingsContainer">
+                                    <div class="form-row-slider">
+                                        <label for="frameInnerShadowBlur">ぼかし (%):</label>
+                                        <input type="range" id="frameInnerShadowBlur">
+                                        <span id="frameInnerShadowBlurValue">5%</span>
+                                    </div>
+                                    <div class="form-row-slider">
+                                        <label for="frameInnerShadowSpread">太さ/深さ (%):</label>
+                                        <input type="range" id="frameInnerShadowSpread">
+                                        <span id="frameInnerShadowSpreadValue">3%</span>
+                                    </div>
+                                    <div class="form-row-simple">
+                                        <label for="frameInnerShadowColor">色:</label>
+                                        <input type="color" id="frameInnerShadowColor">
+                                    </div>
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        <fieldset>
+                            <legend>縁取り／線</legend>
+                            <div class="form-row-simple">
+                                <label for="frameBorderEnabled">縁取りを有効にする:</label>
+                                <input type="checkbox" id="frameBorderEnabled">
+                            </div>
+                            <div id="frameBorderDetailSettingsContainer">
+                                <div class="form-row-slider">
+                                    <label for="frameBorderWidth">線の太さ (%):</label>
+                                    <input type="range" id="frameBorderWidth">
+                                    <span id="frameBorderWidthValue">1%</span>
+                                </div>
+                                <div class="form-row-simple">
+                                    <label for="frameBorderColor">線の色:</label>
+                                    <input type="color" id="frameBorderColor">
+                                </div>
+                                <div class="form-row-simple">
+                                    <label for="frameBorderStyle">線のスタイル:</label>
+                                    <select id="frameBorderStyle">
+                                        <option value="solid">実線</option>
+                                        <option value="dashed">破線</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </fieldset>
                     </div>
                     <div id="tab-text" class="tab-pane">
                         <p>（文字入力の設定項目）</p>

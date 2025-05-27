@@ -39,20 +39,41 @@ let editState = {
     },
     // フレーム加工関連の設定を追加
     frameSettings: {
-        cornerRadius: 0,     // 角丸の半径 (%)
-        shadow: {
-            enabled: false,
-            offsetX: 0,      // 影のオフセットX (%)
-            offsetY: 0,      // 影のオフセットY (%)
-            blur: 0,         // ぼかし半径 (%)
-            spread: 0,       // 広がり (%)
-            color: 'rgba(0,0,0,0.5)' // 影の色
+        // 角のスタイル関連
+        cornerStyle: 'none', // 'none', 'rounded', 'superellipse'
+        cornerRadiusPercent: 0, // 'rounded' スタイル時に使用 (%)
+        superellipseN: 4,       // 'superellipse' スタイル時に使用 (3-20の整数)
+
+        // 影関連
+        shadowEnabled: false,   // 影全体の有効/無効
+        shadowType: 'drop',     // 'none', 'drop' (外側), 'inner' (内側)
+
+        // ドロップシャドウ（外側）用設定
+        dropShadow: {
+            offsetX: 2,      // % (写真短辺比)
+            offsetY: 2,      // %
+            blur: 5,         // %
+            spread: 0,       // % (描画方法で工夫が必要なパラメータ)
+            color: 'rgba(0,0,0,0.5)',
+            // opacity: 0.5, // 色のアルファで代用するか、別途持つか検討
         },
+
+        // インナーシャドウ（内側）用設定 (後で実装するパラメータの例)
+        innerShadow: {
+            // offsetX: 0, // インナーシャドウの場合、オフセットは通常不要か、別の意味合いになる
+            // offsetY: 0,
+            blur: 5,         // %
+            spread: 3,       // 影の太さ/深さ (%)
+            color: 'rgba(0,0,0,0.75)',
+            // opacity: 0.75,
+        },
+
+        // 縁取り／線関連
         border: {
             enabled: false,
-            width: 0,        // 線の太さ (%)
-            color: '#000000', // 線の色
-            style: 'solid'   // 線のスタイル ('solid', 'dashed')
+            width: 1,        // % (写真短辺比)
+            color: '#000000',
+            style: 'solid'   // 'solid', 'dashed'
         }
     },
     // 文字表示関連の設定を追加
@@ -217,7 +238,9 @@ function resetState() {
         },
         outputCanvasConfig: { width: 0, height: 0 },
         frameSettings: {
-            cornerRadius: 0,
+            cornerStyle: 'rounded', // デフォルトに戻す
+            cornerRadiusPercent: 0,
+            superellipseN: 4,
             shadow: {
                 enabled: false,
                 offsetX: 0,
@@ -300,7 +323,12 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
         offsetX: 0.5,
         offsetY: 0.5
     };
-
+    // フレーム設定もリセット（上記で網羅されているが、明示的にデフォルト値を意識）
+    editState.frameSettings.cornerStyle = 'rounded';
+    editState.frameSettings.cornerRadiusPercent = 0;
+    editState.frameSettings.superellipseN = 4;
+    editState.frameSettings.shadow.enabled = false; // 必要に応じて他のshadowプロパティもリセット
+    editState.frameSettings.border.enabled = false; // 必要に応じて他のborderプロパティもリセット
     notifyStateChange();
 }
 
