@@ -1,5 +1,92 @@
 // js/frameRenderer.js
 
+
+/**
+ * 超楕円のパスを生成する (第一象限を計算し、対称性を利用)
+ * @param {CanvasRenderingContext2D} ctx - キャンバスのコンテキスト
+ * @param {number} x - 矩形の左上X座標 (写真の描画位置X)
+ * @param {number} y - 矩形の左上Y座標 (写真の描画位置Y)
+ * @param {number} width - 矩形の幅 (写真の幅)
+ * @param {number} height - 矩形の高さ (写真の高さ)
+ * @param {number} n - 超楕円の次数 (3-20の整数を想定)
+ */
+function createSuperellipsePath(ctx, x, y, width, height, n) {
+    const a = width / 2;  // 水平方向の半径
+    const b = height / 2; // 垂直方向の半径
+    const centerX = x + a;
+    const centerY = y + b;
+
+    // n の値を安全な範囲に丸める・制限する (整数化もここで)
+    const N = Math.max(2, Math.min(20, Math.round(n))); // 2から20の整数に (n=2は楕円)
+
+    const points = [];
+    const steps = 90; // 90ステップで第一象限 (1度ごと)。滑らかさが足りなければ増やす (例: 180で0.5度ごと)
+    const deltaTheta = Math.PI / 2 / steps;
+
+    for (let i = 0; i <= steps; i++) {
+        const theta = i * deltaTheta;
+        const cosTheta = Math.cos(theta);
+        const sinTheta = Math.sin(theta);
+
+        // 媒介変数表示: x = a * sgn(cos) * |cos|^(2/N), y = b * sgn(sin) * |sin|^(2/N)
+        // 第一象限なので cosTheta と sinTheta は非負
+        const termX = (cosTheta === 0 && 2 / N < 1) ? 0 : Math.pow(cosTheta, 2 / N); // 0のべき乗エラーを避ける
+        const termY = (sinTheta === 0 && 2 / N < 1) ? 0 : Math.pow(sinTheta, 2 / N); // 同上
+
+        points.push({
+            x: centerX + a * termX,
+            y: centerY - b * termY  // CanvasのY軸は下向きなのでマイナス
+        });
+    }
+
+    ctx.beginPath();
+    if (points.length === 0) return; // 点がなければ何もしない
+
+    ctx.moveTo(points[0].x, points[0].y);
+
+    // 第一象限
+    for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].x, points[i].y);
+    }
+    // 第二象限 (Y軸対称)
+    for (let i = points.length - 2; i >= 0; i--) { // 重複点を避けるため points.length - 2 から
+        ctx.lineTo(centerX - (points[i].x - centerX), points[i].y);
+    }
+    // 第三象限 (原点対称)
+    for (let i = 1; i < points.length; i++) { // 開始点を重複させないため i = 1 から
+        ctx.lineTo(centerX - (points[i].x - centerX), centerY + (centerY - points[i].y));
+    }
+    // 第四象限 (X軸対称)
+    for (let i = points.length - 2; i >= 0; i--) { // points.length - 2 から
+        ctx.lineTo(points[i].x, centerY + (centerY - points[i].y));
+    }
+    ctx.closePath();
+}
+
+/**
+ * 写真に対してフレーム加工の主要なパス設定とクリッピングを行う
+ * @param {CanvasRenderingContext2D} ctx - キャンバスのコンテキスト
+ * @param {Object} frameSettings - フレーム設定 (currentState.frameSettings)
+ * @param {number} photoX - 写真の左上X座標
+ * @param {number} photoY - 写真の左上Y座標
+ * @param {number} photoWidth - 写真の幅
+ * @param {number} photoHeight - 写真の高さ
+ */
+function createAndApplyClippingPath(ctx, frameSettings, photoX, photoY, photoWidth, photoHeight) {
+    if (photoWidth <= 0 || photoHeight <= 0) return; // 幅や高さが0以下の場合は何もしない
+
+    if (frameSettings.cornerStyle === 'superellipse') {
+        createSuperellipsePath(ctx, photoX, photoY, photoWidth, photoHeight, frameSettings.superellipseN);
+        ctx.clip();
+    } else if (frameSettings.cornerStyle === 'rounded' && frameSettings.cornerRadiusPercent > 0) {
+        const photoShortSidePx = Math.min(photoWidth, photoHeight);
+        const radius = (frameSettings.cornerRadiusPercent / 100) * photoShortSidePx;
+        roundedRect(ctx, photoX, photoY, photoWidth, photoHeight, radius);
+        ctx.clip();
+    }
+    // 'none' の場合はクリッピングパスを適用しない (つまり矩形のまま)
+}
+
 /**
  * 写真に対してフレーム加工を適用する
  * @param {CanvasRenderingContext2D} ctx - キャンバスのコンテキスト
@@ -12,120 +99,86 @@
 function applyFrameEffects(ctx, currentState, photoX, photoY, photoWidth, photoHeight) {
     const frameSettings = currentState.frameSettings;
     const photoShortSidePx = Math.min(photoWidth, photoHeight);
-    
+
     if (frameSettings.shadow.enabled) {
         // CHANGED: frameSettings を applyShadow に渡す
         applyShadow(ctx, frameSettings.shadow, frameSettings.cornerRadius, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
     }
-    
+
     if (frameSettings.cornerRadius > 0) {
         const radius = (frameSettings.cornerRadius / 100) * photoShortSidePx;
         roundedRect(ctx, photoX, photoY, photoWidth, photoHeight, radius);
         ctx.clip(); // 写真本体の描画のためにクリッピングパスを設定
     }
-    
+
     if (frameSettings.border.enabled && frameSettings.border.width > 0) {
         // CHANGED: frameSettings を applyBorder に渡す
         applyBorder(ctx, frameSettings.border, frameSettings.cornerRadius, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
     }
 }
 
-/**
- * 写真に影を適用する
- * @param {CanvasRenderingContext2D} ctx - キャンバスのコンテキスト
- * @param {Object} shadowSettings - 影の設定
- * @param {number} cornerRadiusSetting - 角丸の設定値 (%)
- * @param {number} x - 写真の左上X座標
- * @param {number} y - 写真の左上Y座標
- * @param {number} width - 写真の幅
- * @param {number} height - 写真の高さ
- * @param {number} shortSide - 写真の短辺
- */
-// CHANGED: cornerRadiusSetting を引数に追加
-function applyShadow(ctx, shadowSettings, cornerRadiusSetting, x, y, width, height, shortSide) {
-    const offsetX = (shadowSettings.offsetX / 100) * shortSide;
-    const offsetY = (shadowSettings.offsetY / 100) * shortSide;
-    const blurRadius = (shadowSettings.blur / 100) * shortSide;
-    const spreadRadius = (shadowSettings.spread / 100) * shortSide; // スプレッドはCanvas標準のshadowBlurとは別に描画で工夫が必要
-    
+// applyShadow と applyBorder の仮実装（後で詳細化）
+function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx) {
+    if (!shadowSettings.enabled) return;
+    console.log("applyShadow called (implementation pending full review for superellipse)", shadowSettings);
+    // ここに影描画ロジック（frameSettings.cornerStyleに応じてパスを生成し影付け）
+    // 既存のロジックをベースに、パス生成部分を createSuperellipsePath/roundedRect に置き換える
+    const offsetX = (shadowSettings.offsetX / 100) * photoShortSidePx;
+    const offsetY = (shadowSettings.offsetY / 100) * photoShortSidePx;
+    const blurRadius = (shadowSettings.blur / 100) * photoShortSidePx;
+    const spreadRadius = (shadowSettings.spread / 100) * photoShortSidePx;
+
     ctx.save();
-    
     ctx.shadowColor = shadowSettings.color;
     ctx.shadowOffsetX = offsetX;
     ctx.shadowOffsetY = offsetY;
     ctx.shadowBlur = blurRadius;
-    
-    const adjustedX = x - spreadRadius;
-    const adjustedY = y - spreadRadius;
-    const adjustedWidth = width + 2 * spreadRadius;
-    const adjustedHeight = height + 2 * spreadRadius;
-    
-    ctx.globalCompositeOperation = 'source-over'; // 影の描画のため
-    // 影の色は shadowColor で設定されるので、fillStyle は透明に近いものでも良いが、
-    // 確実に描画されるようにするため、shadowColorのアルファを反映した色か、
-    // もしくは一時的に不透明な色で描画し、後で写真で上書きする。
-    // ここでは影の色を尊重し、shadowColorで設定された色をそのまま使う（ただし globalAlpha なども考慮が必要な場合がある）
-    // 多くのブラウザでは、影が設定されている場合、fillStyleに関わらず影が描画される。
-    // 念のため、影が適用される「形状」を描画するためにfillStyleを設定する。
-    ctx.fillStyle = shadowSettings.color; // または 'rgba(0,0,0,1)' などで形状を確保し影を描画
 
-    // 角丸があれば影の形状も角丸に
-    if (cornerRadiusSetting > 0) { // CHANGED: 引数の cornerRadiusSetting を使用
-        const radius = (cornerRadiusSetting / 100) * shortSide;
-        // スプレッドを考慮した矩形に対して角丸を適用
-        roundedRect(ctx, adjustedX, adjustedY, adjustedWidth, adjustedHeight, radius);
+    const shadowX = photoX - spreadRadius;
+    const shadowY = photoY - spreadRadius;
+    const shadowWidth = photoWidth + 2 * spreadRadius;
+    const shadowHeight = photoHeight + 2 * spreadRadius;
+    ctx.fillStyle = shadowSettings.color;
+
+    if (frameSettings.cornerStyle === 'superellipse') {
+        createSuperellipsePath(ctx, shadowX, shadowY, shadowWidth, shadowHeight, frameSettings.superellipseN);
+    } else if (frameSettings.cornerStyle === 'rounded' && frameSettings.cornerRadiusPercent > 0) {
+        const radius = (frameSettings.cornerRadiusPercent / 100) * Math.min(shadowWidth, shadowHeight);
+        roundedRect(ctx, shadowX, shadowY, shadowWidth, shadowHeight, radius);
     } else {
-        ctx.rect(adjustedX, adjustedY, adjustedWidth, adjustedHeight);
+        ctx.beginPath();
+        ctx.rect(shadowX, shadowY, shadowWidth, shadowHeight);
     }
-    
-    ctx.fill(); // これで影が描画される
+    ctx.fill();
     ctx.restore();
 }
 
-/**
- * 写真にボーダーを適用する
- * @param {CanvasRenderingContext2D} ctx - キャンバスのコンテキスト
- * @param {Object} borderSettings - ボーダーの設定
- * @param {number} cornerRadiusSetting - 角丸の設定値 (%)
- * @param {number} x - 写真の左上X座標
- * @param {number} y - 写真の左上Y座標
- * @param {number} width - 写真の幅
- * @param {number} height - 写真の高さ
- * @param {number} shortSide - 写真の短辺
- */
-// CHANGED: cornerRadiusSetting を引数に追加
-function applyBorder(ctx, borderSettings, cornerRadiusSetting, x, y, width, height, shortSide) {
-    const borderWidth = (borderSettings.width / 100) * shortSide;
+function applyBorder(ctx, borderSettings, frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx) {
+    if (!borderSettings.enabled || borderSettings.width <= 0) return;
+    console.log("applyBorder called (implementation pending full review for superellipse)", borderSettings);
+    // ここに縁取り描画ロジック（frameSettings.cornerStyleに応じてパスを生成しstroke）
+    // 既存のロジックをベースに、パス生成部分を createSuperellipsePath/roundedRect に置き換える
+    const borderWidth = (borderSettings.width / 100) * photoShortSidePx;
     if (borderWidth <= 0) return;
 
     ctx.save();
     ctx.strokeStyle = borderSettings.color;
     ctx.lineWidth = borderWidth;
-    
-    if (borderSettings.style === 'dashed') {
-        ctx.setLineDash([borderWidth * 2, borderWidth]); // 例: 破線のパターン
-    }
-    
-    // 線の中心がパス上に来るため、ボーダーを内側に描画する場合は、
-    // 描画する矩形を線の太さの半分だけ内側にオフセットし、サイズも縮小する。
-    const adj = borderWidth / 2;
-    const adjustedX = x + adj;
-    const adjustedY = y + adj;
-    const adjustedWidth = width - borderWidth;
-    const adjustedHeight = height - borderWidth;
 
-    // 角丸がある場合は適用（半径もボーダー幅を考慮して調整が必要な場合があるが、ここでは単純化）
-    if (cornerRadiusSetting > 0) { // CHANGED: 引数の cornerRadiusSetting を使用
-        let radius = (cornerRadiusSetting / 100) * shortSide;
-        // ボーダーが内側なので、角丸半径もそれに合わせて調整する (外側の半径 - ボーダー幅の半分)
-        // ただし、半径が負にならないように注意
-        radius = Math.max(0, radius - adj); 
-        roundedRect(ctx, adjustedX, adjustedY, adjustedWidth, adjustedHeight, radius);
-    } else {
-        ctx.beginPath(); // rectの前にbeginPathがないと、以前のパスに影響する可能性
-        ctx.rect(adjustedX, adjustedY, adjustedWidth, adjustedHeight);
+    if (borderSettings.style === 'dashed') {
+        ctx.setLineDash([borderWidth * 2, borderWidth]);
     }
-    
+
+    // パスに沿って線を描画 (中心揃え)
+    if (frameSettings.cornerStyle === 'superellipse') {
+        createSuperellipsePath(ctx, photoX, photoY, photoWidth, photoHeight, frameSettings.superellipseN);
+    } else if (frameSettings.cornerStyle === 'rounded' && frameSettings.cornerRadiusPercent > 0) {
+        const radius = (frameSettings.cornerRadiusPercent / 100) * photoShortSidePx;
+        roundedRect(ctx, photoX, photoY, photoWidth, photoHeight, radius);
+    } else {
+        ctx.beginPath();
+        ctx.rect(photoX, photoY, photoWidth, photoHeight);
+    }
     ctx.stroke();
     ctx.restore();
 }
@@ -147,4 +200,5 @@ function roundedRect(ctx, x, y, width, height, radius) {
     ctx.closePath();
 }
 
-export { applyFrameEffects };
+// export { applyFrameEffects };
+export { createAndApplyClippingPath, createSuperellipsePath, roundedRect, applyShadow, applyBorder }; // applyShadow, applyBorderもエクスポート対象に
