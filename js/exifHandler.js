@@ -1,204 +1,200 @@
-/**
- * exif.js
- * Exif情報の読み込みと処理を担当するモジュール
- */
+// js/exifHandler.js
+// piexif.js がグローバルに読み込まれていることを前提とします (window.piexif)
 
 /**
- * 画像からExif情報を抽出する
+ * 画像ファイルからExif情報を抽出する
  * @param {File} file - 画像ファイル
- * @returns {Promise<Object>} Exifデータを含むPromise
+ * @returns {Promise<Object|null>} Exifデータオブジェクト(piexif.js形式)、またはエラー時やExifがない場合はnull
  */
 function extractExifFromFile(file) {
-    return new Promise((resolve, reject) => {
-        // FileReaderを使用してファイルを読み込む
+    return new Promise((resolve) => {
+        if (!file || !file.type.startsWith('image/jpeg')) {
+            // piexif.jsは主にJPEGを対象とするため、JPEG以外はExifなしとして扱うか、
+            // 他のライブラリでの対応を検討する。ここではJPEGのみを対象とする。
+            console.warn("Exif extraction is currently supported for JPEG images only.");
+            resolve(null);
+            return;
+        }
+
         const reader = new FileReader();
-        
-        reader.onload = function(e) {
+        reader.onload = function (e) {
             try {
-                // arraybufferとしてファイルを読み込む
-                const arrayBuffer = e.target.result;
-                
-                // Exifデータを解析する
-                // 注: ここではpiexif.jsが使用されることを想定しているが、
-                // このコードでは単純化のためダミーの実装とする
-                // 実際の実装では、piexif.jsやexif-jsなどのライブラリを使用する
-                
-                // ダミーのExifデータを返す
-                setTimeout(() => {
-                    resolve({
-                        Make: 'カメラメーカーサンプル',
-                        Model: 'カメラモデルサンプル',
-                        DateTime: '2023:04:15 12:30:45',
-                        FNumber: 2.8,
-                        ExposureTime: 1/125,
-                        ISOSpeedRatings: 100,
-                        FocalLength: 50,
-                        LensModel: 'サンプルレンズ 24-70mm',
-                        Software: 'サンプルソフトウェア',
-                        // 実際のピクセル解像度など
-                        PixelXDimension: 6000,
-                        PixelYDimension: 4000,
-                        // その他のExif情報...
-                        _binary: new Uint8Array(arrayBuffer) // 実際のバイナリデータを保持
-                    });
-                }, 100);
+                if (e.target && typeof e.target.result === 'string') {
+                    const exifData = piexif.load(e.target.result);
+                    // サムネイルは非常に大きくなる可能性があるので、ここでは除外するか、
+                    // 必要なら別途処理を検討。今回は主要なIFDのみを返す。
+                    // delete exifData.thumbnail; // 必要ならコメント解除
+                    resolve(exifData);
+                } else {
+                    resolve(null);
+                }
             } catch (error) {
-                reject(error);
+                console.error("Exifデータの解析に失敗しました:", error);
+                resolve(null); // エラー時もnullを返す
             }
         };
-        
-        reader.onerror = function() {
-            reject(new Error('ファイルの読み込みに失敗しました。'));
+        reader.onerror = function () {
+            console.error('ファイルの読み込みに失敗しました (Exif抽出時)。');
+            resolve(null);
         };
-        
-        // ファイルをArrayBufferとして読み込む
-        reader.readAsArrayBuffer(file);
+        // piexif.load はデータURLを期待するため、readAsDataURLで読み込む
+        reader.readAsDataURL(file);
     });
+}
+
+/**
+ * piexif.jsのタグ定数を使って安全に値を取得するヘルパー
+ * @param {Object} ifd - 0th または Exif IFD オブジェクト
+ * @param {number} tag - piexif.TAGS.ImageIFD.xxx または piexif.TAGS.ExifIFD.xxx
+ * @returns {*} タグの値、存在しない場合はundefined
+ */
+function getTagValue(ifd, tag) {
+    return ifd && ifd[tag] !== undefined ? ifd[tag] : undefined;
 }
 
 /**
  * Exif情報をフォーマットして表示用の文字列に変換する
- * @param {Object} exifData - Exifデータオブジェクト
+ * @param {Object} exifData - piexif.js形式のExifデータオブジェクト
+ * @returns {Object} 表示用にフォーマットされたExif情報
+ */
+/**
+ * Exif情報をフォーマットして表示用の文字列に変換する
+ * @param {Object} exifData - piexif.js形式のExifデータオブジェクト
  * @returns {Object} 表示用にフォーマットされたExif情報
  */
 function formatExifForDisplay(exifData) {
-    if (!exifData) return {};
-    
+    if (!exifData || typeof piexif === 'undefined') {
+        console.warn("[formatExifForDisplay] exifData is null or undefined, or piexif library is not loaded.");
+        return {};
+    }
+
     const formatted = {};
-    
-    // カメラ情報
-    if (exifData.Make) formatted.make = exifData.Make;
-    if (exifData.Model) formatted.model = exifData.Model;
-    
-    // 撮影設定
-    if (exifData.FNumber) {
-        formatted.fNumber = `F${exifData.FNumber}`;
+
+    // piexif.jsのバージョンに関わらず比較的安定している直接的なIFD定数オブジェクトを参照する
+    const ImageIFD_CONSTANTS = piexif.ImageIFD;
+    const ExifIFD_CONSTANTS = piexif.ExifIFD;
+    // const GPSIFD_CONSTANTS = piexif.GPSIFD; // 必要なら
+
+    if (!ImageIFD_CONSTANTS || !ExifIFD_CONSTANTS) {
+        console.error("[formatExifForDisplay] piexif.ImageIFD or piexif.ExifIFD constants object is missing. piexif.js might be incomplete.");
+        return {};
     }
-    
-    if (exifData.ExposureTime) {
-        // 露出時間を分数形式に変換
-        const exposureTime = exifData.ExposureTime;
-        if (exposureTime < 1) {
-            const denominator = Math.round(1 / exposureTime);
-            formatted.exposureTime = `1/${denominator}秒`;
-        } else {
-            formatted.exposureTime = `${exposureTime}秒`;
+
+    // 0th IFD (ImageIFD)
+    const zerothIFD = exifData["0th"];
+    if (zerothIFD) {
+        const make = getTagValue(zerothIFD, ImageIFD_CONSTANTS.Make);
+        if (make) formatted.make = make;
+
+        const model = getTagValue(zerothIFD, ImageIFD_CONSTANTS.Model);
+        if (model) formatted.model = model;
+
+        const dateTime = getTagValue(zerothIFD, ImageIFD_CONSTANTS.DateTime);
+        if (dateTime) formatted.dateTime = String(dateTime).replace(/:/g, '/').replace(' ', ' ');
+    }
+
+    // Exif IFD
+    const exifIFD = exifData["Exif"];
+    if (exifIFD) {
+        const fNumberVal = getTagValue(exifIFD, ExifIFD_CONSTANTS.FNumber);
+        if (fNumberVal && Array.isArray(fNumberVal) && fNumberVal.length === 2 && fNumberVal[1] !== 0) {
+            formatted.fNumber = `F${(fNumberVal[0] / fNumberVal[1]).toFixed(1)}`;
         }
+
+        const exposureTimeVal = getTagValue(exifIFD, ExifIFD_CONSTANTS.ExposureTime);
+        if (exposureTimeVal && Array.isArray(exposureTimeVal) && exposureTimeVal.length === 2 && exposureTimeVal[1] !== 0) {
+            const et = exposureTimeVal[0] / exposureTimeVal[1];
+            if (et < 1) {
+                formatted.exposureTime = `1/${Math.round(1 / et)}秒`;
+            } else {
+                formatted.exposureTime = `${et.toFixed(2)}秒`;
+            }
+        }
+
+        const isoVal = getTagValue(exifIFD, ExifIFD_CONSTANTS.ISOSpeedRatings);
+        if (isoVal) formatted.iso = `ISO ${Array.isArray(isoVal) ? isoVal[0] : isoVal}`;
+
+        const focalLengthVal = getTagValue(exifIFD, ExifIFD_CONSTANTS.FocalLength);
+        if (focalLengthVal && Array.isArray(focalLengthVal) && focalLengthVal.length === 2 && focalLengthVal[1] !== 0) {
+            formatted.focalLength = `${Math.round(focalLengthVal[0] / focalLengthVal[1])}mm`;
+        }
+
+        const lensModelVal = getTagValue(exifIFD, ExifIFD_CONSTANTS.LensModel);
+        if (lensModelVal) formatted.lens = lensModelVal;
     }
-    
-    if (exifData.ISOSpeedRatings) {
-        formatted.iso = `ISO ${exifData.ISOSpeedRatings}`;
-    }
-    
-    if (exifData.FocalLength) {
-        formatted.focalLength = `${exifData.FocalLength}mm`;
-    }
-    
-    // レンズ情報
-    if (exifData.LensModel) {
-        formatted.lens = exifData.LensModel;
-    }
-    
-    // 日時情報
-    if (exifData.DateTime) {
-        const dateTime = exifData.DateTime;
-        formatted.dateTime = dateTime.replace(/:/g, '/').replace(' ', ' ');
-    }
-    
+
     return formatted;
 }
 
+
 /**
- * 元のExifデータを新しいJPEG画像に埋め込む
- * @param {Blob} jpegBlob - JPEGデータを含むBlob
- * @param {Object} exifData - 埋め込むExifデータ
- * @returns {Promise<Blob>} Exifが埋め込まれたJPEGデータを含むBlobのPromise
+ * 元のExifデータを新しいJPEG画像に埋め込む (piexif.jsを使用)
+ * @param {string} jpegDataUrl - Exifを埋め込む対象のJPEGデータURL (base64)
+ * @param {Object} exifDataFromState - 埋め込むExifデータ (piexif.jsのloadで取得した形式)
+ * @returns {string|null} Exifが埋め込まれた新しいJPEGデータURL、またはエラー時null
  */
-function embedExifToJpeg(jpegBlob, exifData) {
-    return new Promise((resolve, reject) => {
-        if (!exifData || !exifData._binary) {
-            // Exifデータがない場合は元のBlobをそのまま返す
-            resolve(jpegBlob);
-            return;
-        }
-        
-        try {
-            // この関数は実際にはピクセフまたは他のライブラリを使用する必要があります
-            // このサンプルでは単純に元のBlobを返します
-            
-            // 実際の実装では次のような処理を行います：
-            // 1. ArrayBufferとしてJPEGデータを読み込む
-            // 2. Exifデータを挿入
-            // 3. 新しいBlobを作成して返す
-            
-            // ここでは簡単のため元のBlobを返す
-            setTimeout(() => {
-                resolve(jpegBlob);
-            }, 100);
-        } catch (error) {
-            reject(error);
-        }
-    });
+function embedExifToJpeg(jpegDataUrl, exifDataFromState) {
+    if (!jpegDataUrl || !exifDataFromState || typeof piexif === 'undefined') {
+        return null;
+    }
+    try {
+        const exifBytes = piexif.dump(exifDataFromState);
+        const newJpegDataUrl = piexif.insert(exifBytes, jpegDataUrl);
+        return newJpegDataUrl;
+    } catch (error) {
+        console.error("Exifデータの埋め込みに失敗しました:", error);
+        return null;
+    }
 }
 
 /**
- * Exif情報を画面に表示する
- * @param {Object} exifData - Exifデータ
+ * Exif情報を画面に表示する (変更なし、formatExifForDisplayの結果を使用)
+ * @param {Object} exifData - Exifデータ (piexif.js形式)
  * @param {HTMLElement} container - 表示するコンテナ要素
  */
 function displayExifInfo(exifData, container) {
-    if (!exifData || !container) return;
-    
-    // 表示用にフォーマット
+    if (!container) return;
+    if (!exifData) { // Exifデータがない場合はコンテナをクリア
+        container.innerHTML = '<p>Exif情報はありません。</p>';
+        return;
+    }
+
     const formatted = formatExifForDisplay(exifData);
-    
-    // HTMLを生成
+
+    if (Object.keys(formatted).length === 0) {
+        container.innerHTML = '<p>主要なExif情報は見つかりませんでした。</p>';
+        return;
+    }
+
     let html = '<table class="exif-table">';
-    
+
     if (formatted.make || formatted.model) {
         html += '<tr><th colspan="2">カメラ情報</th></tr>';
-        if (formatted.make) {
-            html += `<tr><td>メーカー名</td><td>${formatted.make}</td></tr>`;
-        }
-        if (formatted.model) {
-            html += `<tr><td>機種名</td><td>${formatted.model}</td></tr>`;
-        }
+        if (formatted.make) html += `<tr><td>メーカー名</td><td>${formatted.make}</td></tr>`;
+        if (formatted.model) html += `<tr><td>機種名</td><td>${formatted.model}</td></tr>`;
     }
-    
-    let hasShootingInfo = formatted.fNumber || formatted.exposureTime || 
-                          formatted.iso || formatted.focalLength;
-    
-    if (hasShootingInfo) {
+
+    const shootingInfoKeys = ['fNumber', 'exposureTime', 'iso', 'focalLength'];
+    if (shootingInfoKeys.some(key => formatted[key])) {
         html += '<tr><th colspan="2">撮影設定</th></tr>';
-        if (formatted.fNumber) {
-            html += `<tr><td>F値</td><td>${formatted.fNumber}</td></tr>`;
-        }
-        if (formatted.exposureTime) {
-            html += `<tr><td>シャッタースピード</td><td>${formatted.exposureTime}</td></tr>`;
-        }
-        if (formatted.iso) {
-            html += `<tr><td>ISO感度</td><td>${formatted.iso}</td></tr>`;
-        }
-        if (formatted.focalLength) {
-            html += `<tr><td>焦点距離</td><td>${formatted.focalLength}</td></tr>`;
-        }
+        if (formatted.fNumber) html += `<tr><td>F値</td><td>${formatted.fNumber}</td></tr>`;
+        if (formatted.exposureTime) html += `<tr><td>シャッタースピード</td><td>${formatted.exposureTime}</td></tr>`;
+        if (formatted.iso) html += `<tr><td>ISO感度</td><td>${formatted.iso}</td></tr>`;
+        if (formatted.focalLength) html += `<tr><td>焦点距離</td><td>${formatted.focalLength}</td></tr>`;
     }
-    
+
     if (formatted.lens) {
         html += '<tr><th colspan="2">レンズ情報</th></tr>';
         html += `<tr><td>レンズ</td><td>${formatted.lens}</td></tr>`;
     }
-    
+
     if (formatted.dateTime) {
         html += '<tr><th colspan="2">日時情報</th></tr>';
         html += `<tr><td>撮影日時</td><td>${formatted.dateTime}</td></tr>`;
     }
-    
+
     html += '</table>';
-    
-    // コンテナにHTMLを設定
     container.innerHTML = html;
 }
 
-// モジュールとしてエクスポート
-export { extractExifFromFile, formatExifForDisplay, embedExifToJpeg, displayExifInfo }; 
+export { extractExifFromFile, formatExifForDisplay, embedExifToJpeg, displayExifInfo };

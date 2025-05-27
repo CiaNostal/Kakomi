@@ -16,7 +16,7 @@ export async function processImageFile(file, redrawCallback) { // CHANGED: Made 
                 try {
                     // Attempt to extract Exif data
                     exifData = await extractExifFromFile(file);
-                } catch (exifError) {
+                } catch (exifError) { // extractExifFromFileがnullを返すので、ここではcatchされない想定
                     console.warn("Exifデータの抽出に失敗しました:", exifError);
                 }
                 // Set image and Exif data (or null if extraction failed) in state
