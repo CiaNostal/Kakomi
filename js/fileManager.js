@@ -2,7 +2,8 @@
 import { getState, setImage } from './stateManager.js';
 import { initializeUIFromState, uiElements } from './uiController.js';
 import { renderFinal } from './canvasRenderer.js';
-import { extractExifFromFile } from './exifHandler.js'; // ADDED: Import for Exif extraction
+import { extractExifFromFile, embedExifToJpeg } from './exifHandler.js'; // ADDED: Import for Exif extraction
+import { canvasToJpegBlob, blobToDataURL, dataURLToBlob } from './utils/canvasUtils.js'; // canvasToJpegBlobと新しいヘルパーをインポート
 // redrawCallback は main.js から渡される
 
 export async function processImageFile(file, redrawCallback) { // CHANGED: Made async
@@ -44,7 +45,7 @@ export async function processImageFile(file, redrawCallback) { // CHANGED: Made 
     }
 }
 
-export function handleDownload() {
+export async function handleDownload() { // async に変更
     const currentState = getState();
 
     if (!currentState.image) {
@@ -55,33 +56,57 @@ export function handleDownload() {
     const finalCanvas = renderFinal(currentState);
 
     if (finalCanvas) {
-        const uiQualityValue = currentState.outputSettings.quality; // これは1～100の値
-        // CORRECTED: Convert 1-100 range to 0.0-1.0 range for blob generation
+        const uiQualityValue = currentState.outputSettings.quality;
         const blobQuality = Math.max(0.01, Math.min(1.0, uiQualityValue / 100));
 
-        const blobPromise = finalCanvas instanceof OffscreenCanvas ?
-            finalCanvas.convertToBlob({ type: 'image/jpeg', quality: blobQuality }) :
-            new Promise(resolve => finalCanvas.toBlob(resolve, 'image/jpeg', blobQuality));
+        try {
+            let finalBlob = await canvasToJpegBlob(finalCanvas, blobQuality); // canvasUtilsから取得
+            if (!finalBlob) throw new Error('初期Blobの生成に失敗しました。');
 
-        blobPromise.then(blob => {
-            if (!blob) throw new Error('Blob generation failed');
-            const url = URL.createObjectURL(blob);
+            // Exifを埋め込むかどうかの設定とExifデータの存在を確認
+            if (currentState.outputSettings.preserveExif && currentState.exifData) {
+                console.log("Exifの埋め込みを試みます...");
+                const jpegDataUrl = await blobToDataURL(finalBlob);
+                if (jpegDataUrl) {
+                    const newJpegDataUrlWithExif = embedExifToJpeg(jpegDataUrl, currentState.exifData);
+                    if (newJpegDataUrlWithExif && newJpegDataUrlWithExif !== jpegDataUrl) {
+                        const newBlobWithExif = dataURLToBlob(newJpegDataUrlWithExif);
+                        if (newBlobWithExif) {
+                            finalBlob = newBlobWithExif;
+                            console.log("Exifの埋め込みに成功しました。");
+                        } else {
+                            console.warn("Exif埋め込み後のBlob変換に失敗しました。元の画像を使用します。");
+                        }
+                    } else if (newJpegDataUrlWithExif === jpegDataUrl) {
+                        console.log("Exifデータが存在しないか、埋め込みが不要と判断されました。元の画像を使用します。");
+                    } else {
+                        console.warn("Exif埋め込み処理でエラーが発生しました。元の画像を使用します。");
+                    }
+                } else {
+                    console.warn("BlobからDataURLへの変換に失敗しました。Exifは埋め込まれません。");
+                }
+            } else {
+                console.log("Exifを保持する設定でないか、Exifデータが存在しないため、埋め込みは行いません。");
+            }
+
+            const url = URL.createObjectURL(finalBlob);
             let baseName = 'image';
             if (uiElements.imageLoader && uiElements.imageLoader.files && uiElements.imageLoader.files[0] && uiElements.imageLoader.files[0].name) {
                 baseName = uiElements.imageLoader.files[0].name.substring(0, uiElements.imageLoader.files[0].name.lastIndexOf('.')) || 'image';
-            } else if (currentState.image && currentState.image.name) {
-                baseName = currentState.image.name.substring(0, currentState.image.name.lastIndexOf('.')) || 'image';
+            } else if (currentState.image && currentState.image.name) { // 画像名がどこかで保存されていれば
+                const originalFileName = typeof currentState.image.name === 'string' ? currentState.image.name : 'image';
+                baseName = originalFileName.substring(0, originalFileName.lastIndexOf('.')) || 'image';
             }
             const fileName = `${baseName}_kakomi_framed.jpg`; // 仕様書では「_framed.jpg」
             const a = document.createElement('a');
             a.href = url; a.download = fileName;
             document.body.appendChild(a); a.click();
             document.body.removeChild(a); URL.revokeObjectURL(url);
-        })
-            .catch(err => {
-                console.error('画像のダウンロードに失敗しました:', err);
-                alert('画像のダウンロードに失敗しました。コンソールを確認してください。');
-            });
+
+        } catch (err) {
+            console.error('画像のダウンロード処理中にエラーが発生しました:', err);
+            alert('画像のダウンロード処理中にエラーが発生しました。コンソールを確認してください。');
+        }
     } else {
         alert('出力用Canvasの生成に失敗しました。');
     }

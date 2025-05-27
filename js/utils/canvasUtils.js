@@ -11,13 +11,13 @@
  */
 function fitCanvasToContainer(canvas, targetAspectRatio) {
     if (!canvas) return { width: 0, height: 0 };
-    
+
     const container = canvas.parentElement;
     const containerWidth = container.clientWidth;
     const containerHeight = container.clientHeight;
-    
+
     let canvasWidth, canvasHeight;
-    
+
     if (containerWidth <= 0 || containerHeight <= 0) {
         // コンテナのサイズが取得できない場合はデフォルト値を使用
         canvasWidth = 300;
@@ -31,11 +31,11 @@ function fitCanvasToContainer(canvas, targetAspectRatio) {
         canvasWidth = containerWidth;
         canvasHeight = containerWidth / targetAspectRatio;
     }
-    
+
     // 小数点以下を切り捨て、最小値を1pxとする
     canvas.width = Math.max(1, Math.floor(canvasWidth));
     canvas.height = Math.max(1, Math.floor(canvasHeight));
-    
+
     return { width: canvas.width, height: canvas.height };
 }
 
@@ -80,7 +80,7 @@ function canvasToJpegBlob(canvas, quality = 0.95) {
             }, 'image/jpeg', quality);
         });
     }
-    
+
     return Promise.reject(new Error('有効なキャンバスが指定されていません。'));
 }
 
@@ -93,10 +93,10 @@ function createOffscreenCanvasFromCanvas(sourceCanvas) {
     const width = sourceCanvas.width;
     const height = sourceCanvas.height;
     const offscreenCanvas = new OffscreenCanvas(width, height);
-    
+
     const ctx = offscreenCanvas.getContext('2d');
     ctx.drawImage(sourceCanvas, 0, 0, width, height);
-    
+
     return offscreenCanvas;
 }
 
@@ -115,7 +115,7 @@ function createOffscreenCanvasFromCanvas(sourceCanvas) {
  */
 function drawImageWithPrecision(ctx, img, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight) {
     const params = calculateDrawImageParams(sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight);
-    
+
     ctx.drawImage(
         img,
         params.sourceX,
@@ -129,11 +129,63 @@ function drawImageWithPrecision(ctx, img, sx, sy, sWidth, sHeight, dx, dy, dWidt
     );
 }
 
+/**
+ * BlobオブジェクトをBase64エンコードされたデータURLに変換します。
+ * @param {Blob} blob 変換するBlobオブジェクト。
+ * @returns {Promise<string>} データURL文字列を解決するPromise。
+ */
+function blobToDataURL(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            if (reader.error) {
+                reject(reader.error);
+            } else {
+                resolve(reader.result);
+            }
+        };
+        reader.onerror = (err) => { // エラーハンドリングを強化
+            console.error("blobToDataURL error:", err);
+            reject(err);
+        };
+        reader.readAsDataURL(blob);
+    });
+}
+
+/**
+ * Base64エンコードされたデータURLをBlobオブジェクトに変換します。
+ * @param {string} dataURL 変換するデータURL文字列。
+ * @returns {Blob | null} 生成されたBlobオブジェクト、またはエラーの場合はnull。
+ */
+function dataURLToBlob(dataURL) {
+    try {
+        const arr = dataURL.split(',');
+        if (arr.length < 2) throw new Error('無効なデータURLです (カンマが見つかりません)。');
+
+        const mimeMatch = arr[0].match(/:(.*?);/);
+        if (!mimeMatch || mimeMatch.length < 2) throw new Error('無効なデータURLです (MIMEタイプが見つかりません)。');
+        const mime = mimeMatch[1];
+
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+            u8arr[n] = bstr.charCodeAt(n);
+        }
+        return new Blob([u8arr], { type: mime });
+    } catch (e) {
+        console.error("dataURLToBlob変換エラー:", e);
+        return null;
+    }
+}
+
 // モジュールとしてエクスポート
 export {
     fitCanvasToContainer,
     calculateDrawImageParams,
     canvasToJpegBlob,
     createOffscreenCanvasFromCanvas,
-    drawImageWithPrecision
+    drawImageWithPrecision,
+    blobToDataURL,      // ADDED
+    dataURLToBlob       // ADDED
 }; 

@@ -131,19 +131,28 @@ function formatExifForDisplay(exifData) {
  * 元のExifデータを新しいJPEG画像に埋め込む (piexif.jsを使用)
  * @param {string} jpegDataUrl - Exifを埋め込む対象のJPEGデータURL (base64)
  * @param {Object} exifDataFromState - 埋め込むExifデータ (piexif.jsのloadで取得した形式)
- * @returns {string|null} Exifが埋め込まれた新しいJPEGデータURL、またはエラー時null
+ * @returns {string|null} Exifが埋め込まれた新しいJPEGデータURL、またはエラー時や必須情報がない場合はnull
  */
 function embedExifToJpeg(jpegDataUrl, exifDataFromState) {
-    if (!jpegDataUrl || !exifDataFromState || typeof piexif === 'undefined') {
+    if (!jpegDataUrl || !jpegDataUrl.startsWith('data:image/jpeg')) {
+        console.error("embedExifToJpeg: 無効なJPEGデータURLです。");
         return null;
     }
+    if (!exifDataFromState || typeof piexif === 'undefined') {
+        console.warn("embedExifToJpeg: Exifデータがないか、piexif.jsがロードされていません。Exifは埋め込まれません。");
+        return jpegDataUrl; // 元のデータURLをそのまま返す
+    }
+
     try {
+        // piexif.dump はGPS情報なども含めて全てのIFDをダンプする
         const exifBytes = piexif.dump(exifDataFromState);
         const newJpegDataUrl = piexif.insert(exifBytes, jpegDataUrl);
         return newJpegDataUrl;
     } catch (error) {
         console.error("Exifデータの埋め込みに失敗しました:", error);
-        return null;
+        // エラーが発生した場合は、元のExifなしのデータURLを返すか、nullを返すか選択
+        // ここでは元のデータURLを返すことで、少なくとも画像はダウンロードできるようにする
+        return jpegDataUrl;
     }
 }
 
