@@ -8,6 +8,7 @@ import { uiElements, initializeUIFromState, setupEventListeners } from './uiCont
 import { calculateLayout } from './layoutCalculator.js'; // This will be replaced later
 import { drawPreview } from './canvasRenderer.js'; // This will be refactored later
 import { processImageFile, handleDownload } from './fileManager.js';
+import { displayExifInfo } from './exifHandler.js'; // ADDED: Import for Exif display
 import { initializeTabs } from './tabManager.js';
 
 /**
@@ -45,6 +46,13 @@ export function requestRedraw() {
         drawPreview(getState(), uiElements.previewCanvas, uiElements.previewCtx); // CHANGED: Pass latest state
     } else {
         console.error("[Main] Preview canvas or context not available for redraw.");
+    }
+
+    // Display Exif Info
+    if (uiElements.exifDataContainer) {
+        // currentState.exifData comes from stateManager
+        // displayExifInfo is from exifHandler
+        displayExifInfo(currentState.exifData, uiElements.exifDataContainer);
     }
 }
 

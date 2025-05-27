@@ -36,6 +36,8 @@ export const uiElements = {
     // 出力タブ
     jpgQualitySlider: document.getElementById('jpgQuality'),
     jpgQualityValueSpan: document.getElementById('jpgQualityValue'),
+    exifDataContainer: document.getElementById('exifDataContainer'), // ADDED
+
 };
 
 export function initializeUIFromState() {

@@ -2,15 +2,25 @@
 import { getState, setImage } from './stateManager.js';
 import { initializeUIFromState, uiElements } from './uiController.js';
 import { renderFinal } from './canvasRenderer.js';
+import { extractExifFromFile } from './exifHandler.js'; // ADDED: Import for Exif extraction
 // redrawCallback は main.js から渡される
 
-export function processImageFile(file, redrawCallback) {
+export async function processImageFile(file, redrawCallback) { // CHANGED: Made async
+
     if (file && file.type.startsWith('image/')) {
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => { // CHANGED: Made async
             const img = new Image();
-            img.onload = () => {
-                setImage(img, null); 
+            img.onload = async () => { // CHANGED: Made async
+                let exifData = null;
+                try {
+                    // Attempt to extract Exif data
+                    exifData = await extractExifFromFile(file);
+                } catch (exifError) {
+                    console.warn("Exifデータの抽出に失敗しました:", exifError);
+                }
+                // Set image and Exif data (or null if extraction failed) in state
+                setImage(img, exifData);
 
                 initializeUIFromState();
 
@@ -20,7 +30,11 @@ export function processImageFile(file, redrawCallback) {
                 if (uiElements.imageLoader) uiElements.imageLoader.value = '';
             };
             img.onerror = () => { alert('画像の読み込みに失敗しました。'); if (uiElements.imageLoader) uiElements.imageLoader.value = ''; };
-            img.src = e.target.result;
+            if (e.target && typeof e.target.result === 'string') {
+                img.src = e.target.result;
+            } else {
+                alert('ファイルの読み込み結果が不正です。');
+            }
         };
         reader.onerror = () => { alert('ファイルの読み込みに失敗しました。'); if (uiElements.imageLoader) uiElements.imageLoader.value = ''; };
         reader.readAsDataURL(file);
@@ -34,11 +48,11 @@ export function handleDownload() {
     const currentState = getState();
 
     if (!currentState.image) {
-        alert('画像が選択されていません。'); 
-        return; 
+        alert('画像が選択されていません。');
+        return;
     }
-    
-    const finalCanvas = renderFinal(currentState); 
+
+    const finalCanvas = renderFinal(currentState);
 
     if (finalCanvas) {
         const uiQualityValue = currentState.outputSettings.quality; // これは1～100の値
@@ -56,7 +70,7 @@ export function handleDownload() {
             if (uiElements.imageLoader && uiElements.imageLoader.files && uiElements.imageLoader.files[0] && uiElements.imageLoader.files[0].name) {
                 baseName = uiElements.imageLoader.files[0].name.substring(0, uiElements.imageLoader.files[0].name.lastIndexOf('.')) || 'image';
             } else if (currentState.image && currentState.image.name) {
-                 baseName = currentState.image.name.substring(0, currentState.image.name.lastIndexOf('.')) || 'image';
+                baseName = currentState.image.name.substring(0, currentState.image.name.lastIndexOf('.')) || 'image';
             }
             const fileName = `${baseName}_kakomi_framed.jpg`; // 仕様書では「_framed.jpg」
             const a = document.createElement('a');
@@ -64,10 +78,10 @@ export function handleDownload() {
             document.body.appendChild(a); a.click();
             document.body.removeChild(a); URL.revokeObjectURL(url);
         })
-        .catch(err => {
-            console.error('画像のダウンロードに失敗しました:', err);
-            alert('画像のダウンロードに失敗しました。コンソールを確認してください。');
-        });
+            .catch(err => {
+                console.error('画像のダウンロードに失敗しました:', err);
+                alert('画像のダウンロードに失敗しました。コンソールを確認してください。');
+            });
     } else {
         alert('出力用Canvasの生成に失敗しました。');
     }
