@@ -8,6 +8,7 @@ let editState = {
     image: null,
     originalWidth: 0,
     originalHeight: 0,
+    originalFileName: null, // ADDED: 元のファイル名を保持するプロパティ
     photoViewParams: {
         offsetX: 0.5, // 0 (左端) to 1 (右端), 0.5 = 中央
         offsetY: 0.5  // 0 (上端) to 1 (下端), 0.5 = 中央
@@ -274,13 +275,15 @@ function resetState() {
  * 新しい画像がロードされたときの処理
  * @param {HTMLImageElement} img - ロードされた画像要素
  * @param {Object} exifData - 画像から抽出されたExifデータ (オプション)
+ * @param {string | null} fileName - 元のファイル名 (オプション)
  */
-function setImage(img, exifData = null) {
+function setImage(img, exifData = null, fileName = null) { // ADDED: fileName パラメータ
     // 基本的な画像情報を更新
     editState.image = img;
     editState.originalWidth = img.width;
     editState.originalHeight = img.height;
     editState.exifData = exifData;
+    editState.originalFileName = typeof fileName === 'string' ? fileName : 'image'; // ADDED: ファイル名を保存
 
     // 画像関連の設定をリセット
     editState.photoViewParams = { offsetX: 0.5, offsetY: 0.5 };

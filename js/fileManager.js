@@ -9,6 +9,7 @@ import { canvasToJpegBlob, blobToDataURL, dataURLToBlob } from './utils/canvasUt
 export async function processImageFile(file, redrawCallback) { // CHANGED: Made async
 
     if (file && file.type.startsWith('image/')) {
+        const originalFileName = file.name; // Get filename from the File object
         const reader = new FileReader();
         reader.onload = async (e) => { // CHANGED: Made async
             const img = new Image();
@@ -20,8 +21,8 @@ export async function processImageFile(file, redrawCallback) { // CHANGED: Made 
                 } catch (exifError) { // extractExifFromFileがnullを返すので、ここではcatchされない想定
                     console.warn("Exifデータの抽出に失敗しました:", exifError);
                 }
-                // Set image and Exif data (or null if extraction failed) in state
-                setImage(img, exifData);
+                // Set image, Exif data, and original filename in state
+                setImage(img, exifData, originalFileName);
 
                 initializeUIFromState();
 
@@ -91,13 +92,11 @@ export async function handleDownload() { // async に変更
 
             const url = URL.createObjectURL(finalBlob);
             let baseName = 'image';
-            if (uiElements.imageLoader && uiElements.imageLoader.files && uiElements.imageLoader.files[0] && uiElements.imageLoader.files[0].name) {
-                baseName = uiElements.imageLoader.files[0].name.substring(0, uiElements.imageLoader.files[0].name.lastIndexOf('.')) || 'image';
-            } else if (currentState.image && currentState.image.name) { // 画像名がどこかで保存されていれば
-                const originalFileName = typeof currentState.image.name === 'string' ? currentState.image.name : 'image';
-                baseName = originalFileName.substring(0, originalFileName.lastIndexOf('.')) || 'image';
+            // Use stored originalFileName from state
+            if (currentState.originalFileName) {
+                baseName = currentState.originalFileName.substring(0, currentState.originalFileName.lastIndexOf('.')) || 'image';
             }
-            const fileName = `${baseName}_kakomi_framed.jpg`; // 仕様書では「_framed.jpg」
+            const fileName = `${baseName}_kakomi_framed.jpg`; // 仕様書では「(読み込んだ元写真のファイル名)_framed.jpg」となっています
             const a = document.createElement('a');
             a.href = url; a.download = fileName;
             document.body.appendChild(a); a.click();
