@@ -326,7 +326,7 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
     editState.frameSettings = { // frameSettings オブジェクトごと初期値で再割り当てするのが安全
         cornerStyle: 'none',
         cornerRadiusPercent: 0,
-        superellipseN: 4,
+        superellipseN: 15,
         shadowEnabled: false,
         shadowType: 'drop',
         dropShadow: {
@@ -338,12 +338,12 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
         },
         innerShadow: { // インナーシャドウのデフォルト値も定義しておく
             blur: 5,
-            spread: 3,
+            spread: 0,
             color: 'rgba(0,0,0,0.75)',
         },
         border: {
             enabled: false,
-            width: 1,
+            width: 0.1,
             color: '#000000',
             style: 'solid'
         }
