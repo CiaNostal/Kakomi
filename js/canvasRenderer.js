@@ -56,7 +56,15 @@ export function drawPreview(currentState, previewCanvas, previewCtx) {
 
         // 1. 影の描画 (写真本体より先)
         if (currentState.frameSettings.shadowEnabled) {
-            applyShadow(previewCtx, currentState.frameSettings.shadow, currentState.frameSettings, previewPhotoX, previewPhotoY, previewPhotoWidth, previewPhotoHeight, previewPhotoShortSidePx);
+            let shadowSettingsToApply;
+            if (currentState.frameSettings.shadowType === 'drop') {
+                shadowSettingsToApply = currentState.frameSettings.dropShadow;
+            } else if (currentState.frameSettings.shadowType === 'inner') {
+                shadowSettingsToApply = currentState.frameSettings.innerShadow;
+            }
+            if (shadowSettingsToApply) { // 該当する影の設定オブジェクトが存在する場合のみ呼び出す
+                applyShadow(previewCtx, shadowSettingsToApply, currentState.frameSettings, previewPhotoX, previewPhotoY, previewPhotoWidth, previewPhotoHeight, previewPhotoShortSidePx);
+            }
         }
 
         // 2. 写真のクリッピングパス設定と適用
@@ -151,7 +159,15 @@ export function renderFinal(currentState) {
 
     // 1. 影の描画 (写真本体より先)
     if (currentState.frameSettings.shadowEnabled) {
-        applyShadow(ctx, currentState.frameSettings.shadow, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
+        let shadowSettingsToApply;
+        if (currentState.frameSettings.shadowType === 'drop') {
+            shadowSettingsToApply = currentState.frameSettings.dropShadow;
+        } else if (currentState.frameSettings.shadowType === 'inner') {
+            shadowSettingsToApply = currentState.frameSettings.innerShadow;
+        }
+        if (shadowSettingsToApply) {
+            applyShadow(ctx, shadowSettingsToApply, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
+        }
     }
 
     // 2. 写真のクリッピングパス設定と適用

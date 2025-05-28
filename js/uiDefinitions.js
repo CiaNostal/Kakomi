@@ -26,7 +26,7 @@ export const controlsConfig = {
     // フレーム加工タブ
     frameCornerStyle: { defaultValue: 'none' }, // ラジオボタンまたはselect用
     frameCornerRadiusPercent: { defaultValue: 0, min: 0, max: 50, step: 1 }, // %
-    frameSuperellipseN: { defaultValue: 4, min: 3, max: 20, step: 1 },    // 整数
+    frameSuperellipseN: { defaultValue: 4, min: 3, max: 40, step: 1 },    // 整数
 
     frameShadowEnabled: { defaultValue: false }, // チェックボックス
     frameShadowType: { defaultValue: 'drop' },   // ラジオボタンまたはselect用 ('none', 'drop', 'inner')
@@ -45,7 +45,7 @@ export const controlsConfig = {
 
     // 縁取り用
     frameBorderEnabled: { defaultValue: false }, // チェックボックス
-    frameBorderWidth: { defaultValue: 1, min: 0, max: 10, step: 0.1 },   // %
+    frameBorderWidth: { defaultValue: 1, min: 0, max: 3, step: 0.05 },   // %
     frameBorderColor: { defaultValue: '#000000' },
     frameBorderStyle: { defaultValue: 'solid' }, // select用
 };

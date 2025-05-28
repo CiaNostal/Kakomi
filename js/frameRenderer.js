@@ -17,7 +17,7 @@ function createSuperellipsePath(ctx, x, y, width, height, n) {
     const centerY = y + b;
 
     // n の値を安全な範囲に丸める・制限する (整数化もここで)
-    const N = Math.max(2, Math.min(20, Math.round(n))); // 2から20の整数に (n=2は楕円)
+    const N = Math.max(2, Math.min(40, Math.round(n))); // 2から20の整数に (n=2は楕円)
 
     const points = [];
     const steps = 90; // 90ステップで第一象限 (1度ごと)。滑らかさが足りなければ増やす (例: 180で0.5度ごと)
@@ -119,8 +119,10 @@ function applyFrameEffects(ctx, currentState, photoX, photoY, photoWidth, photoH
 
 // applyShadow と applyBorder の仮実装（後で詳細化）
 function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx) {
-    if (!shadowSettings.enabled) return;
-    console.log("applyShadow called (implementation pending full review for superellipse)", shadowSettings);
+    // 呼び出し元(canvasRenderer.js)で frameSettings.shadowEnabled をチェックしているので、
+    // ここでは shadowSettings (dropShadow または innerShadow オブジェクト) が渡された時点で描画すると判断。
+    // shadowSettings オブジェクト自体に enabled プロパティはない。
+    console.log("applyShadow called with settings:", shadowSettings); // ログの位置をガード節の前に変更、またはガード節を削除
     // ここに影描画ロジック（frameSettings.cornerStyleに応じてパスを生成し影付け）
     // 既存のロジックをベースに、パス生成部分を createSuperellipsePath/roundedRect に置き換える
     const offsetX = (shadowSettings.offsetX / 100) * photoShortSidePx;
