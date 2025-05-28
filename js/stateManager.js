@@ -323,11 +323,31 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
         offsetY: 0.5
     };
     // フレーム設定もリセット（上記で網羅されているが、明示的にデフォルト値を意識）
-    editState.frameSettings.cornerStyle = 'rounded';
-    editState.frameSettings.cornerRadiusPercent = 0;
-    editState.frameSettings.superellipseN = 4;
-    editState.frameSettings.shadow.enabled = false; // 必要に応じて他のshadowプロパティもリセット
-    editState.frameSettings.border.enabled = false; // 必要に応じて他のborderプロパティもリセット
+    editState.frameSettings = { // frameSettings オブジェクトごと初期値で再割り当てするのが安全
+        cornerStyle: 'none',
+        cornerRadiusPercent: 0,
+        superellipseN: 4,
+        shadowEnabled: false,
+        shadowType: 'drop',
+        dropShadow: {
+            offsetX: 2,
+            offsetY: 2,
+            blur: 5,
+            spread: 0,
+            color: 'rgba(0,0,0,0.5)',
+        },
+        innerShadow: { // インナーシャドウのデフォルト値も定義しておく
+            blur: 5,
+            spread: 3,
+            color: 'rgba(0,0,0,0.75)',
+        },
+        border: {
+            enabled: false,
+            width: 1,
+            color: '#000000',
+            style: 'solid'
+        }
+    };
     notifyStateChange();
 }
 
