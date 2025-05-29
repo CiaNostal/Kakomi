@@ -116,72 +116,96 @@ function createAndApplyClippingPath(ctx, frameSettings, photoX, photoY, photoWid
     ctx.clip();
 }
 
-/**
- * 写真に対してフレーム加工を適用する
- * @param {CanvasRenderingContext2D} ctx - キャンバスのコンテキスト
- * @param {Object} currentState - 現在の編集状態
- * @param {number} photoX - 写真の左上X座標
- * @param {number} photoY - 写真の左上Y座標
- * @param {number} photoWidth - 写真の幅
- * @param {number} photoHeight - 写真の高さ
- */
-function applyFrameEffects(ctx, currentState, photoX, photoY, photoWidth, photoHeight) {
-    const frameSettings = currentState.frameSettings;
-    const photoShortSidePx = Math.min(photoWidth, photoHeight);
+// REMOVED: applyFrameEffects 関数は canvasRenderer.js 側の描画順序制御に役割を移譲
 
-    if (frameSettings.shadow.enabled) {
-        // CHANGED: frameSettings を applyShadow に渡す
-        applyShadow(ctx, frameSettings.shadow, frameSettings.cornerRadius, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
-    }
-
-    if (frameSettings.cornerRadius > 0) {
-        const radius = (frameSettings.cornerRadius / 100) * photoShortSidePx;
-        roundedRect(ctx, photoX, photoY, photoWidth, photoHeight, radius);
-        ctx.clip(); // 写真本体の描画のためにクリッピングパスを設定
-    }
-
-    if (frameSettings.border.enabled && frameSettings.border.width > 0) {
-        // CHANGED: frameSettings を applyBorder に渡す
-        applyBorder(ctx, frameSettings.border, frameSettings.cornerRadius, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
-    }
-}
-
-// applyShadow と applyBorder の仮実装（後で詳細化）
 function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx) {
-    // 呼び出し元(canvasRenderer.js)で frameSettings.shadowEnabled をチェックしているので、
-    // ここでは shadowSettings (dropShadow または innerShadow オブジェクト) が渡された時点で描画すると判断。
-    // shadowSettings オブジェクト自体に enabled プロパティはない。
-    console.log("applyShadow called with settings:", shadowSettings); // ログの位置をガード節の前に変更、またはガード節を削除
-    // ここに影描画ロジック（frameSettings.cornerStyleに応じてパスを生成し影付け）
-    // 既存のロジックをベースに、パス生成部分を createSuperellipsePath/roundedRect に置き換える
-    const offsetX = (shadowSettings.offsetX / 100) * photoShortSidePx;
-    const offsetY = (shadowSettings.offsetY / 100) * photoShortSidePx;
-    const blurRadius = (shadowSettings.blur / 100) * photoShortSidePx;
-    const spreadRadius = (shadowSettings.spread / 100) * photoShortSidePx;
-
-    ctx.save();
-    ctx.shadowColor = shadowSettings.color;
-    ctx.shadowOffsetX = offsetX;
-    ctx.shadowOffsetY = offsetY;
-    ctx.shadowBlur = blurRadius;
-
-    const shadowX = photoX - spreadRadius;
-    const shadowY = photoY - spreadRadius;
-    const shadowWidth = photoWidth + 2 * spreadRadius;
-    const shadowHeight = photoHeight + 2 * spreadRadius;
-    ctx.fillStyle = shadowSettings.color;
-
-    if (frameSettings.cornerStyle === 'superellipse') {
-        createSuperellipsePath(ctx, shadowX, shadowY, shadowWidth, shadowHeight, frameSettings.superellipseN);
-    } else if (frameSettings.cornerStyle === 'rounded' && frameSettings.cornerRadiusPercent > 0) {
-        const radius = (frameSettings.cornerRadiusPercent / 100) * Math.min(shadowWidth, shadowHeight);
-        roundedRect(ctx, shadowX, shadowY, shadowWidth, shadowHeight, radius);
-    } else {
-        ctx.beginPath();
-        ctx.rect(shadowX, shadowY, shadowWidth, shadowHeight);
+    // frameSettings.shadowEnabled のチェックは呼び出し元(canvasRenderer.js)で行われている
+    if (!shadowSettings) {
+        console.warn("applyShadow: shadowSettings is undefined or null.");
+        return;
     }
-    ctx.fill();
-    ctx.restore();
+
+    if (frameSettings.shadowType === 'drop') {
+        console.log("Applying Drop Shadow with settings:", shadowSettings);
+        const offsetX = (shadowSettings.offsetX / 100) * photoShortSidePx;
+        const offsetY = (shadowSettings.offsetY / 100) * photoShortSidePx;
+        const blurRadius = (shadowSettings.blur / 100) * photoShortSidePx;
+        const spreadRadius = (shadowSettings.spread !== undefined ? (shadowSettings.spread / 100) * photoShortSidePx : 0);
+
+        ctx.save();
+        ctx.shadowColor = shadowSettings.color;
+        ctx.shadowOffsetX = offsetX;
+        ctx.shadowOffsetY = offsetY;
+        ctx.shadowBlur = blurRadius;
+
+        const baseRectX = photoX - spreadRadius;
+        const baseRectY = photoY - spreadRadius;
+        const baseRectWidth = photoWidth + 2 * spreadRadius;
+        const baseRectHeight = photoHeight + 2 * spreadRadius;
+        ctx.fillStyle = shadowSettings.color; // Or 'black' if shadowColor dictates the actual shadow
+
+        if (frameSettings.cornerStyle === 'superellipse') {
+            createSuperellipsePath(ctx, baseRectX, baseRectY, baseRectWidth, baseRectHeight, frameSettings.superellipseN);
+        } else if (frameSettings.cornerStyle === 'rounded' && frameSettings.cornerRadiusPercent > 0) {
+            let radius = (frameSettings.cornerRadiusPercent / 100) * photoShortSidePx;
+            radius = Math.max(0, radius + spreadRadius);
+            roundedRect(ctx, baseRectX, baseRectY, baseRectWidth, baseRectHeight, radius);
+        } else {
+            ctx.beginPath();
+            ctx.rect(baseRectX, baseRectY, baseRectWidth, baseRectHeight);
+        }
+        ctx.fill();
+        ctx.restore();
+
+    } else if (frameSettings.shadowType === 'inner') {
+        console.log("Applying Inner Shadow (Step 1: Offset shape, no blur yet) with settings:", shadowSettings);
+
+        const offsetXpx = (shadowSettings.offsetX / 100) * photoShortSidePx;
+        const offsetYpx = (shadowSettings.offsetY / 100) * photoShortSidePx;
+        // const blurAmountPx = (shadowSettings.blur / 100) * photoShortSidePx; // Blur is next step
+
+        if (photoWidth <= 0 || photoHeight <= 0) return;
+
+        const offscreenCanvas = document.createElement('canvas');
+        offscreenCanvas.width = photoWidth;
+        offscreenCanvas.height = photoHeight;
+        const offCtx = offscreenCanvas.getContext('2d');
+        if (!offCtx) {
+            console.error("Failed to get offscreen canvas context for inner shadow.");
+            return;
+        }
+
+        // A. オフセットした形状を影の色で描画
+        offCtx.beginPath();
+        if (frameSettings.cornerStyle === 'superellipse') {
+            createSuperellipsePath(offCtx, offsetXpx, offsetYpx, photoWidth, photoHeight, frameSettings.superellipseN);
+        } else if (frameSettings.cornerStyle === 'rounded' && frameSettings.cornerRadiusPercent > 0) {
+            const radius = (frameSettings.cornerRadiusPercent / 100) * photoShortSidePx;
+            roundedRect(offCtx, offsetXpx, offsetYpx, photoWidth, photoHeight, radius);
+        } else {
+            offCtx.rect(offsetXpx, offsetYpx, photoWidth, photoHeight);
+        }
+        offCtx.fillStyle = shadowSettings.color;
+        offCtx.fill();
+
+        // B. 元の写真の形状でくり抜く (destination-in)
+        offCtx.globalCompositeOperation = 'destination-in';
+        offCtx.beginPath();
+        if (frameSettings.cornerStyle === 'superellipse') {
+            createSuperellipsePath(offCtx, 0, 0, photoWidth, photoHeight, frameSettings.superellipseN);
+        } else if (frameSettings.cornerStyle === 'rounded' && frameSettings.cornerRadiusPercent > 0) {
+            const radius = (frameSettings.cornerRadiusPercent / 100) * photoShortSidePx;
+            roundedRect(offCtx, 0, 0, photoWidth, photoHeight, radius);
+        } else {
+            offCtx.rect(0, 0, photoWidth, photoHeight);
+        }
+        offCtx.fillStyle = 'black'; // destination-in の場合、sourceのアルファが使われるので色は任意（不透明であること）
+        offCtx.fill();
+
+        // メインCanvasの現在のクリップ領域の内側に、オフスクリーンCanvasの内容（影の型）を描画
+        // (ぼかしはまだ適用しない)
+        ctx.drawImage(offscreenCanvas, photoX, photoY);
+    }
 }
 
 function applyBorder(ctx, borderSettings, frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx) {
@@ -231,5 +255,8 @@ function roundedRect(ctx, x, y, width, height, radius) {
     ctx.closePath();
 }
 
-// export { applyFrameEffects };
-export { createAndApplyClippingPath, createSuperellipsePath, roundedRect, applyShadow, applyBorder }; // applyShadow, applyBorderもエクスポート対象に
+export { createAndApplyClippingPath, applyShadow, applyBorder, createSuperellipsePath, roundedRect };
+// createSuperellipsePath と roundedRect は createAndApplyClippingPath や applyShadow/Border から内部的に使われるが、
+// canvasRenderer から直接パス操作をする可能性も考慮してエクスポートしても良いし、しなくても良い。
+// ここでは、主要なエフェクト関数のみをエクスポート対象とし、パス生成は内部利用とするなら、それらを外しても良い。
+// 今回はcanvasRenderer.js側のインポートに合わせておく。

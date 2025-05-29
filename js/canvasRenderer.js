@@ -1,6 +1,6 @@
 // js/canvasRenderer.js
 import { drawBackground } from './backgroundRenderer.js';
-import { createAndApplyClippingPath, applyShadow, applyBorder, createSuperellipsePath, roundedRect } from './frameRenderer.js'; // roundedRect も追加 (もし frameRenderer 側でパス生成に必要なら)
+import { createAndApplyClippingPath, applyShadow, applyBorder } from './frameRenderer.js'; // createSuperellipsePath, roundedRect はframeRenderer内部で使用
 import { drawText } from './textRenderer.js'; // テキスト描画もインポートしておく
 import { drawImageWithPrecision } from './utils/canvasUtils.js';
 
@@ -96,7 +96,7 @@ export function renderFinal(currentState) {
     const { sourceX, sourceY, sourceWidth, sourceHeight, destXonOutputCanvas, destYonOutputCanvas, destWidth, destHeight } = currentState.photoDrawConfig;
     const outputWidth = currentState.outputCanvasConfig.width;
     const outputHeight = currentState.outputCanvasConfig.height;
-    
+
     const photoX = destXonOutputCanvas;
     const photoY = destYonOutputCanvas;
     const photoWidth = destWidth;
@@ -150,7 +150,7 @@ export function renderFinal(currentState) {
 
         ctx.restore(); // クリップなどを解除
     }
-    
+
     // 7. テキスト描画
     if (currentState.textSettings.date.enabled || currentState.textSettings.exif.enabled) {
         // Google Fonts のロードは別途考慮
