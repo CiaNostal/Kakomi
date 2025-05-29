@@ -341,7 +341,6 @@ export function setupEventListeners(redrawCallback) {
                 }
             }
 
-            // console.log(`Updating state for ${element.id}. Payload:`, JSON.stringify(updatePayload));
             updateState(updatePayload);
 
             // UI表示切替判定 - actualNestedKey を使用
@@ -352,7 +351,6 @@ export function setupEventListeners(redrawCallback) {
                     actualNestedKey === 'shadowType' || actualNestedKey === 'borderEnabled' ||
                     (actualNestedKey === 'border' && actualSubNestedKey === 'enabled') // Explicitly for border.enabled
                 )) {
-                // console.log("Calling updateFrameSettingsVisibility. Triggered by actualNestedKey:", actualNestedKey, "actualSubNestedKey:", actualSubNestedKey);
                 updateFrameSettingsVisibility();
             }
             updateSliderValueDisplays();

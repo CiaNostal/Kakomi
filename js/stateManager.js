@@ -337,8 +337,9 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
             color: 'rgba(0,0,0,0.5)',
         },
         innerShadow: { // インナーシャドウのデフォルト値も定義しておく
+            offsetX: 0, // デフォルト値を確認・設定
+            offsetY: 0, // デフォルト値を確認・設定
             blur: 5,
-            spread: 0,
             color: 'rgba(0,0,0,0.75)',
         },
         border: {
