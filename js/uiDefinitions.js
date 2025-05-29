@@ -39,8 +39,10 @@ export const controlsConfig = {
     frameDropShadowColor: { defaultValue: 'rgba(0,0,0,0.5)' },
 
     // インナーシャドウ用 (UIは後で実装するとしても、定義だけは先行可能)
+    frameInnerShadowOffsetX: { defaultValue: 0, min: -50, max: 50, step: 1 }, // 新規追加
+    frameInnerShadowOffsetY: { defaultValue: 0, min: -50, max: 50, step: 1 }, // 新規追加
     frameInnerShadowBlur: { defaultValue: 5, min: 0, max: 30, step: 1 },     // %
-    frameInnerShadowSpread: { defaultValue: 3, min: 0, max: 20, step: 1 }, // % (太さ)
+    // frameInnerShadowSpread: { defaultValue: 3, min: 0, max: 50, step: 1 }, // コメントアウトまたは削除
     frameInnerShadowColor: { defaultValue: 'rgba(0,0,0,0.75)' },
 
     // 縁取り用

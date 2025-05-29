@@ -60,10 +60,10 @@ let editState = {
 
         // インナーシャドウ（内側）用設定 (後で実装するパラメータの例)
         innerShadow: {
-            // offsetX: 0, // インナーシャドウの場合、オフセットは通常不要か、別の意味合いになる
-            // offsetY: 0,
+            offsetX: 0, // インナーシャドウの場合、オフセットは通常不要か、別の意味合いになる
+            offsetY: 0,
             blur: 5,         // %
-            spread: 3,       // 影の太さ/深さ (%)
+            // spread: 3,  // 太さ/深さ (% photoShortSidePx) - 一旦コメントアウトまたは削除
             color: 'rgba(0,0,0,0.75)',
             // opacity: 0.75,
         },
