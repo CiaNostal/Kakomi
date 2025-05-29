@@ -247,7 +247,79 @@
                         </fieldset>
                     </div>
                     <div id="tab-text" class="tab-pane">
-                        <p>（文字入力の設定項目）</p>
+                        <fieldset>
+                            <legend>撮影日 表示</legend>
+                            <div class="form-row-simple">
+                                <label for="textDateEnabled">表示する:</label>
+                                <input type="checkbox" id="textDateEnabled">
+                            </div>
+
+                            <div id="textDateSettingsContainer">
+                                <div class="form-row-simple">
+                                    <label for="textDateFormat">区切り形式:</label>
+                                    <select id="textDateFormat">
+                                        <option value="YYYY/MM/DD">YYYY/MM/DD</option>
+                                        <option value="YY/MM/DD">YY/MM/DD</option>
+                                        <option value="YYYY.MM.DD">YYYY.MM.DD</option>
+                                        <option value="YY.MM.DD">YY.MM.DD</option>
+                                        <option value="YYYY年MM月DD日">YYYY年MM月DD日</option>
+                                    </select>
+                                </div>
+                                <div class="form-row-simple">
+                                    <label for="textDateFont">フォント:</label>
+                                    <select id="textDateFont">
+                                        <option value="Arial">Arial</option>
+                                        <option value="Helvetica">Helvetica</option>
+                                        <option value="Times New Roman">Times New Roman</option>
+                                        <option value="Verdana">Verdana</option>
+                                    </select>
+                                </div>
+                                <div class="form-row-slider">
+                                    <label for="textDateSize">サイズ (%):</label>
+                                    <input type="range" id="textDateSize">
+                                    <span id="textDateSizeValue">5%</span>
+                                </div>
+                                <div class="form-row-simple">
+                                    <label for="textDateColor">文字色:</label>
+                                    <input type="color" id="textDateColor">
+                                </div>
+                                <div class="form-row-simple">
+                                    <label for="textDatePosition">表示位置:</label>
+                                    <select id="textDatePosition">
+                                        <option value="top-left">左上</option>
+                                        <option value="top-center">中央上</option>
+                                        <option value="top-right">右上</option>
+                                        <option value="middle-left">左中央</option>
+                                        <option value="middle-center">中央</option>
+                                        <option value="middle-right">右中央</option>
+                                        <option value="bottom-left">左下</option>
+                                        <option value="bottom-center">中央下</option>
+                                        <option value="bottom-right">右下</option>
+                                    </select>
+                                </div>
+                                <div class="form-row-slider">
+                                    <label for="textDateOffsetX">横オフセット (%):</label>
+                                    <input type="range" id="textDateOffsetX">
+                                    <span id="textDateOffsetXValue">2%</span>
+                                </div>
+                                <div class="form-row-slider">
+                                    <label for="textDateOffsetY">縦オフセット (%):</label>
+                                    <input type="range" id="textDateOffsetY">
+                                    <span id="textDateOffsetYValue">2%</span>
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        <fieldset>
+                            <legend>Exif情報 表示</legend>
+                            <div class="form-row-simple">
+                                <label for="textExifEnabled">表示する:</label>
+                                <input type="checkbox" id="textExifEnabled">
+                            </div>
+                            <div id="textExifSettingsContainer" class="hidden">
+                                <p>（Exif詳細設定は後ほど実装）</p>
+                            </div>
+                        </fieldset>
                     </div>
                     <div id="tab-output" class="tab-pane">
                         <fieldset>

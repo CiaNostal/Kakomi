@@ -79,14 +79,14 @@ let editState = {
     // 文字表示関連の設定を追加
     textSettings: {
         date: {
-            enabled: false,
-            format: 'YYYY/MM/DD', // 日付表示形式
-            font: 'Arial',
-            size: 2,          // サイズ (%)
-            color: '#000000',
-            position: 'bottom-right', // 表示位置
-            offsetX: 0,       // X方向オフセット (%)
-            offsetY: 0        // Y方向オフセット (%)
+            enabled: false,            // 表示ON/OFF
+            format: 'YYYY/MM/DD',    // 区切り形式選択
+            font: 'Arial',           // フォント
+            size: 2,                 // フォントサイズ (%)
+            color: '#FFFFFF',        // 色
+            position: 'bottom-right',// 表示位置
+            offsetX: 2,              // X方向オフセット (%)
+            offsetY: 2               // Y方向オフセット (%)
         },
         exif: {
             enabled: false,
@@ -95,8 +95,8 @@ let editState = {
             size: 2,          // サイズ (%)
             color: '#000000',
             position: 'bottom-left', // 表示位置
-            offsetX: 0,       // X方向オフセット (%)
-            offsetY: 0        // Y方向オフセット (%)
+            offsetX: 2,       // X方向オフセット (%)
+            offsetY: 2        // Y方向オフセット (%)
         }
     },
     // 出力関連の設定を追加
@@ -260,11 +260,11 @@ function resetState() {
                 enabled: false,
                 format: 'YYYY/MM/DD',
                 font: 'Arial',
-                size: 3,
-                color: '#000000',
+                size: 2,
+                color: '#FFFFFF',
                 position: 'bottom-right',
-                offsetX: 0,
-                offsetY: 0
+                offsetX: 2,
+                offsetY: 2
             },
             exif: {
                 enabled: false,
@@ -350,6 +350,19 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
             style: 'solid'
         }
     };
+        // textSettings.date もリセット
+    editState.textSettings.date = {
+        enabled: false,
+        format: 'YYYY/MM/DD',
+        font: 'Arial',
+        size: 2,
+        color: '#FFFFFF',
+        position: 'bottom-right',
+        offsetX: 2,
+        offsetY: 2
+    };
+    // textSettings.exif も同様にリセット（項目は現状のまま）
+    // (もしexifの設定項目も画像ごとにリセットすべきならここに追加)
     notifyStateChange();
 }
 

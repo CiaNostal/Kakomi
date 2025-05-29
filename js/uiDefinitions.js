@@ -23,6 +23,22 @@ export const controlsConfig = {
     // 出力タブ
     jpgQuality: { defaultValue: 100, min: 1, max: 100, step: 1 }, // range input (UI表示用1-100)
 
+    // 文字入力タブ - 撮影日表示
+    textDateEnabled: { defaultValue: false }, // チェックボックス
+    textDateFormat: { defaultValue: 'YYYY/MM/DD' }, // select要素用
+    textDateFont: { defaultValue: 'Arial' }, // select要素用 (将来的にはGoogle Fontsと連携)
+    textDateSize: { defaultValue: 2, min: 0.1, max: 5, step: 0.1 }, // % (写真短辺比)
+    textDateColor: { defaultValue: '#FFFFFF' }, // カラーピッカー
+    textDatePosition: { defaultValue: 'bottom-right' }, // select要素用 (9箇所)
+    textDateOffsetX: { defaultValue: 2, min: -50, max: 50, step: 1 }, // %
+    textDateOffsetY: { defaultValue: 2, min: -50, max: 50, step: 1 }, // %
+
+    // 文字入力タブ - Exif情報表示 (今回の修正範囲外だが、将来的にはここに追加)
+    // textExifEnabled: { defaultValue: false },
+    // textExifItems: { defaultValue: ['make', 'model'] }, // 例: マルチセレクトやチェックボックス群
+    // textExifFont: { defaultValue: 'Arial' },
+    // ...など
+
     // フレーム加工タブ
     frameCornerStyle: { defaultValue: 'none' }, // ラジオボタンまたはselect用
     frameCornerRadiusPercent: { defaultValue: 0, min: 0, max: 50, step: 1 }, // %
