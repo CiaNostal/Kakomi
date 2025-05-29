@@ -67,11 +67,10 @@ export const uiElements = {
     frameInnerShadowOffsetXValueSpan: document.getElementById('frameInnerShadowOffsetXValue'),
     frameInnerShadowOffsetYSlider: document.getElementById('frameInnerShadowOffsetY'),
     frameInnerShadowOffsetYValueSpan: document.getElementById('frameInnerShadowOffsetYValue'),
-
     frameInnerShadowBlurSlider: document.getElementById('frameInnerShadowBlur'),
     frameInnerShadowBlurValueSpan: document.getElementById('frameInnerShadowBlurValue'),
-    frameInnerShadowSpreadPercentSlider: document.getElementById('frameInnerShadowSpreadPercent'), // 新規追加
-    frameInnerShadowSpreadPercentValueSpan: document.getElementById('frameInnerShadowSpreadPercentValue'), // 新規追加
+    frameInnerShadowSpreadPercentSlider: document.getElementById('frameInnerShadowSpreadPercent'),
+    frameInnerShadowSpreadPercentValueSpan: document.getElementById('frameInnerShadowSpreadPercentValue'),
     frameInnerShadowColorInput: document.getElementById('frameInnerShadowColor'),
 
     frameBorderEnabledCheckbox: document.getElementById('frameBorderEnabled'),
@@ -82,7 +81,6 @@ export const uiElements = {
     frameBorderStyleSelect: document.getElementById('frameBorderStyle'),
 
     exifDataContainer: document.getElementById('exifDataContainer'),
-
 
     // 文字入力タブ - 撮影日表示 UI要素
     textDateEnabledCheckbox: document.getElementById('textDateEnabled'),
@@ -122,7 +120,8 @@ export function initializeUIFromState() {
     const state = getState();
 
     const setupInputAttributesAndValue = (element, configKey, stateValue) => {
-        if (element && controlsConfig[configKey]) {
+        if (!element) return; // 要素が存在しない場合は何もしない
+        if (controlsConfig[configKey]) {
             const config = controlsConfig[configKey];
             if (element.type === 'range' || element.type === 'number') {
                 if (config.min !== undefined) element.min = config.min;
@@ -130,20 +129,16 @@ export function initializeUIFromState() {
                 if (config.step !== undefined) element.step = config.step;
             }
             element.value = String(stateValue);
-            // チェックボックスとラジオボタンのcheckedプロパティも設定
-            if (element.type === 'checkbox') {
-                element.checked = Boolean(stateValue);
-            } else if (element.type === 'radio' && config && config.defaultValue !== undefined) {
-                // ラジオボタンの初期選択はname属性でグループ化されたうちの一つがtrueになる
-                // ここではvalueがstateValueと一致するかで判定 (nameとvalueがHTMLに正しく設定されている前提)
-                // initializeUIFromStateでラジオボタンのcheckedを設定するのは煩雑なので、
-                // 実際には state.frameSettings.cornerStyle === 'rounded' のような形で個別に設定する方が確実
-            }
-        } else if (element) {
+        } else { // controlsConfigに定義がない場合でも、stateValueで初期化を試みる
             element.value = String(stateValue);
-            if (element.type === 'checkbox') {
-                element.checked = Boolean(stateValue);
-            }
+        }
+        // チェックボックスとラジオボタンのcheckedプロパティも設定
+        if (element.type === 'checkbox') {
+            element.checked = Boolean(stateValue);
+        } else if (element.type === 'radio' && element.value === String(stateValue)) {
+            // name属性でグループ化されたラジオボタン群の中で、
+            // stateValueと一致するvalueを持つものをチェックする
+            element.checked = true;
         }
     };
 
@@ -186,7 +181,7 @@ export function initializeUIFromState() {
     setupInputAttributesAndValue(uiElements.frameInnerShadowOffsetXSlider, 'frameInnerShadowOffsetX', fs.innerShadow.offsetX);
     setupInputAttributesAndValue(uiElements.frameInnerShadowOffsetYSlider, 'frameInnerShadowOffsetY', fs.innerShadow.offsetY);
     setupInputAttributesAndValue(uiElements.frameInnerShadowBlurSlider, 'frameInnerShadowBlur', fs.innerShadow.blur);
-    setupInputAttributesAndValue(uiElements.frameInnerShadowSpreadPercentSlider, 'frameInnerShadowSpreadPercent', fs.innerShadow.spreadPercent); // 新規追加
+    setupInputAttributesAndValue(uiElements.frameInnerShadowSpreadPercentSlider, 'frameInnerShadowSpreadPercent', fs.innerShadow.spreadPercent);
     if (uiElements.frameInnerShadowColorInput) uiElements.frameInnerShadowColorInput.value = fs.innerShadow.color;
 
     if (uiElements.frameBorderEnabledCheckbox) uiElements.frameBorderEnabledCheckbox.checked = fs.border.enabled;
@@ -209,12 +204,17 @@ export function initializeUIFromState() {
     const tes = state.textSettings.exif;
     if (uiElements.textExifEnabledCheckbox) uiElements.textExifEnabledCheckbox.checked = tes.enabled;
     // 表示項目チェックボックスの初期化
-    if (uiElements.textExifItemMakeCheckbox) uiElements.textExifItemMakeCheckbox.checked = tes.items.includes('Make');
-    if (uiElements.textExifItemModelCheckbox) uiElements.textExifItemModelCheckbox.checked = tes.items.includes('Model');
-    if (uiElements.textExifItemFNumberCheckbox) uiElements.textExifItemFNumberCheckbox.checked = tes.items.includes('FNumber');
-    if (uiElements.textExifItemExposureTimeCheckbox) uiElements.textExifItemExposureTimeCheckbox.checked = tes.items.includes('ExposureTime');
-    if (uiElements.textExifItemISOSpeedRatingsCheckbox) uiElements.textExifItemISOSpeedRatingsCheckbox.checked = tes.items.includes('ISOSpeedRatings');
-    if (uiElements.textExifItemFocalLengthCheckbox) uiElements.textExifItemFocalLengthCheckbox.checked = tes.items.includes('FocalLength');
+    const exifItemCheckboxes = [
+        {el: uiElements.textExifItemMakeCheckbox, key: 'Make'},
+        {el: uiElements.textExifItemModelCheckbox, key: 'Model'},
+        {el: uiElements.textExifItemFNumberCheckbox, key: 'FNumber'},
+        {el: uiElements.textExifItemExposureTimeCheckbox, key: 'ExposureTime'},
+        {el: uiElements.textExifItemISOSpeedRatingsCheckbox, key: 'ISOSpeedRatings'},
+        {el: uiElements.textExifItemFocalLengthCheckbox, key: 'FocalLength'},
+    ];
+    exifItemCheckboxes.forEach(item => {
+        if (item.el) item.el.checked = tes.items.includes(item.key);
+    });
     if (uiElements.textExifFontSelect) uiElements.textExifFontSelect.value = tes.font;
     setupInputAttributesAndValue(uiElements.textExifSizeSlider, 'textExifSize', tes.size);
     if (uiElements.textExifColorInput) uiElements.textExifColorInput.value = tes.color;
@@ -223,9 +223,9 @@ export function initializeUIFromState() {
     setupInputAttributesAndValue(uiElements.textExifOffsetYSlider, 'textExifOffsetY', tes.offsetY);
 
     toggleBackgroundSettingsVisibility();
-    updateFrameSettingsVisibility(); // 初期表示のために呼び出し
-    updateTextDateSettingsVisibility(); // ★新規追加: 文字入力タブの撮影日設定の表示/非表示を初期化
-    updateTextExifSettingsVisibility(); // ★新規追加: Exif設定の表示/非表示を初期化
+    updateFrameSettingsVisibility();
+    updateTextDateSettingsVisibility();
+    updateTextExifSettingsVisibility();
     updateSliderValueDisplays();
 }
 
@@ -272,7 +272,7 @@ export function updateSliderValueDisplays() {
     if (uiElements.frameInnerShadowOffsetXValueSpan) uiElements.frameInnerShadowOffsetXValueSpan.textContent = `${fs.innerShadow.offsetX}%`;
     if (uiElements.frameInnerShadowOffsetYValueSpan) uiElements.frameInnerShadowOffsetYValueSpan.textContent = `${fs.innerShadow.offsetY}%`;
     if (uiElements.frameInnerShadowBlurValueSpan) uiElements.frameInnerShadowBlurValueSpan.textContent = `${fs.innerShadow.blur}%`;
-    if (uiElements.frameInnerShadowSpreadPercentValueSpan) { // 新規追加
+    if (uiElements.frameInnerShadowSpreadPercentValueSpan) {
         uiElements.frameInnerShadowSpreadPercentValueSpan.textContent = `${fs.innerShadow.spreadPercent}%`;
     }
     if (uiElements.frameBorderWidthValueSpan && uiElements.frameBorderWidthSlider) {
@@ -316,7 +316,6 @@ export function toggleBackgroundSettingsVisibility() {
     }
 }
 
-// この関数は uiController.js 内部でのみ使用するため、export しない
 function updateFrameSettingsVisibility() {
     const frameState = getState().frameSettings;
 
@@ -330,7 +329,7 @@ function updateFrameSettingsVisibility() {
     if (uiElements.frameShadowSettingsContainer) {
         uiElements.frameShadowSettingsContainer.style.display = frameState.shadowEnabled ? '' : 'none';
     }
-
+    
     if (frameState.shadowEnabled) {
         if (uiElements.frameDropShadowSettingsContainer) {
             uiElements.frameDropShadowSettingsContainer.style.display = frameState.shadowType === 'drop' ? '' : 'none';
@@ -338,7 +337,7 @@ function updateFrameSettingsVisibility() {
         if (uiElements.frameInnerShadowSettingsContainer) {
             uiElements.frameInnerShadowSettingsContainer.style.display = frameState.shadowType === 'inner' ? '' : 'none';
         }
-    } else {
+    } else { 
         if (uiElements.frameDropShadowSettingsContainer) uiElements.frameDropShadowSettingsContainer.style.display = 'none';
         if (uiElements.frameInnerShadowSettingsContainer) uiElements.frameInnerShadowSettingsContainer.style.display = 'none';
     }
@@ -348,7 +347,6 @@ function updateFrameSettingsVisibility() {
     }
 }
 
-// 撮影日設定コンテナの表示/非表示を更新する関数
 function updateTextDateSettingsVisibility() {
     const dateSettingsEnabled = getState().textSettings.date.enabled;
     if (uiElements.textDateSettingsContainer) {
@@ -356,7 +354,6 @@ function updateTextDateSettingsVisibility() {
     }
 }
 
-// ★新規追加: Exif設定コンテナの表示/非表示を更新する関数
 function updateTextExifSettingsVisibility() {
     const exifSettingsEnabled = getState().textSettings.exif.enabled;
     if (uiElements.textExifSettingsContainer) {
@@ -377,14 +374,14 @@ export function setupEventListeners(redrawCallback) {
                 if (config.min !== undefined) value = Math.max(config.min, value);
                 if (config.max !== undefined) value = Math.min(config.max, value);
             }
-            e.target.value = String(value);
+            e.target.value = String(value); 
 
             let updatePayload;
-            if (subNestedKey && nestedKey) {
+            if (subNestedKey && nestedKey) { 
                 updatePayload = { [stateKey]: { [nestedKey]: { [subNestedKey]: value } } };
-            } else if (nestedKey) {
+            } else if (nestedKey) { 
                 updatePayload = { [stateKey]: { [nestedKey]: value } };
-            } else {
+            } else { 
                 updatePayload = { [stateKey]: value };
             }
             updateState(updatePayload);
@@ -392,9 +389,12 @@ export function setupEventListeners(redrawCallback) {
             redrawCallback();
         });
     };
-
+    
     // 汎用選択肢変更リスナー (ラジオボタン、セレクトボックス、チェックボックス)
-    // 引数: element, stateKey, (isRadio ? radioValue : nestedKey), (isRadio ? nestedKey : subNestedKey), (isRadio ? subNestedKey : undefined)
+    // 引数: element, stateKey, p1, p2, p3
+    // p1: radioValue (radio) | nestedKey (checkbox/select)
+    // p2: nestedKey (radio)  | subNestedKey (checkbox/select)
+    // p3: subNestedKey (radio)| (not used for checkbox/select)
     const addOptionChangeListener = (element, stateKey, p1, p2 = '', p3 = '') => {
         if (!element) return;
         const eventType = (element.type === 'checkbox' || element.type === 'radio') ? 'change' : 'change';
@@ -402,70 +402,54 @@ export function setupEventListeners(redrawCallback) {
         element.addEventListener(eventType, (e) => {
             let valueToSet;
             let updatePayload;
-
+            
             let actualNestedKey = '';
             let actualSubNestedKey = '';
 
             if (element.type === 'checkbox') {
                 valueToSet = e.target.checked;
-                actualNestedKey = p1;    // p1 is nestedKey e.g. 'shadowEnabled', 'borderEnabled'
-                actualSubNestedKey = p2; // p2 is subNestedKey e.g. 'enabled' for 'border'
-                // If p2 is not empty, it means we target state.stateKey.p1.p2
-                // If p2 is empty, we target state.stateKey.p1
-                if (actualSubNestedKey) { //  e.g. frameSettings.border.enabled
-                    updatePayload = { [stateKey]: { [actualNestedKey]: { [actualSubNestedKey]: valueToSet } } };
-                } else { // e.g. frameSettings.shadowEnabled
-                    updatePayload = { [stateKey]: { [actualNestedKey]: valueToSet } };
-                }
-
+                actualNestedKey = p1;    
+                actualSubNestedKey = p2; 
             } else if (element.type === 'radio') {
                 if (!e.target.checked) return;
-                valueToSet = p1;      // p1 is radioValue e.g. 'rounded', 'drop'
-                actualNestedKey = p2; // p2 is nestedKey e.g. 'cornerStyle', 'shadowType'
-                actualSubNestedKey = p3; // p3 is subNestedKey (if any, typically for radio this is empty)
-
-                if (actualSubNestedKey && actualNestedKey) {
-                    updatePayload = { [stateKey]: { [actualNestedKey]: { [actualSubNestedKey]: valueToSet } } };
-                } else if (actualNestedKey) {
-                    updatePayload = { [stateKey]: { [actualNestedKey]: valueToSet } };
-                } else {
-                    updatePayload = { [stateKey]: valueToSet }; // Should not happen for radio tied to nested state
-                }
-
+                valueToSet = p1;      
+                actualNestedKey = p2; 
+                actualSubNestedKey = p3; 
             } else { // select
                 valueToSet = e.target.value;
-                actualNestedKey = p1;      // p1 is nestedKey e.g. 'border'
-                actualSubNestedKey = p2;   // p2 is subNestedKey e.g. 'style'
-
-                if (actualSubNestedKey && actualNestedKey) {
-                    updatePayload = { [stateKey]: { [actualNestedKey]: { [actualSubNestedKey]: valueToSet } } };
-                } else if (actualNestedKey) {
-                    updatePayload = { [stateKey]: { [actualNestedKey]: valueToSet } };
-                } else {
-                    // This case for select is unlikely if it's for nested state, but included for completeness
-                    updatePayload = { [stateKey]: valueToSet };
-                }
+                actualNestedKey = p1;      
+                actualSubNestedKey = p2;   
             }
 
+            if (actualSubNestedKey && actualNestedKey) {
+                updatePayload = { [stateKey]: { [actualNestedKey]: { [actualSubNestedKey]: valueToSet } } };
+            } else if (actualNestedKey) {
+                updatePayload = { [stateKey]: { [actualNestedKey]: valueToSet } };
+            } else {
+                updatePayload = { [stateKey]: valueToSet };
+            }
+            
             updateState(updatePayload);
 
-            // UI表示切替判定 - actualNestedKey を使用
-            if (stateKey === 'backgroundType') { // This uses top-level stateKey directly
+            // UI表示切替判定
+            if (stateKey === 'backgroundType') {
                 toggleBackgroundSettingsVisibility();
-            } else if (stateKey === 'frameSettings' &&
-                (actualNestedKey === 'cornerStyle' || actualNestedKey === 'shadowEnabled' ||
-                    actualNestedKey === 'shadowType' ||
-                    (actualNestedKey === 'border' && actualSubNestedKey === 'enabled') // for border.enabled
-                )) {
+            } else if (stateKey === 'frameSettings' && 
+                       (actualNestedKey === 'cornerStyle' || actualNestedKey === 'shadowEnabled' || 
+                        actualNestedKey === 'shadowType' || 
+                        (actualNestedKey === 'border' && actualSubNestedKey === 'enabled') 
+                       )) {
                 updateFrameSettingsVisibility();
-            } else if (stateKey === 'textSettings' && actualNestedKey === 'date' && actualSubNestedKey === 'enabled') { // ★修正箇所: textSettings.date.enabled の変更時
+            } else if (stateKey === 'textSettings' && actualNestedKey === 'date' && actualSubNestedKey === 'enabled') { 
                 updateTextDateSettingsVisibility();
+            } else if (stateKey === 'textSettings' && actualNestedKey === 'exif' && actualSubNestedKey === 'enabled') { 
+                updateTextExifSettingsVisibility();
             }
             updateSliderValueDisplays();
             redrawCallback();
         });
     };
-
+    
     // カラーピッカー専用リスナー
     const addColorInputListener = (element, stateKey, nestedKey = '', subNestedKey = '') => {
         if (!element) return;
@@ -485,14 +469,14 @@ export function setupEventListeners(redrawCallback) {
     };
 
     // --- レイアウト設定タブ ---
-    addOptionChangeListener(uiElements.outputAspectRatioSelect, 'outputTargetAspectRatioString'); // select (value is top-level state)
+    addOptionChangeListener(uiElements.outputAspectRatioSelect, 'outputTargetAspectRatioString');
     addNumericInputListener(uiElements.baseMarginPercentInput, 'baseMarginPercent', 'baseMarginPercent');
     addNumericInputListener(uiElements.photoPosXSlider, 'photoPosX', 'photoViewParams', 'offsetX');
     addNumericInputListener(uiElements.photoPosYSlider, 'photoPosY', 'photoViewParams', 'offsetY');
 
     // --- 背景編集タブ ---
-    addOptionChangeListener(uiElements.bgTypeColorRadio, 'backgroundType', 'color'); // radio, value for top-level state
-    addOptionChangeListener(uiElements.bgTypeImageBlurRadio, 'backgroundType', 'imageBlur'); // radio, value for top-level state
+    addOptionChangeListener(uiElements.bgTypeColorRadio, 'backgroundType', 'color');
+    addOptionChangeListener(uiElements.bgTypeImageBlurRadio, 'backgroundType', 'imageBlur');
     addColorInputListener(uiElements.backgroundColorInput, 'backgroundColor');
     addNumericInputListener(uiElements.bgScaleSlider, 'bgScale', 'imageBlurBackgroundParams', 'scale');
     addNumericInputListener(uiElements.bgBlurSlider, 'bgBlur', 'imageBlurBackgroundParams', 'blurAmountPercent');
@@ -503,56 +487,44 @@ export function setupEventListeners(redrawCallback) {
     addNumericInputListener(uiElements.jpgQualitySlider, 'jpgQuality', 'outputSettings', 'quality');
 
     // --- フレーム加工タブ ---
-    // 角のスタイル (ラジオボタン)
-    addOptionChangeListener(uiElements.frameCornerStyleNoneRadio, 'frameSettings', 'none', 'cornerStyle'); // radio, val1=radioValue, val2=nestedKey
+    addOptionChangeListener(uiElements.frameCornerStyleNoneRadio, 'frameSettings', 'none', 'cornerStyle');
     addOptionChangeListener(uiElements.frameCornerStyleRoundedRadio, 'frameSettings', 'rounded', 'cornerStyle');
     addOptionChangeListener(uiElements.frameCornerStyleSuperellipseRadio, 'frameSettings', 'superellipse', 'cornerStyle');
-    // 角丸設定 (スライダー)
     addNumericInputListener(uiElements.frameCornerRadiusPercentSlider, 'frameCornerRadiusPercent', 'frameSettings', 'cornerRadiusPercent');
-    // 超楕円設定 (スライダー)
     addNumericInputListener(uiElements.frameSuperellipseNSlider, 'frameSuperellipseN', 'frameSettings', 'superellipseN');
 
-    // 影
-    addOptionChangeListener(uiElements.frameShadowEnabledCheckbox, 'frameSettings', 'shadowEnabled'); // checkbox, val1=nestedKey
-    addOptionChangeListener(uiElements.frameShadowTypeDropRadio, 'frameSettings', 'drop', 'shadowType'); // radio, val1=radioValue, val2=nestedKey
-    addOptionChangeListener(uiElements.frameShadowTypeInnerRadio, 'frameSettings', 'inner', 'shadowType'); // radio, val1=radioValue, val2=nestedKey
-    // ドロップシャドウ詳細設定
+    addOptionChangeListener(uiElements.frameShadowEnabledCheckbox, 'frameSettings', 'shadowEnabled');
+    addOptionChangeListener(uiElements.frameShadowTypeDropRadio, 'frameSettings', 'drop', 'shadowType');
+    addOptionChangeListener(uiElements.frameShadowTypeInnerRadio, 'frameSettings', 'inner', 'shadowType');
     addNumericInputListener(uiElements.frameDropShadowOffsetXSlider, 'frameDropShadowOffsetX', 'frameSettings', 'dropShadow', 'offsetX');
     addNumericInputListener(uiElements.frameDropShadowOffsetYSlider, 'frameDropShadowOffsetY', 'frameSettings', 'dropShadow', 'offsetY');
     addNumericInputListener(uiElements.frameDropShadowBlurSlider, 'frameDropShadowBlur', 'frameSettings', 'dropShadow', 'blur');
     addNumericInputListener(uiElements.frameDropShadowSpreadSlider, 'frameDropShadowSpread', 'frameSettings', 'dropShadow', 'spread');
     addColorInputListener(uiElements.frameDropShadowColorInput, 'frameSettings', 'dropShadow', 'color');
-    // インナーシャドウ詳細設定
     addNumericInputListener(uiElements.frameInnerShadowOffsetXSlider, 'frameInnerShadowOffsetX', 'frameSettings', 'innerShadow', 'offsetX');
     addNumericInputListener(uiElements.frameInnerShadowOffsetYSlider, 'frameInnerShadowOffsetY', 'frameSettings', 'innerShadow', 'offsetY');
     addNumericInputListener(uiElements.frameInnerShadowBlurSlider, 'frameInnerShadowBlur', 'frameSettings', 'innerShadow', 'blur');
-    addNumericInputListener(uiElements.frameInnerShadowSpreadPercentSlider, 'frameInnerShadowSpreadPercent', 'frameSettings', 'innerShadow', 'spreadPercent'); // 新規追加
+    addNumericInputListener(uiElements.frameInnerShadowSpreadPercentSlider, 'frameInnerShadowSpreadPercent', 'frameSettings', 'innerShadow', 'spreadPercent');
     addColorInputListener(uiElements.frameInnerShadowColorInput, 'frameSettings', 'innerShadow', 'color');
 
-    // 縁取り
-    // For checkbox 'frameBorderEnabledCheckbox' to update frameSettings.border.enabled:
-    // stateKey='frameSettings', val1 (becomes pNestedKey)='border', val2 (becomes pSubNestedKey)='enabled'
     addOptionChangeListener(uiElements.frameBorderEnabledCheckbox, 'frameSettings', 'border', 'enabled');
     addNumericInputListener(uiElements.frameBorderWidthSlider, 'frameBorderWidth', 'frameSettings', 'border', 'width');
     addColorInputListener(uiElements.frameBorderColorInput, 'frameSettings', 'border', 'color');
-    // For select 'frameBorderStyleSelect' to update frameSettings.border.style:
-    // stateKey='frameSettings', val1 (becomes pNestedKey)='border', val2 (becomes pSubNestedKey)='style'
     addOptionChangeListener(uiElements.frameBorderStyleSelect, 'frameSettings', 'border', 'style');
 
     // --- 文字入力タブ - 撮影日 ---
-    addOptionChangeListener(uiElements.textDateEnabledCheckbox, 'textSettings', 'date', 'enabled'); // checkbox, val1=nestedKey('date'), val2=subNestedKey('enabled')
-    addOptionChangeListener(uiElements.textDateFormatSelect, 'textSettings', 'date', 'format'); // select
-    addOptionChangeListener(uiElements.textDateFontSelect, 'textSettings', 'date', 'font');     // select
+    addOptionChangeListener(uiElements.textDateEnabledCheckbox, 'textSettings', 'date', 'enabled');
+    addOptionChangeListener(uiElements.textDateFormatSelect, 'textSettings', 'date', 'format');
+    addOptionChangeListener(uiElements.textDateFontSelect, 'textSettings', 'date', 'font');
     addNumericInputListener(uiElements.textDateSizeSlider, 'textDateSize', 'textSettings', 'date', 'size');
     addColorInputListener(uiElements.textDateColorInput, 'textSettings', 'date', 'color');
-    addOptionChangeListener(uiElements.textDatePositionSelect, 'textSettings', 'date', 'position'); // select
+    addOptionChangeListener(uiElements.textDatePositionSelect, 'textSettings', 'date', 'position');
     addNumericInputListener(uiElements.textDateOffsetXSlider, 'textDateOffsetX', 'textSettings', 'date', 'offsetX');
     addNumericInputListener(uiElements.textDateOffsetYSlider, 'textDateOffsetY', 'textSettings', 'date', 'offsetY');
 
     // --- 文字入力タブ - Exif情報 ---
-    addOptionChangeListener(uiElements.textExifEnabledCheckbox, 'textSettings', 'exif', 'enabled'); // チェックボックス
+    addOptionChangeListener(uiElements.textExifEnabledCheckbox, 'textSettings', 'exif', 'enabled');
 
-    // 表示項目選択チェックボックス群のイベントリスナー
     const exifItemCheckboxes = [
         uiElements.textExifItemMakeCheckbox,
         uiElements.textExifItemModelCheckbox,
@@ -565,19 +537,19 @@ export function setupEventListeners(redrawCallback) {
         if (checkbox) {
             checkbox.addEventListener('change', () => {
                 const currentItems = getState().textSettings.exif.items || [];
-                const itemName = checkbox.value;
+                const itemName = checkbox.value; // HTMLのvalue属性に 'Make', 'Model' などを設定
                 let newItems;
                 if (checkbox.checked) {
                     if (!currentItems.includes(itemName)) {
                         newItems = [...currentItems, itemName];
                     } else {
-                        newItems = [...currentItems]; // 既に含まれている場合は変更なし
+                        newItems = [...currentItems];
                     }
                 } else {
                     newItems = currentItems.filter(item => item !== itemName);
                 }
                 updateState({ textSettings: { exif: { items: newItems } } });
-                redrawCallback(); // 状態変更なので再描画
+                redrawCallback();
             });
         }
     });
