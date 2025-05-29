@@ -158,11 +158,11 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
         ctx.restore();
 
     } else if (frameSettings.shadowType === 'inner') {
-        console.log("Applying Inner Shadow (Step 1: Offset shape, no blur yet) with settings:", shadowSettings);
+        console.log("Applying Inner Shadow (revised logic) with settings:", shadowSettings);
 
+        const blurAmountPx = (shadowSettings.blur / 100) * photoShortSidePx;
         const offsetXpx = (shadowSettings.offsetX / 100) * photoShortSidePx;
         const offsetYpx = (shadowSettings.offsetY / 100) * photoShortSidePx;
-        // const blurAmountPx = (shadowSettings.blur / 100) * photoShortSidePx; // Blur is next step
 
         if (photoWidth <= 0 || photoHeight <= 0) return;
 
@@ -175,35 +175,51 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
             return;
         }
 
-        // A. オフセットした形状を影の色で描画
+        // ステップ2a: オフスクリーン全体を影の色で塗りつぶす
+        offCtx.fillStyle = shadowSettings.color;
+        offCtx.fillRect(0, 0, photoWidth, photoHeight);
+
+        // ステップ2b: オフセットした写真の形状でくり抜く (destination-out)
+        offCtx.globalCompositeOperation = 'destination-out';
         offCtx.beginPath();
+        // くり抜く形状はオフセットされた位置に
         if (frameSettings.cornerStyle === 'superellipse') {
             createSuperellipsePath(offCtx, offsetXpx, offsetYpx, photoWidth, photoHeight, frameSettings.superellipseN);
         } else if (frameSettings.cornerStyle === 'rounded' && frameSettings.cornerRadiusPercent > 0) {
             const radius = (frameSettings.cornerRadiusPercent / 100) * photoShortSidePx;
             roundedRect(offCtx, offsetXpx, offsetYpx, photoWidth, photoHeight, radius);
-        } else {
+        } else { // 'none' または角丸半径0
             offCtx.rect(offsetXpx, offsetYpx, photoWidth, photoHeight);
         }
-        offCtx.fillStyle = shadowSettings.color;
+        offCtx.fillStyle = 'black'; // くり抜き用の色は不透明であれば何でも良い
         offCtx.fill();
 
-        // B. 元の写真の形状でくり抜く (destination-in)
-        offCtx.globalCompositeOperation = 'destination-in';
-        offCtx.beginPath();
-        if (frameSettings.cornerStyle === 'superellipse') {
-            createSuperellipsePath(offCtx, 0, 0, photoWidth, photoHeight, frameSettings.superellipseN);
-        } else if (frameSettings.cornerStyle === 'rounded' && frameSettings.cornerRadiusPercent > 0) {
-            const radius = (frameSettings.cornerRadiusPercent / 100) * photoShortSidePx;
-            roundedRect(offCtx, 0, 0, photoWidth, photoHeight, radius);
-        } else {
-            offCtx.rect(0, 0, photoWidth, photoHeight);
+        // ステップ2c: ぼかしの適用 (テンポラリCanvasを使用)
+        if (blurAmountPx > 0) {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = photoWidth;
+            tempCanvas.height = photoHeight;
+            const tempCtx = tempCanvas.getContext('2d');
+            if (tempCtx) {
+                // 現在のオフスクリーンCanvasの内容(くり抜かれた影の型)をテンポラリにコピー
+                tempCtx.drawImage(offscreenCanvas, 0, 0);
+
+                // オフスクリーンCanvasをクリアし、ぼかしフィルタを設定して描き戻す
+                offCtx.clearRect(0, 0, photoWidth, photoHeight);
+                offCtx.filter = `blur(${blurAmountPx}px)`;
+                offCtx.drawImage(tempCanvas, 0, 0);
+                offCtx.filter = 'none'; // フィルタをリセット
+            } else {
+                console.warn("Failed to create temp canvas context for blurring inner shadow.");
+            }
         }
-        offCtx.fillStyle = 'black'; // destination-in の場合、sourceのアルファが使われるので色は任意（不透明であること）
-        offCtx.fill();
 
-        // メインCanvasの現在のクリップ領域の内側に、オフスクリーンCanvasの内容（影の型）を描画
-        // (ぼかしはまだ適用しない)
+        // 合成モードを通常に戻す (メインCanvasへの描画のため)
+        // offCtx.globalCompositeOperation = 'source-over'; // オフスクリーンCanvasはこれで完成
+
+        // メインCanvas (ctx) に、生成したインナーシャドウ (offscreenCanvas) を描画
+        // この描画は、canvasRenderer.js 側で写真本体が描画された後、
+        // かつ写真のクリッピングパスが適用された状態で行われる。
         ctx.drawImage(offscreenCanvas, photoX, photoY);
     }
 }
