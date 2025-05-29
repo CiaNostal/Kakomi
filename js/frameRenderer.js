@@ -8,58 +8,80 @@
  * @param {number} y - 矩形の左上Y座標 (写真の描画位置Y)
  * @param {number} width - 矩形の幅 (写真の幅)
  * @param {number} height - 矩形の高さ (写真の高さ)
- * @param {number} n - 超楕円の次数 (3-20の整数を想定)
+ * @param {number} nParam - 超楕円の次数 (UIから渡される値、3-20の整数を想定)
  */
-function createSuperellipsePath(ctx, x, y, width, height, n) {
+function createSuperellipsePath(ctx, x, y, width, height, nParam) {
     const a = width / 2;  // 水平方向の半径
     const b = height / 2; // 垂直方向の半径
+    if (a <= 0 || b <= 0) return; // 幅または高さが0以下の場合は描画しない
+
     const centerX = x + a;
     const centerY = y + b;
 
-    // n の値を安全な範囲に丸める・制限する (整数化もここで)
-    const N = Math.max(2, Math.min(40, Math.round(n))); // 2から20の整数に (n=2は楕円)
+    // n の値を安全な範囲に丸める・制限する (整数化も)
+    // UI側で3-20に制限されている想定だが、念のためここでも。
+    // n=2で楕円、nが1に近いと星形に、大きいと四角に近づく。
+    // 仕様書ではn=3から20の整数。
+    const n = Math.max(2, Math.min(40, Math.round(nParam))); // n=2も許容して楕円も描けるようにし、上限を少し余裕を持たせる(UI側で3-20を制御)
 
     const points = [];
-    const steps = 90; // 90ステップで第一象限 (1度ごと)。滑らかさが足りなければ増やす (例: 180で0.5度ごと)
-    const deltaTheta = Math.PI / 2 / steps;
+    // 媒介変数表示: x(t) = a * sgn(cos(t)) * |cos(t)|^(2/n), y(t) = b * sgn(sin(t)) * |sin(t)|^(2/n)
+    // 0からPI/2 (第一象限) の点を計算し、対称性を利用する。
+    // 点の数が多いほど滑らかになる。90は1度刻み。
+    const numPointsPerQuadrant = 90; // この値を調整して滑らかさを変更可能
 
-    for (let i = 0; i <= steps; i++) {
-        const theta = i * deltaTheta;
-        const cosTheta = Math.cos(theta);
-        const sinTheta = Math.sin(theta);
+    for (let i = 0; i <= numPointsPerQuadrant; i++) {
+        const t = (Math.PI / 2) * (i / numPointsPerQuadrant);
+        const cos_t = Math.cos(t);
+        const sin_t = Math.sin(t);
 
-        // 媒介変数表示: x = a * sgn(cos) * |cos|^(2/N), y = b * sgn(sin) * |sin|^(2/N)
-        // 第一象限なので cosTheta と sinTheta は非負
-        const termX = (cosTheta === 0 && 2 / N < 1) ? 0 : Math.pow(cosTheta, 2 / N); // 0のべき乗エラーを避ける
-        const termY = (sinTheta === 0 && 2 / N < 1) ? 0 : Math.pow(sinTheta, 2 / N); // 同上
+        // (cos_t)^(2/n) の計算。cos_tが0の場合、2/n < 1 だと Infinity になるのを避ける。
+        // n >= 2 のため 2/n <= 1。
+        let termX, termY;
+
+        if (cos_t === 0) {
+            termX = 0;
+        } else {
+            termX = Math.sign(cos_t) * Math.pow(Math.abs(cos_t), 2 / n);
+        }
+
+        if (sin_t === 0) {
+            termY = 0;
+        } else {
+            termY = Math.sign(sin_t) * Math.pow(Math.abs(sin_t), 2 / n);
+        }
 
         points.push({
-            x: centerX + a * termX,
-            y: centerY - b * termY  // CanvasのY軸は下向きなのでマイナス
+            px: centerX + a * termX,
+            py: centerY - b * termY  // CanvasのY軸は下向きなので、中心からマイナス方向にプロット
         });
     }
 
     ctx.beginPath();
-    if (points.length === 0) return; // 点がなければ何もしない
 
-    ctx.moveTo(points[0].x, points[0].y);
-
-    // 第一象限
+    // 第一象限 (0度 -> 90度)
+    ctx.moveTo(points[0].px, points[0].py);
     for (let i = 1; i < points.length; i++) {
-        ctx.lineTo(points[i].x, points[i].y);
+        ctx.lineTo(points[i].px, points[i].py);
     }
-    // 第二象限 (Y軸対称)
-    for (let i = points.length - 2; i >= 0; i--) { // 重複点を避けるため points.length - 2 から
-        ctx.lineTo(centerX - (points[i].x - centerX), points[i].y);
+
+    // 第二象限 (90度 -> 180度) - Y軸対称
+    for (let i = points.length - 1; i >= 0; i--) {
+        ctx.lineTo(centerX - (points[i].px - centerX), points[i].py);
     }
-    // 第三象限 (原点対称)
-    for (let i = 1; i < points.length; i++) { // 開始点を重複させないため i = 1 から
-        ctx.lineTo(centerX - (points[i].x - centerX), centerY + (centerY - points[i].y));
+
+    // 第三象限 (180度 -> 270度) - 原点対称
+    // (第二象限の終点から連続して描画)
+    for (let i = 1; i < points.length; i++) { // points[0]はX軸上なので重複を避ける
+        ctx.lineTo(centerX - (points[i].px - centerX), centerY + (centerY - points[i].py));
     }
-    // 第四象限 (X軸対称)
-    for (let i = points.length - 2; i >= 0; i--) { // points.length - 2 から
-        ctx.lineTo(points[i].x, centerY + (centerY - points[i].y));
+
+    // 第四象限 (270度 -> 360度) - X軸対称
+    // (第三象限の終点から連続して描画)
+    for (let i = points.length - 1; i >= 0; i--) {
+        ctx.lineTo(points[i].px, centerY + (centerY - points[i].py));
     }
+
     ctx.closePath();
 }
 
@@ -75,6 +97,7 @@ function createSuperellipsePath(ctx, x, y, width, height, n) {
 function createAndApplyClippingPath(ctx, frameSettings, photoX, photoY, photoWidth, photoHeight) {
     if (photoWidth <= 0 || photoHeight <= 0) return; // 幅や高さが0以下の場合は何もしない
 
+    ctx.beginPath(); // パスを開始 (重要：毎回新しいパスにする)
     if (frameSettings.cornerStyle === 'superellipse') {
         createSuperellipsePath(ctx, photoX, photoY, photoWidth, photoHeight, frameSettings.superellipseN);
         ctx.clip();
@@ -82,9 +105,15 @@ function createAndApplyClippingPath(ctx, frameSettings, photoX, photoY, photoWid
         const photoShortSidePx = Math.min(photoWidth, photoHeight);
         const radius = (frameSettings.cornerRadiusPercent / 100) * photoShortSidePx;
         roundedRect(ctx, photoX, photoY, photoWidth, photoHeight, radius);
-        ctx.clip();
     }
-    // 'none' の場合はクリッピングパスを適用しない (つまり矩形のまま)
+    else {
+        // 'none' の場合はクリッピングしないので、単純な矩形パスにするか、何もしない
+        // 何もしなければ、Canvas全体がクリッピング領域のまま（または直前のクリップが影響）
+        // 明示的に矩形パスでリセットするか、canvasRenderer側でクリップしない分岐を設ける
+        // ここではクリップしない場合はパスを作らないでおく
+        return; // パスを作らず、クリップもしない
+    }
+    ctx.clip();
 }
 
 /**
