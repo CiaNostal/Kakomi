@@ -105,6 +105,7 @@ export const uiElements = {
     textExifItemExposureTimeCheckbox: document.getElementById('textExifItemExposureTime'),
     textExifItemISOSpeedRatingsCheckbox: document.getElementById('textExifItemISOSpeedRatings'),
     textExifItemFocalLengthCheckbox: document.getElementById('textExifItemFocalLength'),
+    textExifItemLensModelCheckbox: document.getElementById('textExifItemLensModel'),
     textExifFontSelect: document.getElementById('textExifFont'),
     textExifSizeSlider: document.getElementById('textExifSize'),
     textExifSizeValueSpan: document.getElementById('textExifSizeValue'),
@@ -211,6 +212,7 @@ export function initializeUIFromState() {
         { el: uiElements.textExifItemExposureTimeCheckbox, key: 'ExposureTime' },
         { el: uiElements.textExifItemISOSpeedRatingsCheckbox, key: 'ISOSpeedRatings' },
         { el: uiElements.textExifItemFocalLengthCheckbox, key: 'FocalLength' },
+        { el: uiElements.textExifItemLensModelCheckbox, key: 'LensModel' },
     ];
     exifItemCheckboxes.forEach(item => {
         if (item.el) item.el.checked = tes.items.includes(item.key);
@@ -559,6 +561,7 @@ export function setupEventListeners(redrawCallback) {
         uiElements.textExifItemExposureTimeCheckbox,
         uiElements.textExifItemISOSpeedRatingsCheckbox,
         uiElements.textExifItemFocalLengthCheckbox,
+        uiElements.textExifItemLensModelCheckbox,
     ];
     exifItemCheckboxes.forEach(checkbox => {
         if (checkbox) {

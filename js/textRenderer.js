@@ -304,7 +304,7 @@ function getExifLabel(item) {
         'exposureTime': 'シャッタースピード',
         'iso': 'ISO感度',
         'focalLength': '焦点距離',
-        'lens': 'レンズ',
+        'LensModel': 'レンズ情報',
         'software': 'ソフトウェア'
     };
 
@@ -369,6 +369,8 @@ function getExifValue(exifData, itemKey) { // itemKey は 'make', 'model' など
                 }
             }
             return '';
+        case 'LensModel': // ★キーを 'LensModel' に合わせる
+            return exifIFD && ExifIFD_CONSTANTS.LensModel !== undefined ? exifIFD[ExifIFD_CONSTANTS.LensModel] : '';
         // ... (LensModel, Software なども同様に)
         default:
             // 直接アクセスできる他の一般的なタグも考慮するなら、ここで処理

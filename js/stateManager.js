@@ -90,7 +90,7 @@ let editState = {
         },
         exif: {
             enabled: false,
-            items: ['Make', 'Model', 'FNumber', 'ExposureTime', 'ISOSpeedRatings', 'FocalLength'], // 初期表示項目例 (piexif.jsのキーに合わせるか、表示用キー)
+            items: ['Make', 'Model', 'FNumber', 'ExposureTime', 'ISOSpeedRatings', 'FocalLength', 'LensModel'], // 初期表示項目例 (piexif.jsのキーに合わせるか、表示用キー)
             font: 'Arial',
             size: 2,          // サイズ (%)
             color: '#000000',
@@ -268,7 +268,7 @@ function resetState() {
             },
             exif: {
                 enabled: false,
-                items: ['Make', 'Model', 'FNumber', 'ExposureTime', 'ISOSpeedRatings', 'FocalLength'], // 初期表示項目例 (piexif.jsのキーに合わせるか、表示用キー)
+                items: ['Make', 'Model', 'FNumber', 'ExposureTime', 'ISOSpeedRatings', 'FocalLength', 'LensModel'], // 初期表示項目例 (piexif.jsのキーに合わせるか、表示用キー)
                 font: 'Arial',
                 size: 2,
                 color: '#000000',
@@ -364,7 +364,7 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
     // textSettings.exif も同様にリセット（項目は現状のまま）
     editState.textSettings.exif = {
         enabled: false,
-        items: ['Make', 'Model', 'FNumber', 'ExposureTime', 'ISOSpeedRatings', 'FocalLength'],
+        items: ['Make', 'Model', 'FNumber', 'ExposureTime', 'ISOSpeedRatings', 'FocalLength', 'LensModel'],
         font: 'Arial',
         size: 2,
         color: '#000000',
