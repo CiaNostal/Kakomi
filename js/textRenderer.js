@@ -12,7 +12,12 @@
  * @param {number} basePhotoShortSideForTextPx - テキストサイズ計算の基準となる写真の短辺の実際のピクセル長
  */
 function drawText(ctx, currentState, canvasWidth, canvasHeight, basePhotoShortSideForTextPx) {
-    if (basePhotoShortSideForTextPx <= 0) return; // 基準長が0以下なら描画しない
+    console.log("[TextRenderer] drawText called. basePhotoShortSideForTextPx:", basePhotoShortSideForTextPx, "date.enabled:", currentState.textSettings.date.enabled);
+
+    if (basePhotoShortSideForTextPx <= 0) {
+        console.log("[TextRenderer] basePhotoShortSideForTextPx is <= 0, skipping text draw.");
+        return; // 基準長が0以下なら描画しない
+    }
 
     // 撮影日の表示
     if (currentState.textSettings.date.enabled) {
@@ -20,6 +25,7 @@ function drawText(ctx, currentState, canvasWidth, canvasHeight, basePhotoShortSi
         // exifData.DateTime がある場合のみ描画される。
         // exifData 自体がない場合は、getFormattedDateが早期リターンする。
         const exifDateTime = currentState.exifData ? currentState.exifData["0th"]?.[piexif.ImageIFD.DateTime] : null;
+        console.log("[TextRenderer] For date text: exifDateTime =", exifDateTime);
         if (exifDateTime) { // DateTimeが存在する場合のみ描画を試みる
             console.log(`drawText: Calling drawDateText with basePhotoShortSideForTextPx: ${basePhotoShortSideForTextPx}`);
             drawDateText(
@@ -31,7 +37,7 @@ function drawText(ctx, currentState, canvasWidth, canvasHeight, basePhotoShortSi
                 canvasHeight
             );
         } else {
-            console.log("Date display enabled, but no Exif DateTime found.");
+            console.log("[TextRenderer] No exifDateTime found for date display.");
         }
     }
 
@@ -52,8 +58,11 @@ function drawText(ctx, currentState, canvasWidth, canvasHeight, basePhotoShortSi
  */
 function drawDateText(ctx, dateSettings, exifDateTimeString, basePhotoShortSidePx, canvasWidth, canvasHeight) {
     const dateString = getFormattedDate(exifDateTimeString, dateSettings.format);
-    if (!dateString) return;
-
+    console.log("[TextRenderer] drawDateText called. exifDateTimeString:", exifDateTimeString, "Formatted dateString:", dateString, "Font size setting:", dateSettings.size, "Base short side:", basePhotoShortSidePx);
+    if (!dateString) {
+        console.log("[TextRenderer] dateString is empty, skipping date draw.");
+        return;
+    }
     const fontSizePx = (dateSettings.size / 100) * basePhotoShortSidePx; // 渡された基準長で計算
     if (fontSizePx <= 0) return; // フォントサイズが0以下なら描画しない
 
@@ -239,24 +248,45 @@ function calculateTextPosition(position, offsetXPercent, offsetYPercent, textWid
  * @param {string} format - 日付表示形式 (例: 'YYYY/MM/DD')
  * @returns {string} フォーマットされた日付文字列
  */
-function getFormattedDate(exifDateTimeString, displayFormat = 'YYYY/MM/DD') { // format 引数名を displayFormat に変更 (区別のため)
-    if (!exifDateTimeString || typeof exifDateTime !== 'string') {
-        return ''; // exifData.DateTime がないか、文字列でない場合は空
+function getFormattedDate(exifDateTimeString, displayFormat = 'YYYY/MM/DD') {
+    console.log(`[getFormattedDate] Called with exifDateTimeString: "${exifDateTimeString}", displayFormat: "${displayFormat}"`);
+    if (!exifDateTimeString || typeof exifDateTimeString !== 'string') {
+        console.log("[getFormattedDate] exifDateTimeString is invalid. Returning empty string.");
+        return '';
+    }
+    if (!displayFormat || typeof displayFormat !== 'string') {
+        console.log("[getFormattedDate] displayFormat is invalid. Returning empty string.");
+        return '';
     }
 
-    const parts = exifDateTime.split(' '); // "YYYY:MM:DD HH:MM:SS"
-    if (parts.length === 0) return ''; // 通常はparts.lengthが1以上になるはず
+    const parts = exifDateTimeString.split(' ');
+    if (parts.length === 0) {
+        console.log("[getFormattedDate] Could not split exifDateTimeString by space. Returning empty string.");
+        return '';
+    }
 
     const dateParts = parts[0].split(':');
-    if (dateParts.length !== 3) return '';
+    if (dateParts.length !== 3) {
+        console.log("[getFormattedDate] Date part does not have 3 components after splitting by colon. dateParts:", dateParts);
+        return '';
+    }
 
     const year = dateParts[0];
     const month = dateParts[1];
     const day = dateParts[2];
+    console.log(`[getFormattedDate] Parsed year: ${year}, month: ${month}, day: ${day}`);
 
     let result = displayFormat;
-    result = result.replace('YYYY', year).replace('YY', year.slice(-2))
-        .replace('MM', month).replace('DD', day);
+    console.log(`[getFormattedDate] Initial result (from displayFormat): "${result}"`);
+    result = result.replace('YYYY', year);
+    console.log(`[getFormattedDate] After replacing YYYY: "${result}"`);
+    result = result.replace('YY', year.slice(-2));
+    console.log(`[getFormattedDate] After replacing YY: "${result}"`);
+    result = result.replace('MM', month);
+    console.log(`[getFormattedDate] After replacing MM: "${result}"`);
+    result = result.replace('DD', day);
+    console.log(`[getFormattedDate] Final result after replacing DD: "${result}"`);
+
     return result;
 }
 

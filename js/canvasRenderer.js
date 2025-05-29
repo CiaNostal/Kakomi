@@ -154,6 +154,7 @@ export function renderFinal(currentState) {
     }
 
     // 7. テキスト描画
+    console.log("[CanvasRenderer] Attempting to draw text. date.enabled:", currentState.textSettings.date.enabled, "exif.enabled:", currentState.textSettings.exif.enabled, "basePhotoShortSideForTextPx:", photoShortSidePx);
     if (currentState.textSettings.date.enabled || currentState.textSettings.exif.enabled) {
         // Google Fonts のロードは別途考慮
         // 出力解像度における写真の実際の短辺を渡す
