@@ -76,7 +76,7 @@ function drawDateText(ctx, dateSettings, exifDateTimeString, photoShortSidePx, c
 
     // ctx.textAlign と ctx.textBaseline を position 文字列から推測するか、固定値にするか。
     // 仕様書では「表示位置（左下、右下、中央下など9箇所から選択）」とあるので、
-    // その9箇所に合わせてtextAlignとtextBaselineを設定するのが自然。
+    // その9箇所に合わせてtextAlignとtextBaselineをdrawDateText内で設定し、calculateTextPositionはそれを基に座標を返す。
     let textAlign = 'left';
     let textBaseline = 'alphabetic'; // alphabetic or bottom が一般的
 
@@ -87,6 +87,7 @@ function drawDateText(ctx, dateSettings, exifDateTimeString, photoShortSidePx, c
     else if (dateSettings.position.startsWith('middle-')) textBaseline = 'middle';
     // 'bottom-' の場合は 'alphabetic' or 'bottom' で良い
 
+    // (注意: textBaseline='bottom' は実際のフォントの下端、'alphabetic'はベースライン。見た目が微妙に異なる)
     ctx.textAlign = textAlign;
     ctx.textBaseline = textBaseline;
 
@@ -190,53 +191,51 @@ function calculateTextPosition(position, offsetXPercent, offsetYPercent, textWid
     const offsetXPx = (offsetXPercent / 100) * photoShortSidePx;
     const offsetYPx = (offsetYPercent / 100) * photoShortSidePx;
 
-    let x, y;
+    let baseX, baseY; // テキストのアンカーポイントの基準位置
 
-    // 기준 위치 (textAlign, textBaseline에 따라 조정됨)
+    // Y座標の基準位置 (ctx.textBaseline の設定を考慮してfillTextが描画するアンカーのY座標を計算)
     // top-left, top-center, top-right
     if (position.startsWith('top-')) {
-        y = margin;
-        if (textBaseline === 'middle') y += textHeight / 2;
-        else if (textBaseline === 'bottom') y += textHeight;
+        baseY = margin;
+        if (textBaseline === 'middle') baseY += textHeight / 2;
+        else if (textBaseline === 'alphabetic' || textBaseline === 'bottom') baseY += textHeight; // 'top'ならそのまま
     }
     // middle-left, middle-center, middle-right
     else if (position.startsWith('middle-')) {
-        y = canvasHeight / 2;
-        if (textBaseline === 'top') y -= textHeight / 2;
-        else if (textBaseline === 'bottom') y += textHeight / 2;
+        baseY = canvasHeight / 2;
+        if (textBaseline === 'top') baseY -= textHeight / 2;
+        else if (textBaseline === 'alphabetic' || textBaseline === 'bottom') baseY += textHeight / 2;
         // 'middle' はそのまま
     }
     // bottom-left, bottom-center, bottom-right
     else if (position.startsWith('bottom-')) {
-        y = canvasHeight - margin - textHeight;
-        if (textBaseline === 'middle') y += textHeight / 2;
-        else if (textBaseline === 'top') y += textHeight; // top指定なら下端に合わせる
+        baseY = canvasHeight - margin; // 'alphabetic' または 'bottom' の場合、これがテキストの下端の目安
+        if (textBaseline === 'top') baseY -= textHeight;
+        else if (textBaseline === 'middle') baseY -= textHeight / 2;
     }
+
+    // X座標の基準位置 (ctx.textAlign の設定を考慮してfillTextが描画するアンカーのX座標を計算)
+
 
     if (position.endsWith('-left')) {
-        x = margin;
-        if (textAlign === 'center') x += textWidth / 2;
-        else if (textAlign === 'right') x += textWidth;
+        baseX = margin; // textAlign='left' (デフォルト) の場合、これがテキストの左端
     } else if (position.endsWith('-center')) {
-        x = canvasWidth / 2;
-        if (textAlign === 'left') x -= textWidth / 2;
-        else if (textAlign === 'right') x += textWidth / 2;
-        // 'center' はそのまま
+        baseX = canvasWidth / 2; // textAlign='center' の場合、これがテキストの中央
     } else if (position.endsWith('-right')) {
-        x = canvasWidth - margin - textWidth;
-        if (textAlign === 'center') x += textWidth / 2;
-        else if (textAlign === 'left') x += textWidth; // left指定なら右端に合わせる
+        baseX = canvasWidth - margin; // textAlign='right' の場合、これがテキストの右端
     }
 
-    // 念のため、デフォルト位置を設定 (通常は上記でカバーされる)
-    if (x === undefined || y === undefined) {
-        x = margin; y = canvasHeight - margin - textHeight; // デフォルト: 左下あたり
+    if (baseX === undefined || baseY === undefined) { // フォールバック
+        baseX = margin;
+        baseY = canvasHeight - margin;
+        if (textBaseline === 'top') baseY -= textHeight;
+        else if (textBaseline === 'middle') baseY -= textHeight / 2;
         console.warn("Text position calculation fallback used for:", position);
     }
 
     return {
-        x: x + offsetXPx,
-        y: y + offsetYPx
+        x: baseX + offsetXPx,
+        y: baseY + offsetYPx
     };
 }
 

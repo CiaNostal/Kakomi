@@ -263,8 +263,8 @@ function resetState() {
                 size: 2,
                 color: '#FFFFFF',
                 position: 'bottom-right',
-                offsetX: 2,
-                offsetY: 2
+                offsetX: 0,
+                offsetY: 0
             },
             exif: {
                 enabled: false,
@@ -358,8 +358,8 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
         size: 2,
         color: '#FFFFFF',
         position: 'bottom-right',
-        offsetX: 2,
-        offsetY: 2
+        offsetX: 0,
+        offsetY: 0
     };
     // textSettings.exif も同様にリセット（項目は現状のまま）
     // (もしexifの設定項目も画像ごとにリセットすべきならここに追加)
