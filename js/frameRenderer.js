@@ -163,6 +163,8 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
         const blurAmountPx = (shadowSettings.blur / 100) * photoShortSidePx;
         const offsetXpx = (shadowSettings.offsetX / 100) * photoShortSidePx;
         const offsetYpx = (shadowSettings.offsetY / 100) * photoShortSidePx;
+        // spreadPercent をピクセル値に変換
+        const spreadPx = (shadowSettings.spreadPercent / 100) * photoShortSidePx;
 
         if (photoWidth <= 0 || photoHeight <= 0) return;
 
@@ -182,16 +184,31 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
         // ステップ2b: オフセットした写真の形状でくり抜く (destination-out)
         offCtx.globalCompositeOperation = 'destination-out';
         offCtx.beginPath();
-        // くり抜く形状はオフセットされた位置に
-        if (frameSettings.cornerStyle === 'superellipse') {
-            createSuperellipsePath(offCtx, offsetXpx, offsetYpx, photoWidth, photoHeight, frameSettings.superellipseN);
-        } else if (frameSettings.cornerStyle === 'rounded' && frameSettings.cornerRadiusPercent > 0) {
-            const radius = (frameSettings.cornerRadiusPercent / 100) * photoShortSidePx;
-            roundedRect(offCtx, offsetXpx, offsetYpx, photoWidth, photoHeight, radius);
-        } else { // 'none' または角丸半径0
-            offCtx.rect(offsetXpx, offsetYpx, photoWidth, photoHeight);
+        // spreadPx が正なら形状を小さく（影が太くなる）、負なら大きく（影が細くなる）してくり抜くイメージ
+        // なので、くり抜く形状の寸法は photoWidth - 2 * spreadPx などになる。
+        // X, Yの開始位置も spreadPx だけずらす。
+        const cutoutX = offsetXpx + spreadPx;
+        const cutoutY = offsetYpx + spreadPx;
+        const cutoutWidth = photoWidth - 2 * spreadPx;
+        const cutoutHeight = photoHeight - 2 * spreadPx;
+
+        if (cutoutWidth > 0 && cutoutHeight > 0) { // サイズが正の場合のみ描画
+            if (frameSettings.cornerStyle === 'superellipse') {
+                createSuperellipsePath(offCtx, cutoutX, cutoutY, cutoutWidth, cutoutHeight, frameSettings.superellipseN);
+            } else if (frameSettings.cornerStyle === 'rounded' && frameSettings.cornerRadiusPercent > 0) {
+                // 角丸半径もスプレッドに応じて調整するか、元の写真の角丸を基準にするか検討
+                // ここでは、くり抜く形状の短辺に対する角丸とする
+                const cutoutShortSide = Math.min(cutoutWidth, cutoutHeight);
+                const radius = (frameSettings.cornerRadiusPercent / 100) * cutoutShortSide;
+                // ただし、元の写真の見た目の角丸半径は photoShortSidePx を基準にしているので、
+                // スプレッドによって形状が小さくなった分、半径も相対的に小さく見えるようにする必要があるかもしれない。
+                // 一旦、くり抜く形状の短辺基準で半径を再計算する。
+                roundedRect(offCtx, cutoutX, cutoutY, cutoutWidth, cutoutHeight, radius);
+            } else {
+                offCtx.rect(cutoutX, cutoutY, cutoutWidth, cutoutHeight);
+            }
         }
-        offCtx.fillStyle = 'black'; // くり抜き用の色は不透明であれば何でも良い
+        offCtx.fillStyle = 'black';
         offCtx.fill();
 
         offCtx.globalCompositeOperation = 'source-over';

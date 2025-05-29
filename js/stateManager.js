@@ -63,7 +63,7 @@ let editState = {
             offsetX: 0, // インナーシャドウの場合、オフセットは通常不要か、別の意味合いになる
             offsetY: 0,
             blur: 5,         // %
-            // spread: 3,  // 太さ/深さ (% photoShortSidePx) - 一旦コメントアウトまたは削除
+            spreadPercent: 0, // ADDED: インナーシャドウの広がり/太さ (% photoShortSidePx), デフォルト0
             color: 'rgba(0,0,0,0.75)',
             // opacity: 0.75,
         },
@@ -339,6 +339,7 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
         innerShadow: { // インナーシャドウのデフォルト値も定義しておく
             offsetX: 0, // デフォルト値を確認・設定
             offsetY: 0, // デフォルト値を確認・設定
+            spreadPercent: 0, // ★追加: innerShadow の spreadPercent のデフォルト値
             blur: 5,
             color: 'rgba(0,0,0,0.75)',
         },

@@ -42,7 +42,7 @@ export const controlsConfig = {
     frameInnerShadowOffsetX: { defaultValue: 0, min: -50, max: 50, step: 1 }, // 新規追加
     frameInnerShadowOffsetY: { defaultValue: 0, min: -50, max: 50, step: 1 }, // 新規追加
     frameInnerShadowBlur: { defaultValue: 5, min: 0, max: 30, step: 1 },     // %
-    // frameInnerShadowSpread: { defaultValue: 3, min: 0, max: 50, step: 1 }, // コメントアウトまたは削除
+    frameInnerShadowSpreadPercent: { defaultValue: 0, min: -20, max: 20, step: 1 }, // % (マイナスで細く、プラスで太く)
     frameInnerShadowColor: { defaultValue: 'rgba(0,0,0,0.75)' },
 
     // 縁取り用

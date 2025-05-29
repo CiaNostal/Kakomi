@@ -63,15 +63,15 @@ export const uiElements = {
     frameDropShadowSpreadValueSpan: document.getElementById('frameDropShadowSpreadValue'),
     frameDropShadowColorInput: document.getElementById('frameDropShadowColor'),
     frameInnerShadowSettingsContainer: document.getElementById('frameInnerShadowSettingsContainer'),
-    frameInnerShadowOffsetXSlider: document.getElementById('frameInnerShadowOffsetX'), // 新規追加
-    frameInnerShadowOffsetXValueSpan: document.getElementById('frameInnerShadowOffsetXValue'), // 新規追加
-    frameInnerShadowOffsetYSlider: document.getElementById('frameInnerShadowOffsetY'), // 新規追加
-    frameInnerShadowOffsetYValueSpan: document.getElementById('frameInnerShadowOffsetYValue'), // 新規追加
+    frameInnerShadowOffsetXSlider: document.getElementById('frameInnerShadowOffsetX'),
+    frameInnerShadowOffsetXValueSpan: document.getElementById('frameInnerShadowOffsetXValue'),
+    frameInnerShadowOffsetYSlider: document.getElementById('frameInnerShadowOffsetY'),
+    frameInnerShadowOffsetYValueSpan: document.getElementById('frameInnerShadowOffsetYValue'),
 
     frameInnerShadowBlurSlider: document.getElementById('frameInnerShadowBlur'),
     frameInnerShadowBlurValueSpan: document.getElementById('frameInnerShadowBlurValue'),
-    // frameInnerShadowSpreadSlider: document.getElementById('frameInnerShadowSpread'), // コメントアウトまたは削除
-    // frameInnerShadowSpreadValueSpan: document.getElementById('frameInnerShadowSpreadValue'), // コメントアウトまたは削除
+    frameInnerShadowSpreadPercentSlider: document.getElementById('frameInnerShadowSpreadPercent'), // 新規追加
+    frameInnerShadowSpreadPercentValueSpan: document.getElementById('frameInnerShadowSpreadPercentValue'), // 新規追加
     frameInnerShadowColorInput: document.getElementById('frameInnerShadowColor'),
 
     frameBorderEnabledCheckbox: document.getElementById('frameBorderEnabled'),
@@ -149,10 +149,10 @@ export function initializeUIFromState() {
     setupInputAttributesAndValue(uiElements.frameDropShadowSpreadSlider, 'frameDropShadowSpread', fs.dropShadow.spread);
     if (uiElements.frameDropShadowColorInput) uiElements.frameDropShadowColorInput.value = fs.dropShadow.color;
 
-    setupInputAttributesAndValue(uiElements.frameInnerShadowOffsetXSlider, 'frameInnerShadowOffsetX', fs.innerShadow.offsetX); // 新規追加
-    setupInputAttributesAndValue(uiElements.frameInnerShadowOffsetYSlider, 'frameInnerShadowOffsetY', fs.innerShadow.offsetY); // 新規追加
+    setupInputAttributesAndValue(uiElements.frameInnerShadowOffsetXSlider, 'frameInnerShadowOffsetX', fs.innerShadow.offsetX);
+    setupInputAttributesAndValue(uiElements.frameInnerShadowOffsetYSlider, 'frameInnerShadowOffsetY', fs.innerShadow.offsetY);
     setupInputAttributesAndValue(uiElements.frameInnerShadowBlurSlider, 'frameInnerShadowBlur', fs.innerShadow.blur);
-    // setupInputAttributesAndValue(uiElements.frameInnerShadowSpreadSlider, 'frameInnerShadowSpread', fs.innerShadow.spread); // コメントアウトまたは削除
+    setupInputAttributesAndValue(uiElements.frameInnerShadowSpreadPercentSlider, 'frameInnerShadowSpreadPercent', fs.innerShadow.spreadPercent); // 新規追加
     if (uiElements.frameInnerShadowColorInput) uiElements.frameInnerShadowColorInput.value = fs.innerShadow.color;
 
     if (uiElements.frameBorderEnabledCheckbox) uiElements.frameBorderEnabledCheckbox.checked = fs.border.enabled;
@@ -205,10 +205,12 @@ export function updateSliderValueDisplays() {
     if (uiElements.frameDropShadowOffsetYValueSpan) uiElements.frameDropShadowOffsetYValueSpan.textContent = `${fs.dropShadow.offsetY}%`;
     if (uiElements.frameDropShadowBlurValueSpan) uiElements.frameDropShadowBlurValueSpan.textContent = `${fs.dropShadow.blur}%`;
     if (uiElements.frameDropShadowSpreadValueSpan) uiElements.frameDropShadowSpreadValueSpan.textContent = `${fs.dropShadow.spread}%`;
-    if (uiElements.frameInnerShadowOffsetXValueSpan) uiElements.frameInnerShadowOffsetXValueSpan.textContent = `${fs.innerShadow.offsetX}%`; // 新規追加
-    if (uiElements.frameInnerShadowOffsetYValueSpan) uiElements.frameInnerShadowOffsetYValueSpan.textContent = `${fs.innerShadow.offsetY}%`; // 新規追加
+    if (uiElements.frameInnerShadowOffsetXValueSpan) uiElements.frameInnerShadowOffsetXValueSpan.textContent = `${fs.innerShadow.offsetX}%`;
+    if (uiElements.frameInnerShadowOffsetYValueSpan) uiElements.frameInnerShadowOffsetYValueSpan.textContent = `${fs.innerShadow.offsetY}%`;
     if (uiElements.frameInnerShadowBlurValueSpan) uiElements.frameInnerShadowBlurValueSpan.textContent = `${fs.innerShadow.blur}%`;
-    // if (uiElements.frameInnerShadowSpreadValueSpan) uiElements.frameInnerShadowSpreadValueSpan.textContent = `${fs.innerShadow.spread}%`; // コメントアウトまたは削除
+    if (uiElements.frameInnerShadowSpreadPercentValueSpan) { // 新規追加
+        uiElements.frameInnerShadowSpreadPercentValueSpan.textContent = `${fs.innerShadow.spreadPercent}%`;
+    }
     if (uiElements.frameBorderWidthValueSpan && uiElements.frameBorderWidthSlider) {
         uiElements.frameBorderWidthValueSpan.textContent = `${fs.border.width}%`;
     }
@@ -415,10 +417,10 @@ export function setupEventListeners(redrawCallback) {
     addNumericInputListener(uiElements.frameDropShadowSpreadSlider, 'frameDropShadowSpread', 'frameSettings', 'dropShadow', 'spread');
     addColorInputListener(uiElements.frameDropShadowColorInput, 'frameSettings', 'dropShadow', 'color');
     // インナーシャドウ詳細設定
-    addNumericInputListener(uiElements.frameInnerShadowOffsetXSlider, 'frameInnerShadowOffsetX', 'frameSettings', 'innerShadow', 'offsetX'); // 新規追加
-    addNumericInputListener(uiElements.frameInnerShadowOffsetYSlider, 'frameInnerShadowOffsetY', 'frameSettings', 'innerShadow', 'offsetY'); // 新規追加
+    addNumericInputListener(uiElements.frameInnerShadowOffsetXSlider, 'frameInnerShadowOffsetX', 'frameSettings', 'innerShadow', 'offsetX');
+    addNumericInputListener(uiElements.frameInnerShadowOffsetYSlider, 'frameInnerShadowOffsetY', 'frameSettings', 'innerShadow', 'offsetY');
     addNumericInputListener(uiElements.frameInnerShadowBlurSlider, 'frameInnerShadowBlur', 'frameSettings', 'innerShadow', 'blur');
-    // addNumericInputListener(uiElements.frameInnerShadowSpreadSlider, 'frameInnerShadowSpread', 'frameSettings', 'innerShadow', 'spread'); // コメントアウトまたは削除
+    addNumericInputListener(uiElements.frameInnerShadowSpreadPercentSlider, 'frameInnerShadowSpreadPercent', 'frameSettings', 'innerShadow', 'spreadPercent'); // 新規追加
     addColorInputListener(uiElements.frameInnerShadowColorInput, 'frameSettings', 'innerShadow', 'color');
 
     // 縁取り
