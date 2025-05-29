@@ -4,78 +4,111 @@
  */
 
 /**
- * テキスト要素を描画する
+ * テキスト要素を描画する (メインの呼び出し関数)
  * @param {CanvasRenderingContext2D} ctx - キャンバスのコンテキスト
  * @param {Object} currentState - 現在の編集状態
  * @param {number} canvasWidth - キャンバスの幅
  * @param {number} canvasHeight - キャンバスの高さ
  */
 function drawText(ctx, currentState, canvasWidth, canvasHeight) {
-    console.log("drawText called", currentState.textSettings);
-    const photoShortSide = Math.min(
+    if (!currentState.photoDrawConfig || currentState.photoDrawConfig.destWidth === 0 || currentState.photoDrawConfig.destHeight === 0) {
+        // 写真の描画サイズが0の場合は基準となる短辺も0になるため、描画をスキップ
+        return;
+    }
+    const photoShortSidePx = Math.min(
         currentState.photoDrawConfig.destWidth,
         currentState.photoDrawConfig.destHeight
     );
+    if (photoShortSidePx <= 0) return; // 短辺が0以下の場合もスキップ
 
     // 撮影日の表示
-    if (currentState.textSettings.date.enabled && currentState.exifData) {
-        drawDateText(
-            ctx,
-            currentState.textSettings.date,
-            getFormattedDate(currentState.exifData),
-            photoShortSide,
-            canvasWidth,
-            canvasHeight
-        );
+    if (currentState.textSettings.date.enabled) {
+        // currentState.exifData が null でも getFormattedDate は空文字列を返すので、
+        // exifData.DateTime がある場合のみ描画される。
+        // exifData 自体がない場合は、getFormattedDateが早期リターンする。
+        const exifDateTime = currentState.exifData ? currentState.exifData["0th"]?.[piexif.ImageIFD.DateTime] : null;
+        if (exifDateTime) { // DateTimeが存在する場合のみ描画を試みる
+            drawDateText(
+                ctx,
+                currentState.textSettings.date,
+                exifDateTime, // ★修正: exifDataオブジェクトではなく、DateTime文字列を渡す
+                photoShortSidePx,
+                canvasWidth,
+                canvasHeight
+            );
+        } else {
+            console.log("Date display enabled, but no Exif DateTime found.");
+        }
     }
 
-    // Exif情報の表示
-    if (currentState.textSettings.exif.enabled && currentState.exifData) {
-        drawExifInfo(
-            ctx,
-            currentState.textSettings.exif,
-            currentState.exifData,
-            photoShortSide,
-            canvasWidth,
-            canvasHeight
-        );
-    }
+    // Exif情報の表示 (次のステップで実装)
+    // if (currentState.textSettings.exif.enabled && currentState.exifData) {
+    //     drawExifInfo( /* ... */ );
+    // }
 }
 
 /**
  * 撮影日テキストを描画する
  * @param {CanvasRenderingContext2D} ctx - キャンバスのコンテキスト
- * @param {Object} dateSettings - 日付表示の設定
- * @param {string} dateString - フォーマットされた日付文字列
- * @param {number} photoShortSide - 写真の短辺の長さ
- * @param {number} canvasWidth - キャンバスの幅
- * @param {number} canvasHeight - キャンバスの高さ
+ * @param {Object} dateSettings - 日付表示の設定 (currentState.textSettings.date)
+ * @param {string} exifDateTimeString - Exifから取得したDateTime文字列 (currentState.exifData.DateTime)
+ * @param {number} photoShortSidePx - 写真の短辺の長さ (px)
+ * @param {number} canvasWidth - キャンバスの幅 (px)
+ * @param {number} canvasHeight - キャンバスの高さ (px)
  */
-function drawDateText(ctx, dateSettings, dateString, photoShortSide, canvasWidth, canvasHeight) {
+function drawDateText(ctx, dateSettings, exifDateTimeString, photoShortSidePx, canvasWidth, canvasHeight) {
+    const dateString = getFormattedDate(exifDateTimeString, dateSettings.format);
     if (!dateString) return;
 
-    // フォントサイズを計算
-    const fontSize = (dateSettings.size / 100) * photoShortSide;
+    const fontSizePx = (dateSettings.size / 100) * photoShortSidePx;
+    if (fontSizePx <= 0) return; // フォントサイズが0以下なら描画しない
 
     ctx.save();
-    ctx.font = `${fontSize}px "${dateSettings.font}"`;
+    ctx.font = `${fontSizePx}px "${dateSettings.font}"`; // フォントファミリーは文字列として渡す
     ctx.fillStyle = dateSettings.color;
-    ctx.textBaseline = 'middle';
 
-    const textWidth = ctx.measureText(dateString).width;
+    // テキストの描画基準点を決定 (textAlign と textBaseline)
+    // position の例: 'bottom-right' -> textAlign='right', textBaseline='bottom' (または'alphabetic')
+    // ここでは、calculateTextPosition が返す座標がテキストブロックの左上隅を指すように、
+    // textBaseline='top', textAlign='left' を基準として計算し、描画時に調整する。
+    // もしくは、calculateTextPosition側でtextAlign, textBaselineを考慮させる。
+    // 今回は calculateTextPosition で調整するよう変更。
 
-    // 位置を計算
+    // ctx.textAlign と ctx.textBaseline を position 文字列から推測するか、固定値にするか。
+    // 仕様書では「表示位置（左下、右下、中央下など9箇所から選択）」とあるので、
+    // その9箇所に合わせてtextAlignとtextBaselineを設定するのが自然。
+    let textAlign = 'left';
+    let textBaseline = 'alphabetic'; // alphabetic or bottom が一般的
+
+    if (dateSettings.position.endsWith('-center')) textAlign = 'center';
+    else if (dateSettings.position.endsWith('-right')) textAlign = 'right';
+
+    if (dateSettings.position.startsWith('top-')) textBaseline = 'top';
+    else if (dateSettings.position.startsWith('middle-')) textBaseline = 'middle';
+    // 'bottom-' の場合は 'alphabetic' or 'bottom' で良い
+
+    ctx.textAlign = textAlign;
+    ctx.textBaseline = textBaseline;
+
+    const textMetrics = ctx.measureText(dateString);
+    const textWidth = textMetrics.width;
+    // おおよその高さをフォントサイズとする (より正確には textMetrics.actualBoundingBoxAscent + descent)
+    const textHeight = fontSizePx;
+
     const { x, y } = calculateTextPosition(
         dateSettings.position,
-        dateSettings.offsetX,
-        dateSettings.offsetY,
+        dateSettings.offsetX, // パーセント値
+        dateSettings.offsetY, // パーセント値
         textWidth,
-        fontSize,
-        photoShortSide,
+        textHeight,
+        photoShortSidePx,
         canvasWidth,
-        canvasHeight
+        canvasHeight,
+        textAlign,      // calculateTextPosition に渡して調整させる
+        textBaseline    // calculateTextPosition に渡して調整させる
     );
 
+    console.log(`Drawing date: "${dateString}" at (${x}, ${y}) with font: ${ctx.font} color: ${ctx.fillStyle}`);
     ctx.fillText(dateString, x, y);
     ctx.restore();
 }
@@ -140,65 +173,67 @@ function drawExifInfo(ctx, exifSettings, exifData, photoShortSide, canvasWidth, 
 
 /**
  * テキスト描画位置を計算する
- * @param {string} position - 位置指定（'top-left', 'bottom-right'など）
- * @param {number} offsetX - X方向オフセット（%）
- * @param {number} offsetY - Y方向オフセット（%）
- * @param {number} textWidth - テキストの幅
- * @param {number} textHeight - テキストの高さ
- * @param {number} photoShortSide - 写真の短辺の長さ
- * @param {number} canvasWidth - キャンバスの幅
- * @param {number} canvasHeight - キャンバスの高さ
- * @returns {Object} X座標とY座標
+ * @param {string} position - 位置指定（'top-left', 'bottom-right'など9箇所）
+ * @param {number} offsetXPercent - X方向オフセット（% photoShortSidePx基準）
+ * @param {number} offsetYPercent - Y方向オフセット（% photoShortSidePx基準）
+ * @param {number} textWidth - 描画するテキストの幅 (px)
+ * @param {number} textHeight - 描画するテキストの高さ (px、フォントサイズや行数に基づく)
+ * @param {number} photoShortSidePx - 写真の短辺の長さ (px)
+ * @param {number} canvasWidth - キャンバスの幅 (px)
+ * @param {number} canvasHeight - キャンバスの高さ (px)
+ * @param {string} textAlign - ctx.textAlign の値 ('left', 'center', 'right')
+ * @param {string} textBaseline - ctx.textBaseline の値 ('top', 'middle', 'bottom')
+ * @returns {Object} X座標とY座標 { x, y }
  */
-function calculateTextPosition(position, offsetX, offsetY, textWidth, textHeight, photoShortSide, canvasWidth, canvasHeight) {
-    // オフセットをピクセルに変換
-    const offsetXPx = (offsetX / 100) * photoShortSide;
-    const offsetYPx = (offsetY / 100) * photoShortSide;
+function calculateTextPosition(position, offsetXPercent, offsetYPercent, textWidth, textHeight, photoShortSidePx, canvasWidth, canvasHeight, textAlign = 'left', textBaseline = 'top') {
+    const margin = 10; // Canvasの縁からの基本的なマージン (px)
+    const offsetXPx = (offsetXPercent / 100) * photoShortSidePx;
+    const offsetYPx = (offsetYPercent / 100) * photoShortSidePx;
 
-    // 基本位置を計算
     let x, y;
 
-    switch (position) {
-        case 'top-left':
-            x = 10;
-            y = 10;
-            break;
-        case 'top-center':
-            x = (canvasWidth - textWidth) / 2;
-            y = 10;
-            break;
-        case 'top-right':
-            x = canvasWidth - textWidth - 10;
-            y = 10;
-            break;
-        case 'middle-left':
-            x = 10;
-            y = (canvasHeight - textHeight) / 2;
-            break;
-        case 'middle-center':
-            x = (canvasWidth - textWidth) / 2;
-            y = (canvasHeight - textHeight) / 2;
-            break;
-        case 'middle-right':
-            x = canvasWidth - textWidth - 10;
-            y = (canvasHeight - textHeight) / 2;
-            break;
-        case 'bottom-left':
-            x = 10;
-            y = canvasHeight - textHeight - 10;
-            break;
-        case 'bottom-center':
-            x = (canvasWidth - textWidth) / 2;
-            y = canvasHeight - textHeight - 10;
-            break;
-        case 'bottom-right':
-        default:
-            x = canvasWidth - textWidth - 10;
-            y = canvasHeight - textHeight - 10;
-            break;
+    // 기준 위치 (textAlign, textBaseline에 따라 조정됨)
+    // top-left, top-center, top-right
+    if (position.startsWith('top-')) {
+        y = margin;
+        if (textBaseline === 'middle') y += textHeight / 2;
+        else if (textBaseline === 'bottom') y += textHeight;
+    }
+    // middle-left, middle-center, middle-right
+    else if (position.startsWith('middle-')) {
+        y = canvasHeight / 2;
+        if (textBaseline === 'top') y -= textHeight / 2;
+        else if (textBaseline === 'bottom') y += textHeight / 2;
+        // 'middle' はそのまま
+    }
+    // bottom-left, bottom-center, bottom-right
+    else if (position.startsWith('bottom-')) {
+        y = canvasHeight - margin - textHeight;
+        if (textBaseline === 'middle') y += textHeight / 2;
+        else if (textBaseline === 'top') y += textHeight; // top指定なら下端に合わせる
     }
 
-    // オフセットを適用
+    if (position.endsWith('-left')) {
+        x = margin;
+        if (textAlign === 'center') x += textWidth / 2;
+        else if (textAlign === 'right') x += textWidth;
+    } else if (position.endsWith('-center')) {
+        x = canvasWidth / 2;
+        if (textAlign === 'left') x -= textWidth / 2;
+        else if (textAlign === 'right') x += textWidth / 2;
+        // 'center' はそのまま
+    } else if (position.endsWith('-right')) {
+        x = canvasWidth - margin - textWidth;
+        if (textAlign === 'center') x += textWidth / 2;
+        else if (textAlign === 'left') x += textWidth; // left指定なら右端に合わせる
+    }
+
+    // 念のため、デフォルト位置を設定 (通常は上記でカバーされる)
+    if (x === undefined || y === undefined) {
+        x = margin; y = canvasHeight - margin - textHeight; // デフォルト: 左下あたり
+        console.warn("Text position calculation fallback used for:", position);
+    }
+
     return {
         x: x + offsetXPx,
         y: y + offsetYPx
@@ -207,37 +242,29 @@ function calculateTextPosition(position, offsetX, offsetY, textWidth, textHeight
 
 /**
  * Exifデータから日付を取得してフォーマットする
- * @param {Object} exifData - Exifデータ
- * @param {string} format - 日付フォーマット
- * @returns {string} フォーマットされた日付
+ * @param {Object} exifDateTime - Exifデータ内のDateTime文字列 (例: "2023:05:18 10:30:45")
+ * @param {string} format - 日付表示形式 (例: 'YYYY/MM/DD')
+ * @returns {string} フォーマットされた日付文字列
  */
-// getFormattedDate も同様に piexif.js の構造を意識して修正
-function getFormattedDate(exifData, format = 'YYYY/MM/DD') {
-    if (!exifData || typeof piexif === 'undefined' || !piexif.ImageIFD) return '';
-
-    const zerothIFD = exifData["0th"];
-    const dateTimeTag = piexif.ImageIFD.DateTime; // piexif.ImageIFD が存在することを前提
-
-    if (zerothIFD && dateTimeTag !== undefined) {
-        const dateStr = zerothIFD[dateTimeTag];
-        if (!dateStr || typeof dateStr !== 'string') return '';
-
-        const parts = dateStr.split(' '); // "YYYY:MM:DD HH:MM:SS"
-        if (parts.length === 0) return '';
-
-        const dateParts = parts[0].split(':');
-        if (dateParts.length !== 3) return '';
-
-        const year = dateParts[0];
-        const month = dateParts[1];
-        const day = dateParts[2];
-
-        let result = format;
-        result = result.replace('YYYY', year).replace('YY', year.slice(-2))
-            .replace('MM', month).replace('DD', day);
-        return result;
+function getFormattedDate(exifDateTime, format = 'YYYY/MM/DD') {
+    if (!exifDateTime || typeof exifDateTime !== 'string') {
+        return ''; // exifData.DateTime がないか、文字列でない場合は空
     }
-    return '';
+
+    const parts = exifDateTime.split(' '); // "YYYY:MM:DD HH:MM:SS"
+    if (parts.length === 0) return '';
+
+    const dateParts = parts[0].split(':');
+    if (dateParts.length !== 3) return '';
+
+    const year = dateParts[0];
+    const month = dateParts[1];
+    const day = dateParts[2];
+
+    let result = format;
+    result = result.replace('YYYY', year).replace('YY', year.slice(-2))
+        .replace('MM', month).replace('DD', day);
+    return result;
 }
 
 /**
@@ -377,4 +404,4 @@ function loadGoogleFonts(fontFamilies) {
 }
 
 // モジュールとしてエクスポート
-export { drawText, loadGoogleFonts }; 
+export { drawText, loadGoogleFonts };
