@@ -194,6 +194,8 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
         offCtx.fillStyle = 'black'; // くり抜き用の色は不透明であれば何でも良い
         offCtx.fill();
 
+        offCtx.globalCompositeOperation = 'source-over';
+
         // ステップ2c: ぼかしの適用 (テンポラリCanvasを使用)
         if (blurAmountPx > 0) {
             const tempCanvas = document.createElement('canvas');
