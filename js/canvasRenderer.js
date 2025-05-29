@@ -84,7 +84,9 @@ export function drawPreview(currentState, previewCanvas, previewCtx) {
     // 7. テキスト描画
     if (currentState.textSettings.date.enabled || currentState.textSettings.exif.enabled) {
         // Google Fonts のロードは別途考慮
-        drawText(ctx, currentState, previewCanvas.width, previewCanvas.height);
+        // プレビュー表示における写真の実際の短辺を渡す
+        drawText(ctx, currentState, previewCanvas.width, previewCanvas.height, photoShortSidePx);
+
     }
 }
 
@@ -154,7 +156,8 @@ export function renderFinal(currentState) {
     // 7. テキスト描画
     if (currentState.textSettings.date.enabled || currentState.textSettings.exif.enabled) {
         // Google Fonts のロードは別途考慮
-        drawText(ctx, currentState, outputWidth, outputHeight);
+        // 出力解像度における写真の実際の短辺を渡す
+        drawText(ctx, currentState, outputWidth, outputHeight, photoShortSidePx);
     }
 
     return finalCanvas;

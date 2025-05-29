@@ -9,17 +9,10 @@
  * @param {Object} currentState - 現在の編集状態
  * @param {number} canvasWidth - キャンバスの幅
  * @param {number} canvasHeight - キャンバスの高さ
+ * @param {number} basePhotoShortSideForTextPx - テキストサイズ計算の基準となる写真の短辺の実際のピクセル長
  */
-function drawText(ctx, currentState, canvasWidth, canvasHeight) {
-    if (!currentState.photoDrawConfig || currentState.photoDrawConfig.destWidth === 0 || currentState.photoDrawConfig.destHeight === 0) {
-        // 写真の描画サイズが0の場合は基準となる短辺も0になるため、描画をスキップ
-        return;
-    }
-    const photoShortSidePx = Math.min(
-        currentState.photoDrawConfig.destWidth,
-        currentState.photoDrawConfig.destHeight
-    );
-    if (photoShortSidePx <= 0) return; // 短辺が0以下の場合もスキップ
+function drawText(ctx, currentState, canvasWidth, canvasHeight, basePhotoShortSideForTextPx) {
+    if (basePhotoShortSideForTextPx <= 0) return; // 基準長が0以下なら描画しない
 
     // 撮影日の表示
     if (currentState.textSettings.date.enabled) {
@@ -28,11 +21,12 @@ function drawText(ctx, currentState, canvasWidth, canvasHeight) {
         // exifData 自体がない場合は、getFormattedDateが早期リターンする。
         const exifDateTime = currentState.exifData ? currentState.exifData["0th"]?.[piexif.ImageIFD.DateTime] : null;
         if (exifDateTime) { // DateTimeが存在する場合のみ描画を試みる
+            console.log(`drawText: Calling drawDateText with basePhotoShortSideForTextPx: ${basePhotoShortSideForTextPx}`);
             drawDateText(
                 ctx,
                 currentState.textSettings.date,
                 exifDateTime, // ★修正: exifDataオブジェクトではなく、DateTime文字列を渡す
-                photoShortSidePx,
+                basePhotoShortSideForTextPx, // ★修正: 呼び出し元から渡された基準長を使用
                 canvasWidth,
                 canvasHeight
             );
@@ -52,15 +46,15 @@ function drawText(ctx, currentState, canvasWidth, canvasHeight) {
  * @param {CanvasRenderingContext2D} ctx - キャンバスのコンテキスト
  * @param {Object} dateSettings - 日付表示の設定 (currentState.textSettings.date)
  * @param {string} exifDateTimeString - Exifから取得したDateTime文字列 (currentState.exifData.DateTime)
- * @param {number} photoShortSidePx - 写真の短辺の長さ (px)
+ * @param {number} basePhotoShortSidePx - 基準となる写真の短辺の長さ (px) (プレビュー用または出力用)
  * @param {number} canvasWidth - キャンバスの幅 (px)
  * @param {number} canvasHeight - キャンバスの高さ (px)
  */
-function drawDateText(ctx, dateSettings, exifDateTimeString, photoShortSidePx, canvasWidth, canvasHeight) {
+function drawDateText(ctx, dateSettings, exifDateTimeString, basePhotoShortSidePx, canvasWidth, canvasHeight) {
     const dateString = getFormattedDate(exifDateTimeString, dateSettings.format);
     if (!dateString) return;
 
-    const fontSizePx = (dateSettings.size / 100) * photoShortSidePx;
+    const fontSizePx = (dateSettings.size / 100) * basePhotoShortSidePx; // 渡された基準長で計算
     if (fontSizePx <= 0) return; // フォントサイズが0以下なら描画しない
 
     ctx.save();
@@ -102,7 +96,7 @@ function drawDateText(ctx, dateSettings, exifDateTimeString, photoShortSidePx, c
         dateSettings.offsetY, // パーセント値
         textWidth,
         textHeight,
-        photoShortSidePx,
+        basePhotoShortSidePx, // 渡された基準長で計算
         canvasWidth,
         canvasHeight,
         textAlign,      // calculateTextPosition に渡して調整させる
@@ -245,13 +239,13 @@ function calculateTextPosition(position, offsetXPercent, offsetYPercent, textWid
  * @param {string} format - 日付表示形式 (例: 'YYYY/MM/DD')
  * @returns {string} フォーマットされた日付文字列
  */
-function getFormattedDate(exifDateTime, format = 'YYYY/MM/DD') {
-    if (!exifDateTime || typeof exifDateTime !== 'string') {
+function getFormattedDate(exifDateTimeString, displayFormat = 'YYYY/MM/DD') { // format 引数名を displayFormat に変更 (区別のため)
+    if (!exifDateTimeString || typeof exifDateTime !== 'string') {
         return ''; // exifData.DateTime がないか、文字列でない場合は空
     }
 
     const parts = exifDateTime.split(' '); // "YYYY:MM:DD HH:MM:SS"
-    if (parts.length === 0) return '';
+    if (parts.length === 0) return ''; // 通常はparts.lengthが1以上になるはず
 
     const dateParts = parts[0].split(':');
     if (dateParts.length !== 3) return '';
@@ -260,7 +254,7 @@ function getFormattedDate(exifDateTime, format = 'YYYY/MM/DD') {
     const month = dateParts[1];
     const day = dateParts[2];
 
-    let result = format;
+    let result = displayFormat;
     result = result.replace('YYYY', year).replace('YY', year.slice(-2))
         .replace('MM', month).replace('DD', day);
     return result;
