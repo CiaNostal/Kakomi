@@ -82,6 +82,21 @@ export const uiElements = {
     frameBorderStyleSelect: document.getElementById('frameBorderStyle'),
 
     exifDataContainer: document.getElementById('exifDataContainer'),
+
+
+    // 文字入力タブ - 撮影日表示 UI要素
+    textDateEnabledCheckbox: document.getElementById('textDateEnabled'),
+    textDateSettingsContainer: document.getElementById('textDateSettingsContainer'),
+    textDateFormatSelect: document.getElementById('textDateFormat'),
+    textDateFontSelect: document.getElementById('textDateFont'),
+    textDateSizeSlider: document.getElementById('textDateSize'),
+    textDateSizeValueSpan: document.getElementById('textDateSizeValue'),
+    textDateColorInput: document.getElementById('textDateColor'),
+    textDatePositionSelect: document.getElementById('textDatePosition'),
+    textDateOffsetXSlider: document.getElementById('textDateOffsetX'),
+    textDateOffsetXValueSpan: document.getElementById('textDateOffsetXValue'),
+    textDateOffsetYSlider: document.getElementById('textDateOffsetY'),
+    textDateOffsetYValueSpan: document.getElementById('textDateOffsetYValue'),
 };
 
 export function initializeUIFromState() {
@@ -160,8 +175,22 @@ export function initializeUIFromState() {
     if (uiElements.frameBorderColorInput) uiElements.frameBorderColorInput.value = fs.border.color;
     if (uiElements.frameBorderStyleSelect) uiElements.frameBorderStyleSelect.value = fs.border.style;
 
+    // 文字入力 - 撮影日設定
+    const tds = state.textSettings.date;
+    if (uiElements.textDateEnabledCheckbox) uiElements.textDateEnabledCheckbox.checked = tds.enabled;
+    if (uiElements.textDateFormatSelect) uiElements.textDateFormatSelect.value = tds.format;
+    if (uiElements.textDateFontSelect) uiElements.textDateFontSelect.value = tds.font;
+    setupInputAttributesAndValue(uiElements.textDateSizeSlider, 'textDateSize', tds.size);
+    if (uiElements.textDateColorInput) uiElements.textDateColorInput.value = tds.color;
+    if (uiElements.textDatePositionSelect) uiElements.textDatePositionSelect.value = tds.position;
+    setupInputAttributesAndValue(uiElements.textDateOffsetXSlider, 'textDateOffsetX', tds.offsetX);
+    setupInputAttributesAndValue(uiElements.textDateOffsetYSlider, 'textDateOffsetY', tds.offsetY);
+
+
+
     toggleBackgroundSettingsVisibility();
     updateFrameSettingsVisibility(); // 初期表示のために呼び出し
+    updateTextDateSettingsVisibility(); // ★新規追加: 文字入力タブの撮影日設定の表示/非表示を初期化
     updateSliderValueDisplays();
 }
 
@@ -214,6 +243,18 @@ export function updateSliderValueDisplays() {
     if (uiElements.frameBorderWidthValueSpan && uiElements.frameBorderWidthSlider) {
         uiElements.frameBorderWidthValueSpan.textContent = `${fs.border.width}%`;
     }
+
+    // 文字入力 - 撮影日スライダーの値表示
+    const tds = state.textSettings.date;
+    if (uiElements.textDateSizeValueSpan && uiElements.textDateSizeSlider) {
+        uiElements.textDateSizeValueSpan.textContent = `${tds.size}%`;
+    }
+    if (uiElements.textDateOffsetXValueSpan && uiElements.textDateOffsetXSlider) {
+        uiElements.textDateOffsetXValueSpan.textContent = `${tds.offsetX}%`;
+    }
+    if (uiElements.textDateOffsetYValueSpan && uiElements.textDateOffsetYSlider) {
+        uiElements.textDateOffsetYValueSpan.textContent = `${tds.offsetY}%`;
+    }
 }
 
 export function toggleBackgroundSettingsVisibility() {
@@ -259,6 +300,16 @@ function updateFrameSettingsVisibility() {
         uiElements.frameBorderDetailSettingsContainer.style.display = frameState.border.enabled ? '' : 'none';
     }
 }
+
+// ★新規追加: 撮影日設定コンテナの表示/非表示を更新する関数
+function updateTextDateSettingsVisibility() {
+    const dateSettingsEnabled = getState().textSettings.date.enabled;
+    if (uiElements.textDateSettingsContainer) {
+        uiElements.textDateSettingsContainer.style.display = dateSettingsEnabled ? '' : 'none';
+    }
+}
+
+// (将来的に textExifSettingsContainer 用の同様の関数も追加)
 
 export function setupEventListeners(redrawCallback) {
     // 汎用数値入力リスナー (スライダー、数値入力)
@@ -354,6 +405,8 @@ export function setupEventListeners(redrawCallback) {
                     (actualNestedKey === 'border' && actualSubNestedKey === 'enabled') // Explicitly for border.enabled
                 )) {
                 updateFrameSettingsVisibility();
+            } else if (stateKey === 'textSettings' && actualNestedKey === 'date' && actualSubNestedKey === 'enabled') { // ★修正箇所: textSettings.date.enabled の変更時
+                updateTextDateSettingsVisibility();
             }
             updateSliderValueDisplays();
             redrawCallback();
@@ -432,4 +485,16 @@ export function setupEventListeners(redrawCallback) {
     // For select 'frameBorderStyleSelect' to update frameSettings.border.style:
     // stateKey='frameSettings', val1 (becomes pNestedKey)='border', val2 (becomes pSubNestedKey)='style'
     addOptionChangeListener(uiElements.frameBorderStyleSelect, 'frameSettings', 'border', 'style');
+
+    // --- 文字入力タブ - 撮影日 ---
+    addOptionChangeListener(uiElements.textDateEnabledCheckbox, 'textSettings', 'date', 'enabled'); // checkbox, val1=nestedKey('date'), val2=subNestedKey('enabled')
+    addOptionChangeListener(uiElements.textDateFormatSelect, 'textSettings', 'date', 'format'); // select
+    addOptionChangeListener(uiElements.textDateFontSelect, 'textSettings', 'date', 'font');     // select
+    addNumericInputListener(uiElements.textDateSizeSlider, 'textDateSize', 'textSettings', 'date', 'size');
+    addColorInputListener(uiElements.textDateColorInput, 'textSettings', 'date', 'color');
+    addOptionChangeListener(uiElements.textDatePositionSelect, 'textSettings', 'date', 'position'); // select
+    addNumericInputListener(uiElements.textDateOffsetXSlider, 'textDateOffsetX', 'textSettings', 'date', 'offsetX');
+    addNumericInputListener(uiElements.textDateOffsetYSlider, 'textDateOffsetY', 'textSettings', 'date', 'offsetY');
+
+    // --- 文字入力タブ - Exif情報 (後で同様に追加) ---
 }
