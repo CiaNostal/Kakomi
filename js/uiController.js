@@ -97,6 +97,25 @@ export const uiElements = {
     textDateOffsetXValueSpan: document.getElementById('textDateOffsetXValue'),
     textDateOffsetYSlider: document.getElementById('textDateOffsetY'),
     textDateOffsetYValueSpan: document.getElementById('textDateOffsetYValue'),
+
+    // 文字入力タブ - Exif表示 UI要素
+    textExifEnabledCheckbox: document.getElementById('textExifEnabled'),
+    textExifSettingsContainer: document.getElementById('textExifSettingsContainer'),
+    textExifItemMakeCheckbox: document.getElementById('textExifItemMake'),
+    textExifItemModelCheckbox: document.getElementById('textExifItemModel'),
+    textExifItemFNumberCheckbox: document.getElementById('textExifItemFNumber'),
+    textExifItemExposureTimeCheckbox: document.getElementById('textExifItemExposureTime'),
+    textExifItemISOSpeedRatingsCheckbox: document.getElementById('textExifItemISOSpeedRatings'),
+    textExifItemFocalLengthCheckbox: document.getElementById('textExifItemFocalLength'),
+    textExifFontSelect: document.getElementById('textExifFont'),
+    textExifSizeSlider: document.getElementById('textExifSize'),
+    textExifSizeValueSpan: document.getElementById('textExifSizeValue'),
+    textExifColorInput: document.getElementById('textExifColor'),
+    textExifPositionSelect: document.getElementById('textExifPosition'),
+    textExifOffsetXSlider: document.getElementById('textExifOffsetX'),
+    textExifOffsetXValueSpan: document.getElementById('textExifOffsetXValue'),
+    textExifOffsetYSlider: document.getElementById('textExifOffsetY'),
+    textExifOffsetYValueSpan: document.getElementById('textExifOffsetYValue'),
 };
 
 export function initializeUIFromState() {
@@ -186,11 +205,27 @@ export function initializeUIFromState() {
     setupInputAttributesAndValue(uiElements.textDateOffsetXSlider, 'textDateOffsetX', tds.offsetX);
     setupInputAttributesAndValue(uiElements.textDateOffsetYSlider, 'textDateOffsetY', tds.offsetY);
 
-
+    // 文字入力 - Exif設定
+    const tes = state.textSettings.exif;
+    if (uiElements.textExifEnabledCheckbox) uiElements.textExifEnabledCheckbox.checked = tes.enabled;
+    // 表示項目チェックボックスの初期化
+    if (uiElements.textExifItemMakeCheckbox) uiElements.textExifItemMakeCheckbox.checked = tes.items.includes('Make');
+    if (uiElements.textExifItemModelCheckbox) uiElements.textExifItemModelCheckbox.checked = tes.items.includes('Model');
+    if (uiElements.textExifItemFNumberCheckbox) uiElements.textExifItemFNumberCheckbox.checked = tes.items.includes('FNumber');
+    if (uiElements.textExifItemExposureTimeCheckbox) uiElements.textExifItemExposureTimeCheckbox.checked = tes.items.includes('ExposureTime');
+    if (uiElements.textExifItemISOSpeedRatingsCheckbox) uiElements.textExifItemISOSpeedRatingsCheckbox.checked = tes.items.includes('ISOSpeedRatings');
+    if (uiElements.textExifItemFocalLengthCheckbox) uiElements.textExifItemFocalLengthCheckbox.checked = tes.items.includes('FocalLength');
+    if (uiElements.textExifFontSelect) uiElements.textExifFontSelect.value = tes.font;
+    setupInputAttributesAndValue(uiElements.textExifSizeSlider, 'textExifSize', tes.size);
+    if (uiElements.textExifColorInput) uiElements.textExifColorInput.value = tes.color;
+    if (uiElements.textExifPositionSelect) uiElements.textExifPositionSelect.value = tes.position;
+    setupInputAttributesAndValue(uiElements.textExifOffsetXSlider, 'textExifOffsetX', tes.offsetX);
+    setupInputAttributesAndValue(uiElements.textExifOffsetYSlider, 'textExifOffsetY', tes.offsetY);
 
     toggleBackgroundSettingsVisibility();
     updateFrameSettingsVisibility(); // 初期表示のために呼び出し
     updateTextDateSettingsVisibility(); // ★新規追加: 文字入力タブの撮影日設定の表示/非表示を初期化
+    updateTextExifSettingsVisibility(); // ★新規追加: Exif設定の表示/非表示を初期化
     updateSliderValueDisplays();
 }
 
@@ -255,6 +290,18 @@ export function updateSliderValueDisplays() {
     if (uiElements.textDateOffsetYValueSpan && uiElements.textDateOffsetYSlider) {
         uiElements.textDateOffsetYValueSpan.textContent = `${tds.offsetY}%`;
     }
+
+    // 文字入力 - Exifスライダーの値表示
+    const tes = state.textSettings.exif;
+    if (uiElements.textExifSizeValueSpan && uiElements.textExifSizeSlider) {
+        uiElements.textExifSizeValueSpan.textContent = `${tes.size}%`;
+    }
+    if (uiElements.textExifOffsetXValueSpan && uiElements.textExifOffsetXSlider) {
+        uiElements.textExifOffsetXValueSpan.textContent = `${tes.offsetX}%`;
+    }
+    if (uiElements.textExifOffsetYValueSpan && uiElements.textExifOffsetYSlider) {
+        uiElements.textExifOffsetYValueSpan.textContent = `${tes.offsetY}%`;
+    }
 }
 
 export function toggleBackgroundSettingsVisibility() {
@@ -301,7 +348,7 @@ function updateFrameSettingsVisibility() {
     }
 }
 
-// ★新規追加: 撮影日設定コンテナの表示/非表示を更新する関数
+// 撮影日設定コンテナの表示/非表示を更新する関数
 function updateTextDateSettingsVisibility() {
     const dateSettingsEnabled = getState().textSettings.date.enabled;
     if (uiElements.textDateSettingsContainer) {
@@ -309,7 +356,13 @@ function updateTextDateSettingsVisibility() {
     }
 }
 
-// (将来的に textExifSettingsContainer 用の同様の関数も追加)
+// ★新規追加: Exif設定コンテナの表示/非表示を更新する関数
+function updateTextExifSettingsVisibility() {
+    const exifSettingsEnabled = getState().textSettings.exif.enabled;
+    if (uiElements.textExifSettingsContainer) {
+        uiElements.textExifSettingsContainer.style.display = exifSettingsEnabled ? '' : 'none';
+    }
+}
 
 export function setupEventListeners(redrawCallback) {
     // 汎用数値入力リスナー (スライダー、数値入力)
@@ -401,8 +454,8 @@ export function setupEventListeners(redrawCallback) {
                 toggleBackgroundSettingsVisibility();
             } else if (stateKey === 'frameSettings' &&
                 (actualNestedKey === 'cornerStyle' || actualNestedKey === 'shadowEnabled' ||
-                    actualNestedKey === 'shadowType' || actualNestedKey === 'borderEnabled' ||
-                    (actualNestedKey === 'border' && actualSubNestedKey === 'enabled') // Explicitly for border.enabled
+                    actualNestedKey === 'shadowType' ||
+                    (actualNestedKey === 'border' && actualSubNestedKey === 'enabled') // for border.enabled
                 )) {
                 updateFrameSettingsVisibility();
             } else if (stateKey === 'textSettings' && actualNestedKey === 'date' && actualSubNestedKey === 'enabled') { // ★修正箇所: textSettings.date.enabled の変更時
@@ -496,5 +549,42 @@ export function setupEventListeners(redrawCallback) {
     addNumericInputListener(uiElements.textDateOffsetXSlider, 'textDateOffsetX', 'textSettings', 'date', 'offsetX');
     addNumericInputListener(uiElements.textDateOffsetYSlider, 'textDateOffsetY', 'textSettings', 'date', 'offsetY');
 
-    // --- 文字入力タブ - Exif情報 (後で同様に追加) ---
+    // --- 文字入力タブ - Exif情報 ---
+    addOptionChangeListener(uiElements.textExifEnabledCheckbox, 'textSettings', 'exif', 'enabled'); // チェックボックス
+
+    // 表示項目選択チェックボックス群のイベントリスナー
+    const exifItemCheckboxes = [
+        uiElements.textExifItemMakeCheckbox,
+        uiElements.textExifItemModelCheckbox,
+        uiElements.textExifItemFNumberCheckbox,
+        uiElements.textExifItemExposureTimeCheckbox,
+        uiElements.textExifItemISOSpeedRatingsCheckbox,
+        uiElements.textExifItemFocalLengthCheckbox,
+    ];
+    exifItemCheckboxes.forEach(checkbox => {
+        if (checkbox) {
+            checkbox.addEventListener('change', () => {
+                const currentItems = getState().textSettings.exif.items || [];
+                const itemName = checkbox.value;
+                let newItems;
+                if (checkbox.checked) {
+                    if (!currentItems.includes(itemName)) {
+                        newItems = [...currentItems, itemName];
+                    } else {
+                        newItems = [...currentItems]; // 既に含まれている場合は変更なし
+                    }
+                } else {
+                    newItems = currentItems.filter(item => item !== itemName);
+                }
+                updateState({ textSettings: { exif: { items: newItems } } });
+                redrawCallback(); // 状態変更なので再描画
+            });
+        }
+    });
+    addOptionChangeListener(uiElements.textExifFontSelect, 'textSettings', 'exif', 'font');
+    addNumericInputListener(uiElements.textExifSizeSlider, 'textExifSize', 'textSettings', 'exif', 'size');
+    addColorInputListener(uiElements.textExifColorInput, 'textSettings', 'exif', 'color');
+    addOptionChangeListener(uiElements.textExifPositionSelect, 'textSettings', 'exif', 'position');
+    addNumericInputListener(uiElements.textExifOffsetXSlider, 'textExifOffsetX', 'textSettings', 'exif', 'offsetX');
+    addNumericInputListener(uiElements.textExifOffsetYSlider, 'textExifOffsetY', 'textSettings', 'exif', 'offsetY');
 }
