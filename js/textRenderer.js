@@ -41,10 +41,18 @@ function drawText(ctx, currentState, canvasWidth, canvasHeight, basePhotoShortSi
         }
     }
 
-    // Exif情報の表示 (次のステップで実装)
-    // if (currentState.textSettings.exif.enabled && currentState.exifData) {
-    //     drawExifInfo( /* ... */ );
-    // }
+    // Exif情報の表示
+    if (currentState.textSettings.exif.enabled && currentState.exifData) {
+        console.log(`drawText: Calling drawExifInfo with basePhotoShortSideForTextPx: ${basePhotoShortSideForTextPx}`);
+        drawExifInfo(
+            ctx,
+            currentState.textSettings.exif,
+            currentState.exifData,
+            basePhotoShortSideForTextPx,
+            canvasWidth,
+            canvasHeight
+        );
+    }
 }
 
 /**
@@ -126,52 +134,85 @@ function drawDateText(ctx, dateSettings, exifDateTimeString, basePhotoShortSideP
  * @param {number} canvasWidth - キャンバスの幅
  * @param {number} canvasHeight - キャンバスの高さ
  */
-function drawExifInfo(ctx, exifSettings, exifData, photoShortSide, canvasWidth, canvasHeight) {
-    // 表示するExif情報を収集
-    const exifLines = [];
+/**
+ * Exif情報を描画する
+ * @param {CanvasRenderingContext2D} ctx - キャンバスのコンテキスト
+ * @param {Object} exifSettings - Exif表示の設定 (currentState.textSettings.exif)
+ * @param {Object} exifDataFromState - Exifデータ (piexif.js形式)
+ * @param {number} basePhotoShortSidePx - 基準となる写真の短辺の長さ (px)
+ * @param {number} canvasWidth - キャンバスの幅 (px)
+ * @param {number} canvasHeight - キャンバスの高さ (px)
+ */
+function drawExifInfo(ctx, exifSettings, exifDataFromState, basePhotoShortSidePx, canvasWidth, canvasHeight) {
+    if (!exifDataFromState || !exifSettings.items || exifSettings.items.length === 0) {
+        return;
+    }
 
-    for (const item of exifSettings.items) {
-        const value = getExifValue(exifData, item);
-        if (value) {
-            exifLines.push(`${getExifLabel(item)}: ${value}`);
+    const lines = [];
+    for (const itemKey of exifSettings.items) {
+        const label = getExifLabel(itemKey);
+        const value = getExifValue(exifDataFromState, itemKey);
+        if (value) { // 値がある項目のみ表示
+            lines.push(`${label}: ${value}`);
         }
     }
 
-    if (exifLines.length === 0) return;
+    if (lines.length === 0) return;
 
-    // フォントサイズを計算
-    const fontSize = (exifSettings.size / 100) * photoShortSide;
-    const lineHeight = fontSize * 1.2;
+    const fontSizePx = (exifSettings.size / 100) * basePhotoShortSidePx;
+    if (fontSizePx <= 0) return;
+
+    const lineHeight = fontSizePx * 1.2; // 行の高さ（フォントサイズの1.2倍程度）
 
     ctx.save();
-    ctx.font = `${fontSize}px "${exifSettings.font}"`;
+    ctx.font = `${fontSizePx}px "${exifSettings.font}"`;
     ctx.fillStyle = exifSettings.color;
-    ctx.textBaseline = 'top';
 
-    // 最も長い行の幅を測定
-    let maxWidth = 0;
-    for (const line of exifLines) {
-        const width = ctx.measureText(line).width;
-        if (width > maxWidth) maxWidth = width;
+    let textAlign = 'left';
+    let textBaseline = 'alphabetic'; // Exif情報は複数行になる可能性があるので、最初の行の上端を基準にしたい場合 'top' も検討
+
+    if (exifSettings.position.endsWith('-center')) textAlign = 'center';
+    else if (exifSettings.position.endsWith('-right')) textAlign = 'right';
+
+    if (exifSettings.position.startsWith('top-')) textBaseline = 'top';
+    else if (exifSettings.position.startsWith('middle-')) textBaseline = 'middle';
+    // 'bottom-' の場合は 'alphabetic' or 'bottom'
+
+    ctx.textAlign = textAlign;
+    ctx.textBaseline = textBaseline; // 'top' にすると、y座標が各行の上端になる
+
+    // テキストブロック全体の幅と高さを概算 (最も長い行の幅と、行数 x 行の高さ)
+    let maxTextWidth = 0;
+    for (const line of lines) {
+        const metrics = ctx.measureText(line);
+        if (metrics.width > maxTextWidth) {
+            maxTextWidth = metrics.width;
+        }
     }
+    const totalTextHeight = lineHeight * lines.length - (lineHeight - fontSizePx); // 最後の行の余分なスペースを引く
 
-    // 位置を計算
     const { x, y } = calculateTextPosition(
         exifSettings.position,
         exifSettings.offsetX,
         exifSettings.offsetY,
-        maxWidth,
-        lineHeight * exifLines.length,
-        photoShortSide,
+        maxTextWidth,
+        totalTextHeight, // テキストブロック全体の高さ
+        basePhotoShortSidePx,
         canvasWidth,
-        canvasHeight
+        canvasHeight,
+        textAlign,
+        textBaseline // textBaseline を 'top' にして、y をブロックの上端として扱う方が複数行の場合は制御しやすい
     );
 
-    // 各行を描画
-    for (let i = 0; i < exifLines.length; i++) {
-        ctx.fillText(exifLines[i], x, y + i * lineHeight);
+    console.log(`Drawing Exif Info at (${x}, ${y}) with font: ${ctx.font} color: ${ctx.fillStyle}`);
+    for (let i = 0; i < lines.length; i++) {
+        // textBaseline が 'top' の場合、y は最初の行の上端。各行は lineHeight ずつ下に描画。
+        // textBaseline が 'alphabetic' や 'bottom' の場合、y は最初の行のベースライン/下端なので、
+        // 複数行描画のy座標の調整は、textBaseline の設定と calculateTextPosition のyの返し方に依存する。
+        // ここでは、textBaseline='top' を想定し、calculateTextPosition がブロック左上を返すようにするとシンプル。
+        // → 前回の calculateTextPosition の修正で、textBaseline='top' の場合、yはブロック上端を指すようになったはず。
+        ctx.fillText(lines[i], x, y + (i * lineHeight));
     }
-
     ctx.restore();
 }
 
@@ -292,89 +333,85 @@ function getFormattedDate(exifDateTimeString, displayFormat = 'YYYY/MM/DD') {
 }
 
 /**
- * Exif項目のラベルを取得する
- * @param {string} item - Exif項目キー
+ * Exif項目のキーに対応する表示用ラベルを取得する
+ * @param {string} itemKey - Exif項目のキー (stateManager.jsのitems配列で使われるキー)
  * @returns {string} 表示用ラベル
  */
-function getExifLabel(item) {
+function getExifLabel(itemKey) {
     const labels = {
-        'make': 'メーカー',
-        'model': '機種名',
-        'fNumber': 'F値',
-        'exposureTime': 'シャッタースピード',
-        'iso': 'ISO感度',
-        'focalLength': '焦点距離',
-        'LensModel': 'レンズ情報',
-        'software': 'ソフトウェア'
+        'Make': 'メーカー',
+        'Model': '機種名',
+        'FNumber': 'F値',
+        'ExposureTime': 'シャッタースピード',
+        'ISOSpeedRatings': 'ISO感度',
+        'FocalLength': '焦点距離',
+        'LensModel': 'レンズ情報', // 前回追加したキー
+        // 必要に応じて他のキーとラベルを追加
     };
-
-    return labels[item] || item;
+    return labels[itemKey] || itemKey; // マッチしない場合はキー名をそのまま表示
 }
 
 /**
- * Exifデータから指定された項目の値を取得する
- * @param {Object} exifData - Exifデータ
- * @param {string} item - 取得する項目
- * @returns {string} 項目の値
+ * Exifデータ(piexif.js形式)から指定された項目の値を取得し、フォーマットする
+ * @param {Object} exifDataFromState - stateManagerから取得したExifデータ (piexif.jsのload()の戻り値)
+ * @param {string} itemKey - 取得する項目のキー (stateManager.jsのitems配列で使われるキー)
+ * @returns {string} フォーマットされた値の文字列、または空文字列
  */
-// js/textRenderer.js の getExifValue 関数を piexif.js のデータ構造に合わせて修正
-function getExifValue(exifData, itemKey) { // itemKey は 'make', 'model' など
-    if (!exifData || typeof piexif === 'undefined' || !piexif.ImageIFD || !piexif.ExifIFD) return '';
+function getExifValue(exifDataFromState, itemKey) {
+    if (!exifDataFromState || typeof piexif === 'undefined') return '';
+
+    const zerothIFD = exifDataFromState["0th"];
+    const exifIFD = exifDataFromState["Exif"];
+    // const gpsIFD = exifDataFromState["GPS"]; // 必要なら
 
     const ImageIFD_CONSTANTS = piexif.ImageIFD;
     const ExifIFD_CONSTANTS = piexif.ExifIFD;
+    // const GPSIFD_CONSTANTS = piexif.GPSIFD; // 必要なら
 
-    const zerothIFD = exifData["0th"];
-    const exifIFD = exifData["Exif"];
-
-    // getTagValue は exifHandler.js にある想定だが、もし textRenderer.js 内で使うなら別途定義かインポートが必要
-    // ここでは exifHandler.js の getTagValue を使ったと仮定する (実際には直接アクセス)
-    // または、textRenderer.js 用に簡易的な値取得ロジックをここに書く
+    if (!zerothIFD && !exifIFD) return ''; // 主要なIFDがない場合は空
 
     switch (itemKey) {
-        case 'make':
-            return zerothIFD && ImageIFD_CONSTANTS.Make !== undefined ? zerothIFD[ImageIFD_CONSTANTS.Make] : '';
-        case 'model':
-            return zerothIFD && ImageIFD_CONSTANTS.Model !== undefined ? zerothIFD[ImageIFD_CONSTANTS.Model] : '';
-        case 'fNumber':
-            if (exifIFD && ExifIFD_CONSTANTS.FNumber !== undefined) {
+        case 'Make':
+            return (zerothIFD && ImageIFD_CONSTANTS && ImageIFD_CONSTANTS.Make !== undefined) ? zerothIFD[ImageIFD_CONSTANTS.Make] : '';
+        case 'Model':
+            return (zerothIFD && ImageIFD_CONSTANTS && ImageIFD_CONSTANTS.Model !== undefined) ? zerothIFD[ImageIFD_CONSTANTS.Model] : '';
+        case 'FNumber':
+            if (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.FNumber !== undefined) {
                 const fVal = exifIFD[ExifIFD_CONSTANTS.FNumber];
                 if (fVal && Array.isArray(fVal) && fVal.length === 2 && fVal[1] !== 0) {
                     return `F${(fVal[0] / fVal[1]).toFixed(1)}`;
                 }
             }
             return '';
-        // ... 他の項目も同様に piexif.js の構造に合わせて修正 ...
-        case 'exposureTime':
-            if (exifIFD && ExifIFD_CONSTANTS.ExposureTime !== undefined) {
+        case 'ExposureTime':
+            if (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.ExposureTime !== undefined) {
                 const etVal = exifIFD[ExifIFD_CONSTANTS.ExposureTime];
                 if (etVal && Array.isArray(etVal) && etVal.length === 2 && etVal[1] !== 0) {
                     const et = etVal[0] / etVal[1];
-                    if (et < 1) return `1/${Math.round(1 / et)}秒`;
-                    return `${et.toFixed(2)}秒`;
+                    if (et >= 1) return `${et.toFixed(1)}秒`; // 1秒以上は小数点1桁まで
+                    if (et >= 0.1) return `${et.toFixed(2)}秒`; // 0.1秒以上
+                    return `1/${Math.round(1 / et)}秒`; // それ未満は分数
                 }
             }
             return '';
-        case 'iso':
-            if (exifIFD && ExifIFD_CONSTANTS.ISOSpeedRatings !== undefined) {
+        case 'ISOSpeedRatings':
+            if (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.ISOSpeedRatings !== undefined) {
                 const iso = exifIFD[ExifIFD_CONSTANTS.ISOSpeedRatings];
-                return iso ? `ISO ${Array.isArray(iso) ? iso[0] : iso}` : '';
+                return iso ? `${Array.isArray(iso) ? iso[0] : iso}` : ''; // ISO 文字列は付けない
             }
             return '';
-        case 'focalLength':
-            if (exifIFD && ExifIFD_CONSTANTS.FocalLength !== undefined) {
+        case 'FocalLength':
+            if (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.FocalLength !== undefined) {
                 const flVal = exifIFD[ExifIFD_CONSTANTS.FocalLength];
                 if (flVal && Array.isArray(flVal) && flVal.length === 2 && flVal[1] !== 0) {
                     return `${Math.round(flVal[0] / flVal[1])}mm`;
                 }
             }
             return '';
-        case 'LensModel': // ★キーを 'LensModel' に合わせる
-            return exifIFD && ExifIFD_CONSTANTS.LensModel !== undefined ? exifIFD[ExifIFD_CONSTANTS.LensModel] : '';
-        // ... (LensModel, Software なども同様に)
+        case 'LensModel':
+            return (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.LensModel !== undefined) ? exifIFD[ExifIFD_CONSTANTS.LensModel] : '';
+        // 必要に応じて他のExif項目のcaseを追加
         default:
-            // 直接アクセスできる他の一般的なタグも考慮するなら、ここで処理
-            // ただし、textSettings.exif.items にリストされているものに限定するのが良い
             return '';
     }
 }
