@@ -33,11 +33,19 @@ export const controlsConfig = {
     textDateOffsetX: { defaultValue: 2, min: -50, max: 50, step: 1 }, // %
     textDateOffsetY: { defaultValue: 2, min: -50, max: 50, step: 1 }, // %
 
-    // 文字入力タブ - Exif情報表示 (今回の修正範囲外だが、将来的にはここに追加)
-    // textExifEnabled: { defaultValue: false },
-    // textExifItems: { defaultValue: ['make', 'model'] }, // 例: マルチセレクトやチェックボックス群
-    // textExifFont: { defaultValue: 'Arial' },
-    // ...など
+    // 文字入力タブ - Exif情報表示 
+    textExifEnabled: { defaultValue: false }, // チェックボックス
+    // textExifItems: // 表示項目選択は複数のチェックボックスになるため、個別にIDで管理 (controlsConfigには不要かも)
+    textExifFont: { defaultValue: 'Arial' }, // select要素用
+    textExifSize: { defaultValue: 2, min: 1, max: 20, step: 0.5 }, // % (写真短辺比)
+    textExifColor: { defaultValue: '#000000' }, // カラーピッカー
+    textExifPosition: { defaultValue: 'bottom-left' }, // select要素用 (9箇所)
+    textExifOffsetX: { defaultValue: 2, min: -50, max: 50, step: 1 }, // %
+    textExifOffsetY: { defaultValue: 2, min: -50, max: 50, step: 1 }, // %
+
+    // Exif表示項目選択用チェックボックスのデフォルト値 (uiControllerで直接参照する想定)
+    // textExifItemMake: { defaultValue: true }, // 例
+    // textExifItemModel: { defaultValue: true }, // 例
 
     // フレーム加工タブ
     frameCornerStyle: { defaultValue: 'none' }, // ラジオボタンまたはselect用

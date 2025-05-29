@@ -83,20 +83,20 @@ let editState = {
             format: 'YYYY/MM/DD',    // 区切り形式選択
             font: 'Arial',           // フォント
             size: 2,                 // フォントサイズ (%)
-            color: '#FFFFFF',        // 色
+            color: '#000000',        // 色
             position: 'bottom-right',// 表示位置
-            offsetX: 2,              // X方向オフセット (%)
-            offsetY: 2               // Y方向オフセット (%)
+            offsetX: 0,              // X方向オフセット (%)
+            offsetY: 0               // Y方向オフセット (%)
         },
         exif: {
             enabled: false,
-            items: ['make', 'model', 'fNumber', 'exposureTime', 'iso', 'focalLength'],
+            items: ['Make', 'Model', 'FNumber', 'ExposureTime', 'ISOSpeedRatings', 'FocalLength'], // 初期表示項目例 (piexif.jsのキーに合わせるか、表示用キー)
             font: 'Arial',
             size: 2,          // サイズ (%)
             color: '#000000',
             position: 'bottom-left', // 表示位置
-            offsetX: 2,       // X方向オフセット (%)
-            offsetY: 2        // Y方向オフセット (%)
+            offsetX: 0,       // X方向オフセット (%)
+            offsetY: 0        // Y方向オフセット (%)
         }
     },
     // 出力関連の設定を追加
@@ -261,14 +261,14 @@ function resetState() {
                 format: 'YYYY/MM/DD',
                 font: 'Arial',
                 size: 2,
-                color: '#FFFFFF',
+                color: '#000000',
                 position: 'bottom-right',
                 offsetX: 0,
                 offsetY: 0
             },
             exif: {
                 enabled: false,
-                items: ['make', 'model', 'fNumber', 'exposureTime', 'iso', 'focalLength'],
+                items: ['Make', 'Model', 'FNumber', 'ExposureTime', 'ISOSpeedRatings', 'FocalLength'], // 初期表示項目例 (piexif.jsのキーに合わせるか、表示用キー)
                 font: 'Arial',
                 size: 2,
                 color: '#000000',
@@ -350,20 +350,28 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
             style: 'solid'
         }
     };
-        // textSettings.date もリセット
+    // textSettings.date もリセット
     editState.textSettings.date = {
         enabled: false,
         format: 'YYYY/MM/DD',
         font: 'Arial',
         size: 2,
-        color: '#FFFFFF',
+        color: '#000000',
         position: 'bottom-right',
         offsetX: 0,
         offsetY: 0
     };
     // textSettings.exif も同様にリセット（項目は現状のまま）
-    // (もしexifの設定項目も画像ごとにリセットすべきならここに追加)
-    notifyStateChange();
+    editState.textSettings.exif = {
+        enabled: false,
+        items: ['Make', 'Model', 'FNumber', 'ExposureTime', 'ISOSpeedRatings', 'FocalLength'],
+        font: 'Arial',
+        size: 2,
+        color: '#000000',
+        position: 'bottom-left',
+        offsetX: 0,
+        offsetY: 0
+    }; notifyStateChange();
 }
 
 // モジュールとしてエクスポート
