@@ -190,7 +190,8 @@ function drawExifInfo(ctx, exifSettings, exifData, photoShortSide, canvasWidth, 
  * @returns {Object} X座標とY座標 { x, y }
  */
 function calculateTextPosition(position, offsetXPercent, offsetYPercent, textWidth, textHeight, photoShortSidePx, canvasWidth, canvasHeight, textAlign = 'left', textBaseline = 'top') {
-    const margin = 10; // Canvasの縁からの基本的なマージン (px)
+    const margin = 0;
+    // const margin = (1.5 / 100) * Math.min(canvasWidth, canvasHeight); // Canvasの短辺の1.5%をマージンとする (調整可能)
     const offsetXPx = (offsetXPercent / 100) * photoShortSidePx;
     const offsetYPx = (offsetYPercent / 100) * photoShortSidePx;
 
