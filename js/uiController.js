@@ -205,12 +205,12 @@ export function initializeUIFromState() {
     if (uiElements.textExifEnabledCheckbox) uiElements.textExifEnabledCheckbox.checked = tes.enabled;
     // 表示項目チェックボックスの初期化
     const exifItemCheckboxes = [
-        {el: uiElements.textExifItemMakeCheckbox, key: 'Make'},
-        {el: uiElements.textExifItemModelCheckbox, key: 'Model'},
-        {el: uiElements.textExifItemFNumberCheckbox, key: 'FNumber'},
-        {el: uiElements.textExifItemExposureTimeCheckbox, key: 'ExposureTime'},
-        {el: uiElements.textExifItemISOSpeedRatingsCheckbox, key: 'ISOSpeedRatings'},
-        {el: uiElements.textExifItemFocalLengthCheckbox, key: 'FocalLength'},
+        { el: uiElements.textExifItemMakeCheckbox, key: 'Make' },
+        { el: uiElements.textExifItemModelCheckbox, key: 'Model' },
+        { el: uiElements.textExifItemFNumberCheckbox, key: 'FNumber' },
+        { el: uiElements.textExifItemExposureTimeCheckbox, key: 'ExposureTime' },
+        { el: uiElements.textExifItemISOSpeedRatingsCheckbox, key: 'ISOSpeedRatings' },
+        { el: uiElements.textExifItemFocalLengthCheckbox, key: 'FocalLength' },
     ];
     exifItemCheckboxes.forEach(item => {
         if (item.el) item.el.checked = tes.items.includes(item.key);
@@ -329,7 +329,7 @@ function updateFrameSettingsVisibility() {
     if (uiElements.frameShadowSettingsContainer) {
         uiElements.frameShadowSettingsContainer.style.display = frameState.shadowEnabled ? '' : 'none';
     }
-    
+
     if (frameState.shadowEnabled) {
         if (uiElements.frameDropShadowSettingsContainer) {
             uiElements.frameDropShadowSettingsContainer.style.display = frameState.shadowType === 'drop' ? '' : 'none';
@@ -337,7 +337,7 @@ function updateFrameSettingsVisibility() {
         if (uiElements.frameInnerShadowSettingsContainer) {
             uiElements.frameInnerShadowSettingsContainer.style.display = frameState.shadowType === 'inner' ? '' : 'none';
         }
-    } else { 
+    } else {
         if (uiElements.frameDropShadowSettingsContainer) uiElements.frameDropShadowSettingsContainer.style.display = 'none';
         if (uiElements.frameInnerShadowSettingsContainer) uiElements.frameInnerShadowSettingsContainer.style.display = 'none';
     }
@@ -356,7 +356,12 @@ function updateTextDateSettingsVisibility() {
 
 function updateTextExifSettingsVisibility() {
     const exifSettingsEnabled = getState().textSettings.exif.enabled;
+    // ★デバッグログ追加
+    console.log('[updateTextExifSettingsVisibility] Called. Current textSettings.exif.enabled:', exifSettingsEnabled);
     if (uiElements.textExifSettingsContainer) {
+        const newDisplayValue = exifSettingsEnabled ? '' : 'none';
+        // ★デバッグログ追加
+        console.log(`[updateTextExifSettingsVisibility] textExifSettingsContainer: setting display to '${newDisplayValue}'`);
         uiElements.textExifSettingsContainer.style.display = exifSettingsEnabled ? '' : 'none';
     }
 }
@@ -374,14 +379,14 @@ export function setupEventListeners(redrawCallback) {
                 if (config.min !== undefined) value = Math.max(config.min, value);
                 if (config.max !== undefined) value = Math.min(config.max, value);
             }
-            e.target.value = String(value); 
+            e.target.value = String(value);
 
             let updatePayload;
-            if (subNestedKey && nestedKey) { 
+            if (subNestedKey && nestedKey) {
                 updatePayload = { [stateKey]: { [nestedKey]: { [subNestedKey]: value } } };
-            } else if (nestedKey) { 
+            } else if (nestedKey) {
                 updatePayload = { [stateKey]: { [nestedKey]: value } };
-            } else { 
+            } else {
                 updatePayload = { [stateKey]: value };
             }
             updateState(updatePayload);
@@ -389,7 +394,7 @@ export function setupEventListeners(redrawCallback) {
             redrawCallback();
         });
     };
-    
+
     // 汎用選択肢変更リスナー (ラジオボタン、セレクトボックス、チェックボックス)
     // 引数: element, stateKey, p1, p2, p3
     // p1: radioValue (radio) | nestedKey (checkbox/select)
@@ -402,23 +407,29 @@ export function setupEventListeners(redrawCallback) {
         element.addEventListener(eventType, (e) => {
             let valueToSet;
             let updatePayload;
-            
+
             let actualNestedKey = '';
             let actualSubNestedKey = '';
 
+            // ★特定の要素のデバッグログ (textExifEnabledCheckbox にも適用)
+            if (element.id === 'textExifEnabledCheckbox' || element.id === 'frameBorderEnabledCheckbox' || element.id === 'frameShadowEnabledCheckbox' || element.id === 'textDateEnabledCheckbox') {
+                console.log(`[UIController] Event on: ${element.id}, type: ${eventType}, checked: ${e.target.checked}`);
+                console.log(`[UIController] addOptionChangeListener params for ${element.id}: stateKey=${stateKey}, p1=${p1}, p2=${p2}, p3=${p3}`);
+            }
+
             if (element.type === 'checkbox') {
                 valueToSet = e.target.checked;
-                actualNestedKey = p1;    
-                actualSubNestedKey = p2; 
+                actualNestedKey = p1;
+                actualSubNestedKey = p2;
             } else if (element.type === 'radio') {
                 if (!e.target.checked) return;
-                valueToSet = p1;      
-                actualNestedKey = p2; 
-                actualSubNestedKey = p3; 
+                valueToSet = p1;
+                actualNestedKey = p2;
+                actualSubNestedKey = p3;
             } else { // select
                 valueToSet = e.target.value;
-                actualNestedKey = p1;      
-                actualSubNestedKey = p2;   
+                actualNestedKey = p1;
+                actualSubNestedKey = p2;
             }
 
             if (actualSubNestedKey && actualNestedKey) {
@@ -428,28 +439,43 @@ export function setupEventListeners(redrawCallback) {
             } else {
                 updatePayload = { [stateKey]: valueToSet };
             }
-            
+
+            if (element.id === 'textExifEnabledCheckbox' || element.id === 'frameBorderEnabledCheckbox') { // ★デバッグログ追加
+                console.log(`[UIController] ${element.id} - updatePayload:`, JSON.stringify(updatePayload));
+            }
             updateState(updatePayload);
 
-            // UI表示切替判定
+            // UI表示切替判定 - actualNestedKey と actualSubNestedKey を使用
+            let visibilityFunctionCalled = false;
             if (stateKey === 'backgroundType') {
                 toggleBackgroundSettingsVisibility();
-            } else if (stateKey === 'frameSettings' && 
-                       (actualNestedKey === 'cornerStyle' || actualNestedKey === 'shadowEnabled' || 
-                        actualNestedKey === 'shadowType' || 
-                        (actualNestedKey === 'border' && actualSubNestedKey === 'enabled') 
-                       )) {
-                updateFrameSettingsVisibility();
-            } else if (stateKey === 'textSettings' && actualNestedKey === 'date' && actualSubNestedKey === 'enabled') { 
-                updateTextDateSettingsVisibility();
-            } else if (stateKey === 'textSettings' && actualNestedKey === 'exif' && actualSubNestedKey === 'enabled') { 
-                updateTextExifSettingsVisibility();
+                visibilityFunctionCalled = true;
+            } else if (stateKey === 'frameSettings') {
+                if (actualNestedKey === 'cornerStyle' || actualNestedKey === 'shadowEnabled' || actualNestedKey === 'shadowType' || (actualNestedKey === 'border' && actualSubNestedKey === 'enabled')) {
+                    console.log(`[UIController] Calling updateFrameSettingsVisibility. Triggered by: ${actualNestedKey}.${actualSubNestedKey || ''}`);
+                    updateFrameSettingsVisibility();
+                    visibilityFunctionCalled = true;
+                }
+            } else if (stateKey === 'textSettings') {
+                if (actualNestedKey === 'date' && actualSubNestedKey === 'enabled') {
+                    updateTextDateSettingsVisibility();
+                    visibilityFunctionCalled = true;
+                } else if (actualNestedKey === 'exif' && actualSubNestedKey === 'enabled') { // ★この条件で呼び出し
+                    console.log(`[UIController] Calling updateTextExifSettingsVisibility for ${element.id}`);
+                    updateTextExifSettingsVisibility();
+                    visibilityFunctionCalled = true;
+                }
             }
+
+            if ((element.id === 'textExifEnabledCheckbox' || element.id === 'frameBorderEnabledCheckbox') && !visibilityFunctionCalled) {
+                console.warn(`[UIController] ${element.id} changed, but no specific visibility function was called. actualNestedKey: ${actualNestedKey}, actualSubNestedKey: ${actualSubNestedKey}`);
+            }
+
             updateSliderValueDisplays();
             redrawCallback();
         });
     };
-    
+
     // カラーピッカー専用リスナー
     const addColorInputListener = (element, stateKey, nestedKey = '', subNestedKey = '') => {
         if (!element) return;
@@ -523,7 +549,8 @@ export function setupEventListeners(redrawCallback) {
     addNumericInputListener(uiElements.textDateOffsetYSlider, 'textDateOffsetY', 'textSettings', 'date', 'offsetY');
 
     // --- 文字入力タブ - Exif情報 ---
-    addOptionChangeListener(uiElements.textExifEnabledCheckbox, 'textSettings', 'exif', 'enabled');
+    addOptionChangeListener(uiElements.textExifEnabledCheckbox, 'textSettings', 'exif', 'enabled'); // ★呼び出し方を確認
+
 
     const exifItemCheckboxes = [
         uiElements.textExifItemMakeCheckbox,
