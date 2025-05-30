@@ -579,6 +579,7 @@ export function setupEventListeners(redrawCallback) {
                     newItems = currentItems.filter(item => item !== itemName);
                 }
                 updateState({ textSettings: { exif: { items: newItems } } });
+                console.log("[UIController] After updateState, exif.items in state:", JSON.stringify(getState().textSettings.exif.items)); // ★追加
                 redrawCallback();
             });
         }
