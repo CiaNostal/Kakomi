@@ -126,16 +126,7 @@ function drawDateText(ctx, dateSettings, exifDateTimeString, basePhotoShortSideP
 }
 
 /**
- * Exif情報を描画する
- * @param {CanvasRenderingContext2D} ctx - キャンバスのコンテキスト
- * @param {Object} exifSettings - Exif表示の設定
- * @param {Object} exifData - Exifデータ
- * @param {number} photoShortSide - 写真の短辺の長さ
- * @param {number} canvasWidth - キャンバスの幅
- * @param {number} canvasHeight - キャンバスの高さ
- */
-/**
- * Exif情報を描画する
+ * Exif情報を1行のテキストとして描画する
  * @param {CanvasRenderingContext2D} ctx - キャンバスのコンテキスト
  * @param {Object} exifSettings - Exif表示の設定 (currentState.textSettings.exif)
  * @param {Object} exifDataFromState - Exifデータ (piexif.js形式)
@@ -148,71 +139,70 @@ function drawExifInfo(ctx, exifSettings, exifDataFromState, basePhotoShortSidePx
         return;
     }
 
-    const lines = [];
-    for (const itemKey of exifSettings.items) {
-        const label = getExifLabel(itemKey);
-        const value = getExifValue(exifDataFromState, itemKey);
-        if (value) { // 値がある項目のみ表示
-            lines.push(`${label}: ${value}`);
+    const displayedExifValues = [];
+    // textSettings.exif.items 配列に定義された順序で値を取得・連結
+    // 表示順序を固定したい場合は、ここでitemsの順序をソートするか、固定の順序リストで処理する
+    const displayOrder = ['Make', 'Model', 'LensModel', 'FocalLength', 'FNumber', 'ExposureTime', 'ISOSpeedRatings']; // 表示したい順序の例
+
+    for (const itemKey of displayOrder) {
+        if (exifSettings.items.includes(itemKey)) { // チェックボックスで選択されている項目のみ
+            const value = getExifValue(exifDataFromState, itemKey);
+            if (value) { // 値がある項目のみ
+                // 必要に応じてここで各項目の接頭辞・接尾辞を調整
+                // 例: FNumberなら 'F' を付ける、ISOSpeedRatingsなら 'ISO ' を付けるなど
+                // getExifValueが既に "F2.8" や "ISO100" のように整形済みの文字列を返すと仮定
+                let displayValue = value;
+                if (itemKey === 'ISOSpeedRatings' && !String(value).toUpperCase().startsWith('ISO')) {
+                    displayValue = `ISO ${value}`;
+                }
+                // 他の項目も必要に応じて整形
+                displayedExifValues.push(displayValue);
+            }
         }
     }
 
-    if (lines.length === 0) return;
+    if (displayedExifValues.length === 0) return;
+
+    const exifString = `${displayedExifValues.join(' ')}`; // スペース区切りで連結
 
     const fontSizePx = (exifSettings.size / 100) * basePhotoShortSidePx;
     if (fontSizePx <= 0) return;
-
-    const lineHeight = fontSizePx * 1.2; // 行の高さ（フォントサイズの1.2倍程度）
 
     ctx.save();
     ctx.font = `${fontSizePx}px "${exifSettings.font}"`;
     ctx.fillStyle = exifSettings.color;
 
     let textAlign = 'left';
-    let textBaseline = 'alphabetic'; // Exif情報は複数行になる可能性があるので、最初の行の上端を基準にしたい場合 'top' も検討
+    let textBaseline = 'alphabetic';
 
     if (exifSettings.position.endsWith('-center')) textAlign = 'center';
     else if (exifSettings.position.endsWith('-right')) textAlign = 'right';
 
     if (exifSettings.position.startsWith('top-')) textBaseline = 'top';
     else if (exifSettings.position.startsWith('middle-')) textBaseline = 'middle';
-    // 'bottom-' の場合は 'alphabetic' or 'bottom'
 
     ctx.textAlign = textAlign;
-    ctx.textBaseline = textBaseline; // 'top' にすると、y座標が各行の上端になる
+    ctx.textBaseline = textBaseline;
 
-    // テキストブロック全体の幅と高さを概算 (最も長い行の幅と、行数 x 行の高さ)
-    let maxTextWidth = 0;
-    for (const line of lines) {
-        const metrics = ctx.measureText(line);
-        if (metrics.width > maxTextWidth) {
-            maxTextWidth = metrics.width;
-        }
-    }
-    const totalTextHeight = lineHeight * lines.length - (lineHeight - fontSizePx); // 最後の行の余分なスペースを引く
+    const textMetrics = ctx.measureText(exifString);
+    const textWidth = textMetrics.width;
+    const textHeight = fontSizePx;
 
     const { x, y } = calculateTextPosition(
         exifSettings.position,
         exifSettings.offsetX,
         exifSettings.offsetY,
-        maxTextWidth,
-        totalTextHeight, // テキストブロック全体の高さ
+        textWidth,
+        textHeight,
         basePhotoShortSidePx,
         canvasWidth,
         canvasHeight,
         textAlign,
-        textBaseline // textBaseline を 'top' にして、y をブロックの上端として扱う方が複数行の場合は制御しやすい
+        textBaseline
     );
 
-    console.log(`Drawing Exif Info at (${x}, ${y}) with font: ${ctx.font} color: ${ctx.fillStyle}`);
-    for (let i = 0; i < lines.length; i++) {
-        // textBaseline が 'top' の場合、y は最初の行の上端。各行は lineHeight ずつ下に描画。
-        // textBaseline が 'alphabetic' や 'bottom' の場合、y は最初の行のベースライン/下端なので、
-        // 複数行描画のy座標の調整は、textBaseline の設定と calculateTextPosition のyの返し方に依存する。
-        // ここでは、textBaseline='top' を想定し、calculateTextPosition がブロック左上を返すようにするとシンプル。
-        // → 前回の calculateTextPosition の修正で、textBaseline='top' の場合、yはブロック上端を指すようになったはず。
-        ctx.fillText(lines[i], x, y + (i * lineHeight));
-    }
+    console.log(`Drawing Exif string: "${exifString}" at (${x}, ${y}) with font: ${ctx.font} color: ${ctx.fillStyle}`);
+    ctx.fillText(exifString, x, y);
     ctx.restore();
 }
 
