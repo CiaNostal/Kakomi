@@ -13,6 +13,7 @@ export const uiElements = {
     // レイアウト設定タブ
     outputAspectRatioSelect: document.getElementById('outputAspectRatio'),
     baseMarginPercentInput: document.getElementById('baseMarginPercent'),
+    baseMarginPercentValueSpan: document.getElementById('baseMarginPercentValue'), // ★追加
     photoPosXSlider: document.getElementById('photoPosX'),
     photoPosYSlider: document.getElementById('photoPosY'),
     photoPosXValueSpan: document.getElementById('photoPosXValue'),
