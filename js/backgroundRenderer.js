@@ -10,11 +10,16 @@
  * @param {number} canvasHeight - キャンバスの高さ
  * @param {Object} currentState - 現在の編集状態
  */
-function drawBackground(ctx, canvasWidth, canvasHeight, currentState) {
+function drawBackground(ctx, canvasWidth, canvasHeight, currentState, basePhotoShortSideForBlurPxIfPreview) {
     if (currentState.backgroundType === 'color' || !currentState.image) {
         drawColorBackground(ctx, canvasWidth, canvasHeight, currentState.backgroundColor);
     } else if (currentState.backgroundType === 'imageBlur') {
-        drawBlurredImageBackground(ctx, canvasWidth, canvasHeight, currentState);
+        // プレビュー時はプレビュー上の写真短辺、出力時は出力上の写真短辺を渡す
+        const baseLength = basePhotoShortSideForBlurPxIfPreview !== undefined
+            ? basePhotoShortSideForBlurPxIfPreview
+            : Math.min(currentState.photoDrawConfig.destWidth, currentState.photoDrawConfig.destHeight);
+        drawBlurredImageBackground(ctx, canvasWidth, canvasHeight, currentState.image, currentState.imageBlurBackgroundParams, baseLength);
+
     }
 }
 
@@ -35,39 +40,33 @@ function drawColorBackground(ctx, canvasWidth, canvasHeight, color) {
  * @param {CanvasRenderingContext2D} ctx - キャンバスのコンテキスト
  * @param {number} canvasWidth - キャンバスの幅
  * @param {number} canvasHeight - キャンバスの高さ
- * @param {Object} currentState - 現在の編集状態
+ * @param {Object} img - 背景に使用するImageオブジェクト (currentState.image)
+ * @param {Object} blurParams - ぼかしパラメータ (currentState.imageBlurBackgroundParams)
+ * @param {number} basePhotoShortSideForBlurPx - ぼかし強度計算の基準となる写真の短辺の実際のピクセル長
  */
-function drawBlurredImageBackground(ctx, canvasWidth, canvasHeight, currentState) {
-    const img = currentState.image;
-    const params = currentState.imageBlurBackgroundParams;
+function drawBlurredImageBackground(ctx, canvasWidth, canvasHeight, img, blurParams, basePhotoShortSideForBlurPx) {
+    if (!img || !blurParams || basePhotoShortSideForBlurPx <= 0) return;
 
-    // 写真の短辺の長さを取得
-    const photoDrawWidth = currentState.photoDrawConfig.destWidth;
-    const photoDrawHeight = currentState.photoDrawConfig.destHeight;
-    const photoShortSidePx = (photoDrawWidth > 0 && photoDrawHeight > 0) 
-        ? Math.min(photoDrawWidth, photoDrawHeight) 
-        : 100; // フォールバック
-
-    const blurPx = photoShortSidePx * (params.blurAmountPercent / 100);
+    const blurPx = basePhotoShortSideForBlurPx * (blurParams.blurAmountPercent / 100);
 
     ctx.save(); // フィルター適用前に状態を保存
 
     // フィルター文字列を生成
     let filterString = '';
     if (blurPx > 0) filterString += `blur(${blurPx}px) `;
-    if (params.brightness !== 100) filterString += `brightness(${params.brightness}%) `;
-    if (params.saturation !== 100) filterString += `saturate(${params.saturation}%)`;
+    if (blurParams.brightness !== 100) filterString += `brightness(${blurParams.brightness}%) `;
+    if (blurParams.saturation !== 100) filterString += `saturate(${blurParams.saturation}%)`;
     if (filterString.trim() !== '') {
         ctx.filter = filterString.trim();
     }
 
     // 元画像のアスペクト比を保ちつつ、Canvas全体を覆うように拡大描画
     const imgAspectRatio = img.width / img.height;
-    const canvasAspectRatio = canvasWidth / canvasHeight;
+    // const canvasAspectRatio = canvasWidth / canvasHeight;
     let sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight;
 
-    dWidth = canvasWidth * params.scale;
-    dHeight = canvasHeight * params.scale;
+    dWidth = canvasWidth * blurParams.scale;
+    dHeight = canvasHeight * blurParams.scale;
     dx = (canvasWidth - dWidth) / 2; // 中央に配置
     dy = (canvasHeight - dHeight) / 2;
 

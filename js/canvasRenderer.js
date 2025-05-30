@@ -48,7 +48,8 @@ export function drawPreview(currentState, previewCanvas, previewCtx) {
     const photoShortSidePx = Math.min(photoWidth, photoHeight);
 
     // 1. 背景描画
-    drawBackground(ctx, previewCanvas.width, previewCanvas.height, currentState);
+    // プレビュー表示における写真の実際の短辺 photoShortSidePx を渡す
+    drawBackground(ctx, previewCanvas.width, previewCanvas.height, currentState, photoShortSidePx);
 
     if (img && sourceWidth > 0 && sourceHeight > 0 && photoWidth > 0 && photoHeight > 0) {
         ctx.save(); // 写真とその装飾のためのコンテキスト保存
@@ -121,7 +122,8 @@ export function renderFinal(currentState) {
     }
 
     // 1. 背景描画
-    drawBackground(ctx, outputWidth, outputHeight, currentState);
+    // renderFinal時は、backgroundRenderer側でphotoDrawConfigから計算するため、第5引数は不要（またはoutput時のphotoShortSidePxを渡しても良い）
+    drawBackground(ctx, outputWidth, outputHeight, currentState, photoShortSidePx);
 
     if (img && sourceWidth > 0 && sourceHeight > 0) {
         ctx.save(); // 写真とその装飾のためのコンテキスト保存
