@@ -142,7 +142,7 @@ function drawExifInfo(ctx, exifSettings, exifDataFromState, basePhotoShortSidePx
     const displayedExifValues = [];
     // textSettings.exif.items 配列に定義された順序で値を取得・連結
     // 表示順序を固定したい場合は、ここでitemsの順序をソートするか、固定の順序リストで処理する
-    const displayOrder = ['Make', 'Model', 'LensModel', 'FocalLength', 'FNumber', 'ExposureTime', 'ISOSpeedRatings']; // 表示したい順序の例
+    const displayOrder = ['Make', 'Model', 'LensModel', 'FNumber', 'ExposureTime', 'ISOSpeedRatings', 'FocalLength']; // 表示したい順序の例
 
     for (const itemKey of displayOrder) {
         if (exifSettings.items.includes(itemKey)) { // チェックボックスで選択されている項目のみ
