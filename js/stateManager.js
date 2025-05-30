@@ -157,7 +157,9 @@ function updateState(updates) {
     function deepMerge(target, source) {
         for (const key in source) {
             if (source.hasOwnProperty(key)) {
-                if (source[key] instanceof Object && key in target) {
+                if (Array.isArray(source[key])) { // ★ソースが配列の場合
+                    target[key] = [...source[key]]; // 配列のコピーでターゲットを置き換える
+                } else if (source[key] instanceof Object && key in target && target[key] instanceof Object && !Array.isArray(target[key])) { // ★オブジェクトかつ配列でない場合のみ再帰
                     deepMerge(target[key], source[key]);
                 } else {
                     target[key] = source[key];

@@ -567,19 +567,25 @@ export function setupEventListeners(redrawCallback) {
         if (checkbox) {
             checkbox.addEventListener('change', () => {
                 const currentItems = getState().textSettings.exif.items || [];
-                const itemName = checkbox.value; // HTMLのvalue属性に 'Make', 'Model' などを設定
+                const itemName = checkbox.value;
+                console.log(`[ExifCheckbox] Changed: ${checkbox.id} (${itemName}), Checked: ${checkbox.checked}`);
+                console.log("[ExifCheckbox] currentItems before change:", JSON.stringify(currentItems));
+
                 let newItems;
                 if (checkbox.checked) {
                     if (!currentItems.includes(itemName)) {
+                        console.log(`[ExifCheckbox] Adding ${itemName} to items.`);
                         newItems = [...currentItems, itemName];
                     } else {
                         newItems = [...currentItems];
                     }
                 } else {
                     newItems = currentItems.filter(item => item !== itemName);
+                    console.log(`[ExifCheckbox] Removing ${itemName}. newItems after filter:`, JSON.stringify(newItems));
                 }
                 updateState({ textSettings: { exif: { items: newItems } } });
                 console.log("[UIController] After updateState, exif.items in state:", JSON.stringify(getState().textSettings.exif.items)); // ★追加
+                console.log("[UIController] After updateState, exif.items in state (from ExifCheckbox):", JSON.stringify(getState().textSettings.exif.items));
                 redrawCallback();
             });
         }
