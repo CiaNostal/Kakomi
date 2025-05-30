@@ -328,7 +328,7 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
     editState.frameSettings = { // frameSettings オブジェクトごと初期値で再割り当てするのが安全
         cornerStyle: 'none',
         cornerRadiusPercent: 0,
-        superellipseN: 15,
+        superellipseN: 4,
         shadowEnabled: false,
         shadowType: 'drop',
         dropShadow: {

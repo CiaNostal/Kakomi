@@ -281,6 +281,10 @@ export function updateSliderValueDisplays() {
     if (uiElements.frameBorderWidthValueSpan && uiElements.frameBorderWidthSlider) {
         uiElements.frameBorderWidthValueSpan.textContent = `${fs.border.width}%`;
     }
+    // レイアウト設定タブ - 基準余白スライダーの値表示 ★追加
+    if (uiElements.baseMarginPercentValueSpan && uiElements.baseMarginPercentInput) { // baseMarginPercentInput はスライダーになった
+        uiElements.baseMarginPercentValueSpan.textContent = `${state.baseMarginPercent}%`;
+    }
 
     // 文字入力 - 撮影日スライダーの値表示
     const tds = state.textSettings.date;
