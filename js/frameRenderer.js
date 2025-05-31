@@ -127,44 +127,41 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
 
     if (frameSettings.shadowType === 'drop') {
         // console.log("Applying Drop Shadow (Offscreen method) with settings:", shadowSettings);
-        console.log("--- applyShadow (drop) ---"); // ★ログ追加
-        console.log("shadowSettings:", JSON.parse(JSON.stringify(shadowSettings))); // ★ログ追加 (内容はディープコピーして表示)
-        console.log("frameSettings (for corner):", JSON.parse(JSON.stringify(frameSettings))); // ★ログ追加
-        console.log(`photoX: ${photoX}, photoY: ${photoY}, photoWidth: ${photoWidth}, photoHeight: ${photoHeight}, photoShortSidePx: ${photoShortSidePx}`); // ★ログ追加
+        // console.log("--- applyShadow (drop) ---");
+        // console.log("shadowSettings:", JSON.parse(JSON.stringify(shadowSettings)));
+        // console.log("frameSettings (for corner):", JSON.parse(JSON.stringify(frameSettings)));
+        // console.log(`photoX: ${photoX}, photoY: ${photoY}, photoWidth: ${photoWidth}, photoHeight: ${photoHeight}, photoShortSidePx: ${photoShortSidePx}`);
 
-        const offsetX = (shadowSettings.offsetX / 100) * photoShortSidePx;
-        const offsetY = (shadowSettings.offsetY / 100) * photoShortSidePx;
+        const userShadowOffsetX = (shadowSettings.offsetX / 100) * photoShortSidePx;
+        const userShadowOffsetY = (shadowSettings.offsetY / 100) * photoShortSidePx;
         const blurRadius = Math.max(0, (shadowSettings.blur / 100) * photoShortSidePx); // ぼかしは0以上
         const spreadRadius = (shadowSettings.spread !== undefined ? (shadowSettings.spread / 100) * photoShortSidePx : 0);
-        const shadowColor = shadowSettings.color;
-
-        console.log(`Calculated - offsetXpx: ${offsetX}, offsetYpx: ${offsetY}, blurRadius: ${blurRadius}, spreadRadius: ${spreadRadius}`); // ★ログ追加
-
+        const shadowColor = shadowSettings.color; // ユーザー指定の影の色 (RGBA文字列を想定)
 
         // 影の描画範囲を考慮してオフスクリーンCanvasのサイズと描画オフセットを決定
-        // スプレッドとぼかしで最大どれくらい広がるかを見積もる
-        const marginForShadow = Math.abs(offsetX) + Math.abs(offsetY) + blurRadius + Math.abs(spreadRadius) + 5; // 若干の余裕
-        const offscreenWidth = photoWidth + marginForShadow * 2;
-        const offscreenHeight = photoHeight + marginForShadow * 2;
+        const blurSafetyMargin = blurRadius * 2; // ぼかしが広がるマージン (半径の2倍程度見ておく)
+        const offscreenMargin = Math.max(Math.abs(userShadowOffsetX), Math.abs(userShadowOffsetY)) + blurSafetyMargin + Math.abs(spreadRadius) + 5; // 若干の余裕
 
-        // 写真形状をオフスクリーンCanvasの中央に描くためのオフセット
-        const shapeOffsetXonOffscreen = marginForShadow;
-        const shapeOffsetYonOffscreen = marginForShadow;
+        const offscreenWidth = photoWidth + offscreenMargin * 2;
+        const offscreenHeight = photoHeight + offscreenMargin * 2;
+
+        // 写真形状をオフスクリーンCanvasの中央に描くためのオフセット (これが (0,0) 相当になる)
+        const shapeBaseXonOffscreen = offscreenMargin;
+        const shapeBaseYonOffscreen = offscreenMargin;
 
         const offscreenCanvas = document.createElement('canvas');
         offscreenCanvas.width = offscreenWidth;
         offscreenCanvas.height = offscreenHeight;
         const offCtx = offscreenCanvas.getContext('2d');
-        if (!offCtx) { console.error("Failed to get offscreen context for drop shadow"); return; } // ★エラーなら早期リターン
+        if (!offCtx) {
+            console.error("Failed to get offscreen context for drop shadow"); return;
+        }
+        // console.log(`Offscreen canvas created: ${offscreenWidth}x${offscreenHeight}`);
 
-        console.log(`Offscreen canvas created: ${offscreenWidth}x${offscreenHeight}`); // ★ログ追加
-
-        // 1. オフスクリーンに、スプレッドを考慮した「影を落とす物体」の形状を描画
-        //    この物体の色は、最終的な影の色とは無関係（影の形状を作るためだけ）
-        //    ただし、Canvasの影機能が参照するので、ある程度不透明である必要がある。
+        // ステップ1: オフスクリーンに「影の元」となる形状をスプレッドを考慮して描画 (色は最終的な影の色で)
         offCtx.beginPath();
-        const objectX = shapeOffsetXonOffscreen + (spreadRadius < 0 ? -spreadRadius : 0); // スプレッドが負なら描画位置を調整
-        const objectY = shapeOffsetYonOffscreen + (spreadRadius < 0 ? -spreadRadius : 0);
+        const objectX = shapeBaseXonOffscreen + (spreadRadius < 0 ? -spreadRadius : 0);
+        const objectY = shapeBaseYonOffscreen + (spreadRadius < 0 ? -spreadRadius : 0);
         const objectWidth = photoWidth + Math.max(0, spreadRadius * 2);
         const objectHeight = photoHeight + Math.max(0, spreadRadius * 2);
 
@@ -172,89 +169,39 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
             createSuperellipsePath(offCtx, objectX, objectY, objectWidth, objectHeight, frameSettings.superellipseN);
         } else if (frameSettings.cornerStyle === 'rounded' && frameSettings.cornerRadiusPercent > 0) {
             let radius = (frameSettings.cornerRadiusPercent / 100) * photoShortSidePx;
-            radius = Math.max(0, radius + spreadRadius); // スプレッドに応じて半径も調整
+            radius = Math.max(0, radius + spreadRadius);
             roundedRect(offCtx, objectX, objectY, objectWidth, objectHeight, radius);
         } else {
             offCtx.rect(objectX, objectY, objectWidth, objectHeight);
         }
-        offCtx.fillStyle = 'black'; // 影を生成するためのダミーの塗りつぶし（不透明）
+        offCtx.fillStyle = shadowColor; // ★最終的な影の色で塗りつぶす
         offCtx.fill();
 
-        // ★デバッグ用: オフスクリーンCanvasの内容を一時的にメインCanvasに描画して確認
-        // このdrawImageはデバッグ後に削除またはコメントアウトしてください。
-        ctx.save();
-        ctx.globalAlpha = 0.5; // 半透明にして写真と重なっても見えるように
-        ctx.drawImage(offscreenCanvas, photoX - shapeOffsetXonOffscreen, photoY - shapeOffsetYonOffscreen);
-        ctx.restore();
-        console.log("Debug: Drew offscreen 'object' to main canvas temporarily."); // ★ログ追加
-
-        // 2. オフスクリーンCanvasに影を設定し、影だけを描画する
-        //    現在のオフスクリーンCanvasの内容（黒い物体）をソースとして、
-        //    ぼかしとオフセットのついた影を別の場所に描画するようなイメージだが、
-        //    ここでは、メインのctxに影付きで物体を描画し、物体自体は透明にするという
-        //    トリックの代わりに、影自体をオフスクリーンに描くことを目指す。
-
-        //    手法A：一度影付きで物体を描き、物体を消す
-        //    オフスクリーンB (temp) を用意
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = offscreenWidth;
-        tempCanvas.height = offscreenHeight;
-        const tempCtx = tempCanvas.getContext('2d');
-        if (!tempCtx) return;
-
-        // tempCanvas に、影設定を有効にしてオフスクリーンAの「物体」を描画する -> これで物体と影ができる
-        tempCtx.shadowColor = shadowColor;
-        tempCtx.shadowOffsetX = offsetX;
-        tempCtx.shadowOffsetY = offsetY;
-        tempCtx.shadowBlur = blurRadius;
-        tempCtx.drawImage(offscreenCanvas, 0, 0); // offscreenCanvasの物体がtempCanvasに影付きで描かれる
-
-        // 次に、tempCanvas上で「物体」の部分だけを透明にする
-        tempCtx.globalCompositeOperation = 'destination-in'; // 物体の形状の内側だけを残す
-        // destination-out だと物体の形状でくり抜く
-        // shadowOffsetX/Y が0の場合、物体と影は重なる。そうでない場合はずれる。
-        // destination-in だと、元の物体の形状(alphaあり)と、影付きで描画された物体(alphaあり)の積になる。
-        // これは期待通りではない。
-
-        // 手法B：影の色でオフセット・ぼかし描画し、後で形状でマスクする
-        // (これはインナーシャドウに近いので、ドロップシャドウでは別の方法が良い)
-
-        // 手法C：物体を透明にして影だけ描画 (再挑戦)
-        // メインのctxに直接描画するのではなく、このoffCtxに影だけを生成する
-        offCtx.clearRect(0, 0, offscreenWidth, offscreenHeight); // 一旦クリア
-        offCtx.save();
-        offCtx.shadowColor = shadowColor;
-        offCtx.shadowOffsetX = offsetX;
-        offCtx.shadowOffsetY = offsetY;
-        offCtx.shadowBlur = blurRadius;
-
-        // 影を落とす形状を再度パスとして定義 (これはfillやstrokeをしない)
-        // このパスは、spreadを適用した後の写真の輪郭
-        const pathX = shapeOffsetXonOffscreen + (spreadRadius < 0 ? -spreadRadius : 0);
-        const pathY = shapeOffsetYonOffscreen + (spreadRadius < 0 ? -spreadRadius : 0);
-        const pathWidth = photoWidth + Math.max(0, spreadRadius * 2);
-        const pathHeight = photoHeight + Math.max(0, spreadRadius * 2);
-
-        if (frameSettings.cornerStyle === 'superellipse') {
-            createSuperellipsePath(offCtx, pathX, pathY, pathWidth, pathHeight, frameSettings.superellipseN);
-        } else if (frameSettings.cornerStyle === 'rounded' && frameSettings.cornerRadiusPercent > 0) {
-            let radius = (frameSettings.cornerRadiusPercent / 100) * photoShortSidePx;
-            radius = Math.max(0, radius + spreadRadius);
-            roundedRect(offCtx, pathX, pathY, pathWidth, pathHeight, radius);
-        } else {
-            offCtx.beginPath(); // rectの前にbeginPath
-            offCtx.rect(pathX, pathY, pathWidth, pathHeight);
+        // ステップ2: オフスクリーンCanvasにぼかしフィルタを適用 (影のオフセットはまだ適用しない)
+        //           一時Canvasを使って、ぼかし後の結果を元のオフスクリーンCanvasに戻す
+        if (blurRadius > 0.1) {
+            const tempBlurCanvas = document.createElement('canvas');
+            tempBlurCanvas.width = offscreenWidth;
+            tempBlurCanvas.height = offscreenHeight;
+            const tempBlurCtx = tempBlurCanvas.getContext('2d');
+            if (tempBlurCtx) {
+                tempBlurCtx.drawImage(offscreenCanvas, 0, 0); // 現在の影の形状をコピー
+                offCtx.clearRect(0, 0, offscreenWidth, offscreenHeight); // 元をクリア
+                offCtx.filter = `blur(${blurRadius}px)`;
+                offCtx.drawImage(tempBlurCanvas, 0, 0); // ぼかして描き戻し
+                offCtx.filter = 'none';
+            }
         }
-        // fillStyleを完全に透明に設定し、fill()を呼び出すことで、影だけが描画されることを期待
-        // ただし、一部ブラウザでは影が出ない可能性がある
-        offCtx.fillStyle = 'rgba(0,0,0,0)';
-        offCtx.fill(); // これで offscreenCanvas に影だけが描画される (期待)
-        offCtx.restore();
 
+        // ステップ3: ぼかされた影を、メインCanvasの正しい位置にオフセットを考慮して描画
+        // メインCanvasの写真の左上座標 (photoX, photoY) を基準に、
+        // オフスクリーンCanvas上での形状の描画開始位置 (shapeBaseXonOffscreen, shapeBaseYonOffscreen) と
+        // ユーザー指定の影のオフセット (userShadowOffsetX, userShadowOffsetY) を考慮して描画位置を決定
+        const finalShadowDrawX = photoX - shapeBaseXonOffscreen + userShadowOffsetX;
+        const finalShadowDrawY = photoY - shapeBaseYonOffscreen + userShadowOffsetY;
 
-        // 3. メインCanvasにオフスクリーンCanvasの内容（影のみのはず）を描画
-        //    描画位置は、写真本体の位置からオフスクリーンCanvasのマージン分を引いた位置
-        ctx.drawImage(offscreenCanvas, photoX - shapeOffsetXonOffscreen, photoY - shapeOffsetYonOffscreen);
+        ctx.drawImage(offscreenCanvas, finalShadowDrawX, finalShadowDrawY);
+
 
     } else if (frameSettings.shadowType === 'inner') {
         console.log("Applying Inner Shadow (revised logic) with settings:", shadowSettings);
