@@ -119,31 +119,36 @@ function createAndApplyClippingPath(ctx, frameSettings, photoX, photoY, photoWid
 // REMOVED: applyFrameEffects 関数は canvasRenderer.js 側の描画順序制御に役割を移譲
 
 function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx) {
-    // frameSettings.shadowEnabled のチェックは呼び出し元(canvasRenderer.js)で行われている
-    if (!shadowSettings) {
-        console.warn("applyShadow: shadowSettings is undefined or null.");
+    // shadowEnabled のチェックは呼び出し元(canvasRenderer.js)で行われている。
+    // shadowSettings は共通化された frameSettings.shadowParams が渡ってくる。
+    if (!shadowSettings || typeof shadowSettings.offsetX !== 'number') {
+        console.warn("applyShadow: Invalid or missing shadowParams.", shadowSettings);
         return;
     }
 
     if (frameSettings.shadowType === 'drop') {
-        console.log("Applying Drop Shadow (Offscreen V3 - based on inner shadow logic) with settings:", shadowSettings);
-        const userShadowOffsetX = (shadowSettings.offsetX / 100) * photoShortSidePx;
-        const userShadowOffsetY = (shadowSettings.offsetY / 100) * photoShortSidePx;
+        console.log("Applying Drop Shadow (Common Params) with settings:", shadowSettings);
+        const userShadowOffsetX = (shadowSettings.offsetX / 100) * photoShortSidePx; // 共通パラメータから取得
+        const userShadowOffsetY = (shadowSettings.offsetY / 100) * photoShortSidePx; // 共通パラメータから取得
         const blurRadius = Math.max(0, (shadowSettings.blur / 100) * photoShortSidePx);
-        const spreadRadius = (shadowSettings.spread !== undefined ? (shadowSettings.spread / 100) * photoShortSidePx : 0);
-        const shadowColorWithUserAlpha = shadowSettings.color; // ユーザーが指定した色（RGBA文字列を想定）
+        const spreadRadius = (shadowSettings.effectRangePercent / 100) * photoShortSidePx; // ★共通の effectRangePercent を使用
+        const shadowColor = shadowSettings.color; // 共通パラメータから取得
 
         if (photoWidth <= 0 || photoHeight <= 0) return;
 
-        // 影の描画に必要なマージンを計算
-        const shadowMargin = Math.abs(userShadowOffsetX) + Math.abs(userShadowOffsetY) + (blurRadius * 2) + Math.abs(spreadRadius) + 5; // ぼかしとオフセット、スプレッドを考慮
+        const blurSafetyMargin = blurRadius * 2;
+        const offscreenMargin = Math.max(0, Math.abs(userShadowOffsetX)) +
+            Math.max(0, Math.abs(userShadowOffsetY)) +
+            blurSafetyMargin +
+            Math.max(0, spreadRadius) + // spreadRadiusは常に正なのでMath.abs不要
+            10;
 
-        const offscreenWidth = Math.round(photoWidth + shadowMargin * 2);
-        const offscreenHeight = Math.round(photoHeight + shadowMargin * 2);
+        const offscreenWidth = Math.round(photoWidth + offscreenMargin * 2);
+        const offscreenHeight = Math.round(photoHeight + offscreenMargin * 2);
 
         // オフスクリーンCanvas上で写真形状を描画する際の中心オフセット
-        const shapeDrawXonOffscreen = shadowMargin;
-        const shapeDrawYonOffscreen = shadowMargin;
+        const shapeDrawXonOffscreen = offscreenMargin;
+        const shapeDrawYonOffscreen = offscreenMargin;
 
         const offscreenCanvas = document.createElement('canvas');
         offscreenCanvas.width = offscreenWidth;
@@ -173,7 +178,7 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
             } else {
                 offCtx.rect(spreadPhotoXonOffscreen, spreadPhotoYonOffscreen, spreadPhotoWidth, spreadPhotoHeight);
             }
-            offCtx.fillStyle = shadowColorWithUserAlpha; // ★ユーザー指定の影の色で塗りつぶす
+            offCtx.fillStyle = shadowColor; // ★共通の影の色で塗りつぶす
             offCtx.fill();
         }
 
@@ -203,13 +208,12 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
         ctx.drawImage(offscreenCanvas, finalDrawX, finalDrawY);
 
     } else if (frameSettings.shadowType === 'inner') {
-        console.log("Applying Inner Shadow (revised logic) with settings:", shadowSettings);
-
+        console.log("Applying Inner Shadow (Common Params) with settings:", shadowSettings);
+        // 共通パラメータ shadowParams を使用
         const blurAmountPx = (shadowSettings.blur / 100) * photoShortSidePx;
         const offsetXpx = (shadowSettings.offsetX / 100) * photoShortSidePx;
         const offsetYpx = (shadowSettings.offsetY / 100) * photoShortSidePx;
-        // spreadPercent をピクセル値に変換
-        const spreadPx = (shadowSettings.spreadPercent / 100) * photoShortSidePx;
+        const spreadPx = (shadowSettings.effectRangePercent / 100) * photoShortSidePx; // ★共通の effectRangePercent を使用
 
         if (photoWidth <= 0 || photoHeight <= 0) return;
 
@@ -223,7 +227,7 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
         }
 
         // ステップ2a: オフスクリーン全体を影の色で塗りつぶす
-        offCtx.fillStyle = shadowSettings.color;
+        offCtx.fillStyle = shadowSettings.color;// 共通の影の色を使用
         offCtx.fillRect(0, 0, photoWidth, photoHeight);
 
         // ステップ2b: オフセットした写真の形状でくり抜く (destination-out)

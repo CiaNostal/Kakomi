@@ -56,10 +56,10 @@ export const controlsConfig = {
     frameShadowType: { defaultValue: 'drop' },   // ラジオボタンまたはselect用 ('none', 'drop', 'inner')
 
     // 共通の影パラメータ用UI定義
-    frameShadowOffsetX: { defaultValue: 0, min: -25, max: 25, step: 1 },  // % (共通化後のオフセットXのデフォルトを0に)
-    frameShadowOffsetY: { defaultValue: 0, min: -25, max: 25, step: 1 },  // % (共通化後のオフセットYのデフォルトを0に)
-    frameShadowBlur: { defaultValue: 5, min: 0, max: 30, step: 0.1 },     // %
-    frameShadowEffectRange: { defaultValue: 0, min: 0, max: 20, step: 1 }, // % (新しい「効果の範囲」、正の値のみ)
+    frameShadowOffsetX: { defaultValue: 0, min: -25, max: 25, step: 0.2 },  // % (共通化後のオフセットXのデフォルトを0に)
+    frameShadowOffsetY: { defaultValue: 0, min: -25, max: 25, step: 0.2 },  // % (共通化後のオフセットYのデフォルトを0に)
+    frameShadowBlur: { defaultValue: 5, min: 0, max: 10, step: 0.1 },     // %
+    frameShadowEffectRange: { defaultValue: 0, min: 0, max: 10, step: 0.1 }, // % (新しい「効果の範囲」、正の値のみ)
     frameShadowColor: { defaultValue: 'rgba(0,0,0,0.5)' }, // カラーピッカー用 (共通の初期色)
 
     // 縁取り用

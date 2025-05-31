@@ -56,7 +56,8 @@ export function drawPreview(currentState, previewCanvas, previewCtx) {
 
         // 2. ドロップシャドウ描画 (写真本体より先)
         if (currentState.frameSettings.shadowEnabled && currentState.frameSettings.shadowType === 'drop') {
-            applyShadow(ctx, currentState.frameSettings.dropShadow, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
+            // applyShadow(ctx, currentState.frameSettings.dropShadow, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
+            applyShadow(ctx, currentState.frameSettings.shadowParams, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
         }
 
         // 3. 写真のクリッピングパス設定と適用 (角丸・超楕円)
@@ -70,8 +71,8 @@ export function drawPreview(currentState, previewCanvas, previewCtx) {
 
         // 5. インナーシャドウ描画 (クリッピングされた写真の上に合成)
         if (currentState.frameSettings.shadowEnabled && currentState.frameSettings.shadowType === 'inner') {
-            // applyShadow がインナーシャドウロジックを持つように frameRenderer.js を改修する必要がある
-            applyShadow(ctx, currentState.frameSettings.innerShadow, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
+            // applyShadow(ctx, currentState.frameSettings.innerShadow, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
+            applyShadow(ctx, currentState.frameSettings.shadowParams, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
         }
 
         // 6. 縁取りの描画 (クリッピングパスに沿って)
@@ -130,7 +131,8 @@ export function renderFinal(currentState) {
 
         // 2. ドロップシャドウ描画
         if (currentState.frameSettings.shadowEnabled && currentState.frameSettings.shadowType === 'drop') {
-            applyShadow(ctx, currentState.frameSettings.dropShadow, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
+            // applyShadow(ctx, currentState.frameSettings.dropShadow, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
+            applyShadow(ctx, currentState.frameSettings.shadowParams, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
         }
 
         // 3. 写真のクリッピングパス設定と適用
@@ -144,7 +146,8 @@ export function renderFinal(currentState) {
 
         // 5. インナーシャドウ描画
         if (currentState.frameSettings.shadowEnabled && currentState.frameSettings.shadowType === 'inner') {
-            applyShadow(ctx, currentState.frameSettings.innerShadow, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
+            // applyShadow(ctx, currentState.frameSettings.innerShadow, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
+            applyShadow(ctx, currentState.frameSettings.shadowParams, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
         }
 
         // 6. 縁取りの描画
