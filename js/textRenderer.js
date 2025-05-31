@@ -74,9 +74,18 @@ function drawDateText(ctx, dateSettings, exifDateTimeString, basePhotoShortSideP
     const fontSizePx = (dateSettings.size / 100) * basePhotoShortSidePx; // 渡された基準長で計算
     if (fontSizePx <= 0) return; // フォントサイズが0以下なら描画しない
 
+    console.log(`[TextRenderer-drawDateText] Attempting to set font: <span class="math-inline">\{fontSizePx\}px "</span>{dateSettings.font}"`); // ★ログ追加
     ctx.save();
-    ctx.font = `${fontSizePx}px "${dateSettings.font}"`; // フォントファミリーは文字列として渡す
-    ctx.fillStyle = dateSettings.color;
+    // dateSettings.font には、例えば "'Roboto', sans-serif" のようなCSSで使えるフォントファミリー名が入っていることを期待
+    const expectedFontFamily = dateSettings.font;
+    const fontToSet = `${fontSizePx}px ${expectedFontFamily}`; // ★引用符の扱いに注意
+
+    console.log(`[TextRenderer-drawDateText] Attempting to set font with family: "${expectedFontFamily}"`);
+    console.log(`[TextRenderer-drawDateText] Full font string to set: "${fontToSet}"`);
+
+    ctx.font = fontToSet;
+    console.log("[TextRenderer-drawDateText] ctx.font actually set to:", ctx.font); // 実際にセットされた値を確認
+        ctx.fillStyle = dateSettings.color;
 
     // テキストの描画基準点を決定 (textAlign と textBaseline)
     // position の例: 'bottom-right' -> textAlign='right', textBaseline='bottom' (または'alphabetic')
@@ -415,44 +424,39 @@ let fontsLoadPromise = null;
  * @param {Array} fontFamilies - 読み込むフォントファミリーの配列
  * @returns {Promise} フォント読み込み完了を示すPromise
  */
+// js/textRenderer.js の loadGoogleFonts 関数を修正
 function loadGoogleFonts(fontFamilies) {
-    // 既に読み込み済みのフォントをフィルタリング
     const fontsToLoad = fontFamilies.filter(font => !loadedFonts.has(font));
-
     if (fontsToLoad.length === 0) {
+        console.log("[TextRenderer-loadGoogleFonts] All requested fonts already loaded or nothing to load:", fontFamilies);
         return Promise.resolve();
     }
+    // fontsLoadPromise の重複実行を防ぐロジックは前回のもので良いが、
+    // 複数の異なるフォントセットを同時にリクエストする場合の考慮は必要。
+    // 現状は一度に1フォントファミリー名(の配列)を要求する形。
+    console.log("[TextRenderer-loadGoogleFonts] Attempting to load fonts:", fontsToLoad);
 
-    // 既に読み込み中のPromiseがあればそれを返す
-    if (fontsLoadPromise) {
-        return fontsLoadPromise;
-    }
-
-    // Google Fonts APIのURLを構築
-    const fontQuery = fontsToLoad.map(font => {
-        // スペースを+に置き換え
-        return font.replace(/ /g, '+');
-    }).join('|');
-
+    const fontQuery = fontsToLoad.map(font => font.replace(/ /g, '+')).join('|');
     const link = document.createElement('link');
     link.rel = 'stylesheet';
     link.href = `https://fonts.googleapis.com/css2?family=${fontQuery}&display=swap`;
 
-    // フォント読み込みを待つPromiseを作成
+    console.log("[TextRenderer-loadGoogleFonts] Appending link element to head:", link.href); // ★ログ追加
+    document.head.appendChild(link); // 先にheadに追加
+
     fontsLoadPromise = new Promise((resolve, reject) => {
         link.onload = () => {
-            // 読み込んだフォントを記録
+            console.log("[TextRenderer-loadGoogleFonts] Fonts loaded successfully via link.onload:", fontsToLoad); // ★ログ追加
             fontsToLoad.forEach(font => loadedFonts.add(font));
-            fontsLoadPromise = null;
+            fontsLoadPromise = null; // 次のロードのためにリセット
             resolve();
         };
-        link.onerror = () => {
+        link.onerror = (err) => { // errオブジェクトもログに出す
+            console.error("[TextRenderer-loadGoogleFonts] Failed to load fonts via link.onerror:", fontsToLoad, err); // ★ログ追加
             fontsLoadPromise = null;
-            reject(new Error('Googleフォントの読み込みに失敗しました。'));
+            reject(new Error(`Googleフォント (${fontsToLoad.join(', ')}) の読み込みに失敗しました。`));
         };
     });
-
-    document.head.appendChild(link);
     return fontsLoadPromise;
 }
 

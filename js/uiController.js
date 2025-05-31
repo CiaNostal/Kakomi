@@ -1,6 +1,7 @@
 // js/uiController.js
 import { getState, updateState } from './stateManager.js';
-import { controlsConfig } from './uiDefinitions.js';
+import { controlsConfig, googleFontsOptions } from './uiDefinitions.js'; // ★ googleFontsOptions をインポート
+import { loadGoogleFonts } from './textRenderer.js'; // ★ loadGoogleFonts をインポート
 // requestRedraw は main.js からコールバックとして渡される
 
 export const uiElements = {
@@ -109,6 +110,26 @@ export const uiElements = {
     textExifOffsetYValueSpan: document.getElementById('textExifOffsetYValue'),
 };
 
+// ヘルパー関数: フォント選択セレクトボックスにオプションを設定
+function populateFontSelect(selectElement, selectedFontFamily) {
+    if (!selectElement) return;
+    selectElement.innerHTML = ''; // 既存のオプションをクリア
+
+    googleFontsOptions.forEach(font => {
+        const option = document.createElement('option');
+        option.value = font.family; // stateに保存するのはfont-family文字列
+        option.textContent = font.name;
+        // CSSで実際に適用されるフォントをoptionにも適用して見た目を分かりやすくする（オプション）
+        // option.style.fontFamily = font.family; 
+        selectElement.appendChild(option);
+    });
+    // 保存されているフォントファミリーで初期選択
+    if (selectedFontFamily) {
+        selectElement.value = selectedFontFamily;
+    }
+}
+
+
 export function initializeUIFromState() {
     const state = getState();
 
@@ -181,7 +202,8 @@ export function initializeUIFromState() {
     const tds = state.textSettings.date;
     if (uiElements.textDateEnabledCheckbox) uiElements.textDateEnabledCheckbox.checked = tds.enabled;
     if (uiElements.textDateFormatSelect) uiElements.textDateFormatSelect.value = tds.format;
-    if (uiElements.textDateFontSelect) uiElements.textDateFontSelect.value = tds.font;
+    // フォントセレクタの初期化
+    populateFontSelect(uiElements.textDateFontSelect, tds.font);
     setupInputAttributesAndValue(uiElements.textDateSizeSlider, 'textDateSize', tds.size);
     if (uiElements.textDateColorInput) uiElements.textDateColorInput.value = tds.color;
     if (uiElements.textDatePositionSelect) uiElements.textDatePositionSelect.value = tds.position;
@@ -201,10 +223,10 @@ export function initializeUIFromState() {
         { el: uiElements.textExifItemFocalLengthCheckbox, key: 'FocalLength' },
         { el: uiElements.textExifItemLensModelCheckbox, key: 'LensModel' },
     ];
-    exifItemCheckboxes.forEach(item => {
+    exifItemCheckboxes.forEach(item => { // ★ el が null でないことを確認
         if (item.el) item.el.checked = tes.items.includes(item.key);
     });
-    if (uiElements.textExifFontSelect) uiElements.textExifFontSelect.value = tes.font;
+    populateFontSelect(uiElements.textExifFontSelect, tes.font); // フォントセレクタの初期化
     setupInputAttributesAndValue(uiElements.textExifSizeSlider, 'textExifSize', tes.size);
     if (uiElements.textExifColorInput) uiElements.textExifColorInput.value = tes.color;
     if (uiElements.textExifPositionSelect) uiElements.textExifPositionSelect.value = tes.position;
@@ -518,8 +540,23 @@ export function setupEventListeners(redrawCallback) {
 
     // --- 文字入力タブ - 撮影日 ---
     addOptionChangeListener(uiElements.textDateEnabledCheckbox, 'textSettings', 'date', 'enabled');
-    addOptionChangeListener(uiElements.textDateFormatSelect, 'textSettings', 'date', 'format');
-    addOptionChangeListener(uiElements.textDateFontSelect, 'textSettings', 'date', 'font');
+    addOptionChangeListener(uiElements.textDateFormatSelect, 'textSettings', 'date', 'format'); // select
+    if (uiElements.textDateFontSelect) { // フォントセレクタのイベントリスナー
+        uiElements.textDateFontSelect.addEventListener('change', async (e) => {
+            const selectedFontFamily = e.target.value;
+            updateState({ textSettings: { date: { font: selectedFontFamily } } });
+            const selectedFontOption = googleFontsOptions.find(f => f.family === selectedFontFamily);
+            if (selectedFontOption && selectedFontOption.googleFont) {
+                try {
+                    await loadGoogleFonts([selectedFontOption.name]); // loadGoogleFonts はフォント名(name)の配列を期待する
+                    console.log(`${selectedFontOption.name} loaded for date.`);
+                } catch (error) {
+                    console.error("Error loading Google Font for date:", error);
+                }
+            }
+            redrawCallback();
+        });
+    }
     addNumericInputListener(uiElements.textDateSizeSlider, 'textDateSize', 'textSettings', 'date', 'size');
     addColorInputListener(uiElements.textDateColorInput, 'textSettings', 'date', 'color');
     addOptionChangeListener(uiElements.textDatePositionSelect, 'textSettings', 'date', 'position');
@@ -566,7 +603,22 @@ export function setupEventListeners(redrawCallback) {
             });
         }
     });
-    addOptionChangeListener(uiElements.textExifFontSelect, 'textSettings', 'exif', 'font');
+    if (uiElements.textExifFontSelect) { // フォントセレクタのイベントリスナー
+        uiElements.textExifFontSelect.addEventListener('change', async (e) => {
+            const selectedFontFamily = e.target.value;
+            updateState({ textSettings: { exif: { font: selectedFontFamily } } });
+            const selectedFontOption = googleFontsOptions.find(f => f.family === selectedFontFamily);
+            if (selectedFontOption && selectedFontOption.googleFont) {
+                try {
+                    await loadGoogleFonts([selectedFontOption.name]);
+                    console.log(`${selectedFontOption.name} loaded for Exif.`);
+                } catch (error) {
+                    console.error("Error loading Google Font for Exif:", error);
+                }
+            }
+            redrawCallback();
+        });
+    }
     addNumericInputListener(uiElements.textExifSizeSlider, 'textExifSize', 'textSettings', 'exif', 'size');
     addColorInputListener(uiElements.textExifColorInput, 'textSettings', 'exif', 'color');
     addOptionChangeListener(uiElements.textExifPositionSelect, 'textSettings', 'exif', 'position');
