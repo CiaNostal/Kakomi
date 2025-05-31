@@ -55,19 +55,12 @@ export const controlsConfig = {
     frameShadowEnabled: { defaultValue: false }, // チェックボックス
     frameShadowType: { defaultValue: 'drop' },   // ラジオボタンまたはselect用 ('none', 'drop', 'inner')
 
-    // ドロップシャドウ用
-    frameDropShadowOffsetX: { defaultValue: 2, min: -25, max: 25, step: 1 },  // %
-    frameDropShadowOffsetY: { defaultValue: 2, min: -25, max: 25, step: 1 },  // %
-    frameDropShadowBlur: { defaultValue: 5, min: 0, max: 10, step: 0.1 },     // %
-    frameDropShadowSpread: { defaultValue: 0, min: -20, max: 20, step: 1 }, // %
-    frameDropShadowColor: { defaultValue: 'rgba(0,0,0,0.5)' },
-
-    // インナーシャドウ用 (UIは後で実装するとしても、定義だけは先行可能)
-    frameInnerShadowOffsetX: { defaultValue: 0, min: -50, max: 50, step: 1 }, // 新規追加
-    frameInnerShadowOffsetY: { defaultValue: 0, min: -50, max: 50, step: 1 }, // 新規追加
-    frameInnerShadowBlur: { defaultValue: 5, min: 0, max: 10, step: 0.1 },     // %
-    frameInnerShadowSpreadPercent: { defaultValue: 0, min: 0, max: 10, step: 0.1 }, // % (マイナスで細く、プラスで太く)
-    frameInnerShadowColor: { defaultValue: 'rgba(0,0,0,0.75)' },
+    // 共通の影パラメータ用UI定義
+    frameShadowOffsetX: { defaultValue: 0, min: -25, max: 25, step: 1 },  // % (共通化後のオフセットXのデフォルトを0に)
+    frameShadowOffsetY: { defaultValue: 0, min: -25, max: 25, step: 1 },  // % (共通化後のオフセットYのデフォルトを0に)
+    frameShadowBlur: { defaultValue: 5, min: 0, max: 30, step: 0.1 },     // %
+    frameShadowEffectRange: { defaultValue: 0, min: 0, max: 20, step: 1 }, // % (新しい「効果の範囲」、正の値のみ)
+    frameShadowColor: { defaultValue: 'rgba(0,0,0,0.5)' }, // カラーピッカー用 (共通の初期色)
 
     // 縁取り用
     frameBorderEnabled: { defaultValue: false }, // チェックボックス

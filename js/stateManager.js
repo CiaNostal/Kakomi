@@ -48,23 +48,15 @@ let editState = {
         shadowEnabled: false,   // 影全体の有効/無効
         shadowType: 'drop',     // 'none', 'drop' (外側), 'inner' (内側)
 
-        // ドロップシャドウ（外側）用設定
-        dropShadow: {
-            offsetX: 2,      // % (写真短辺比)
-            offsetY: 2,      // %
-            blur: 5,         // %
-            spread: 0,       // % (描画方法で工夫が必要なパラメータ)
-            color: 'rgba(0,0,0,0.5)',
-            // opacity: 0.5, // 色のアルファで代用するか、別途持つか検討
-        },
-
-        // インナーシャドウ（内側）用設定 (後で実装するパラメータの例)
-        innerShadow: {
+        // 共通の影パラメータ
+        // effectRangePercent は、ドロップシャドウでは従来の spread (広がり)、
+        // インナーシャドウでは従来の spreadPercent (太さ/深さ) に対応
+        shadowParams: {
             offsetX: 0, // インナーシャドウの場合、オフセットは通常不要か、別の意味合いになる
             offsetY: 0,
-            blur: 5,         // %
-            spreadPercent: 0, // ADDED: インナーシャドウの広がり/太さ (% photoShortSidePx), デフォルト0
-            color: 'rgba(0,0,0,0.75)',
+            blur: 2,         // %
+            effectRangePercent: 2, // ★共通化された「効果の範囲」(% photoShortSidePx), デフォルト0
+            color: 'rgba(0,0,0,0.5)', // 色も共通化 (初期値はドロップシャドウに合わせるか別途検討)
             // opacity: 0.75,
         },
 
@@ -331,19 +323,12 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
         superellipseN: 4,
         shadowEnabled: false,
         shadowType: 'drop',
-        dropShadow: {
-            offsetX: 2,
-            offsetY: 2,
-            blur: 5,
-            spread: 0,
+        shadowParams: { // 共通パラメータとしてリセット
+            offsetX: 0,
+            offsetY: 0,
+            blur: 2,
+            effectRangePercent: 2, // 新しい共通パラメータ
             color: 'rgba(0,0,0,0.5)',
-        },
-        innerShadow: { // インナーシャドウのデフォルト値も定義しておく
-            offsetX: 0, // デフォルト値を確認・設定
-            offsetY: 0, // デフォルト値を確認・設定
-            spreadPercent: 0, // ★追加: innerShadow の spreadPercent のデフォルト値
-            blur: 5,
-            color: 'rgba(0,0,0,0.75)',
         },
         border: {
             enabled: false,
