@@ -68,3 +68,16 @@ export const controlsConfig = {
     frameBorderColor: { defaultValue: '#000000' },
     frameBorderStyle: { defaultValue: 'solid' }, // select用
 };
+// js/uiDefinitions.js の末尾などに追加
+export const googleFontsOptions = [
+    { name: 'Arial', family: 'Arial, sans-serif' }, // システムフォントの例
+    { name: 'Helvetica', family: 'Helvetica, sans-serif' }, // システムフォントの例
+    { name: 'Times New Roman', family: '"Times New Roman", serif' }, // システムフォントの例
+    { name: 'Noto Sans JP', family: "'Noto Sans JP', sans-serif", googleFont: true },
+    { name: 'Roboto', family: "'Roboto', sans-serif", googleFont: true },
+    { name: 'Montserrat', family: "'Montserrat', sans-serif", googleFont: true },
+    { name: 'Merriweather', family: "'Merriweather', serif", googleFont: true },
+    { name: 'Yuji Syuku', family: "'Yuji Syuku', serif", googleFont: true }, // 例：日本語手書き風
+    { name: 'Potta One', family: "'Potta One', cursive", googleFont: true }, // 例：デザインフォント
+    // 他にも必要なフォントを追加
+];
