@@ -126,59 +126,59 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
     }
 
     if (frameSettings.shadowType === 'drop') {
-        // console.log("Applying Drop Shadow (Offscreen method) with settings:", shadowSettings);
-        // console.log("--- applyShadow (drop) ---");
-        // console.log("shadowSettings:", JSON.parse(JSON.stringify(shadowSettings)));
-        // console.log("frameSettings (for corner):", JSON.parse(JSON.stringify(frameSettings)));
-        // console.log(`photoX: ${photoX}, photoY: ${photoY}, photoWidth: ${photoWidth}, photoHeight: ${photoHeight}, photoShortSidePx: ${photoShortSidePx}`);
-
+        console.log("Applying Drop Shadow (Offscreen V3 - based on inner shadow logic) with settings:", shadowSettings);
         const userShadowOffsetX = (shadowSettings.offsetX / 100) * photoShortSidePx;
         const userShadowOffsetY = (shadowSettings.offsetY / 100) * photoShortSidePx;
-        const blurRadius = Math.max(0, (shadowSettings.blur / 100) * photoShortSidePx); // ぼかしは0以上
+        const blurRadius = Math.max(0, (shadowSettings.blur / 100) * photoShortSidePx);
         const spreadRadius = (shadowSettings.spread !== undefined ? (shadowSettings.spread / 100) * photoShortSidePx : 0);
-        const shadowColor = shadowSettings.color; // ユーザー指定の影の色 (RGBA文字列を想定)
+        const shadowColorWithUserAlpha = shadowSettings.color; // ユーザーが指定した色（RGBA文字列を想定）
 
-        // 影の描画範囲を考慮してオフスクリーンCanvasのサイズと描画オフセットを決定
-        const blurSafetyMargin = blurRadius * 2; // ぼかしが広がるマージン (半径の2倍程度見ておく)
-        const offscreenMargin = Math.max(Math.abs(userShadowOffsetX), Math.abs(userShadowOffsetY)) + blurSafetyMargin + Math.abs(spreadRadius) + 5; // 若干の余裕
+        if (photoWidth <= 0 || photoHeight <= 0) return;
 
-        const offscreenWidth = photoWidth + offscreenMargin * 2;
-        const offscreenHeight = photoHeight + offscreenMargin * 2;
+        // 影の描画に必要なマージンを計算
+        const shadowMargin = Math.abs(userShadowOffsetX) + Math.abs(userShadowOffsetY) + (blurRadius * 2) + Math.abs(spreadRadius) + 5; // ぼかしとオフセット、スプレッドを考慮
 
-        // 写真形状をオフスクリーンCanvasの中央に描くためのオフセット (これが (0,0) 相当になる)
-        const shapeBaseXonOffscreen = offscreenMargin;
-        const shapeBaseYonOffscreen = offscreenMargin;
+        const offscreenWidth = Math.round(photoWidth + shadowMargin * 2);
+        const offscreenHeight = Math.round(photoHeight + shadowMargin * 2);
+
+        // オフスクリーンCanvas上で写真形状を描画する際の中心オフセット
+        const shapeDrawXonOffscreen = shadowMargin;
+        const shapeDrawYonOffscreen = shadowMargin;
 
         const offscreenCanvas = document.createElement('canvas');
         offscreenCanvas.width = offscreenWidth;
         offscreenCanvas.height = offscreenHeight;
         const offCtx = offscreenCanvas.getContext('2d');
         if (!offCtx) {
-            console.error("Failed to get offscreen context for drop shadow"); return;
+            console.error("Failed to get offscreen context for drop shadow");
+            return;
         }
-        // console.log(`Offscreen canvas created: ${offscreenWidth}x${offscreenHeight}`);
 
-        // ステップ1: オフスクリーンに「影の元」となる形状をスプレッドを考慮して描画 (色は最終的な影の色で)
+        // 1. オフスクリーンに「スプレッドを適用した写真の形状」を、最終的な影の色で不透明に描画する
+        //    これが影のベース形状となる。
         offCtx.beginPath();
-        const objectX = shapeBaseXonOffscreen + (spreadRadius < 0 ? -spreadRadius : 0);
-        const objectY = shapeBaseYonOffscreen + (spreadRadius < 0 ? -spreadRadius : 0);
-        const objectWidth = photoWidth + Math.max(0, spreadRadius * 2);
-        const objectHeight = photoHeight + Math.max(0, spreadRadius * 2);
+        const spreadPhotoWidth = photoWidth + spreadRadius * 2;
+        const spreadPhotoHeight = photoHeight + spreadRadius * 2;
+        // スプレッド適用後の形状をオフスクリーンCanvasの中央に配置するための開始座標
+        const spreadPhotoXonOffscreen = shapeDrawXonOffscreen - spreadRadius;
+        const spreadPhotoYonOffscreen = shapeDrawYonOffscreen - spreadRadius;
 
-        if (frameSettings.cornerStyle === 'superellipse') {
-            createSuperellipsePath(offCtx, objectX, objectY, objectWidth, objectHeight, frameSettings.superellipseN);
-        } else if (frameSettings.cornerStyle === 'rounded' && frameSettings.cornerRadiusPercent > 0) {
-            let radius = (frameSettings.cornerRadiusPercent / 100) * photoShortSidePx;
-            radius = Math.max(0, radius + spreadRadius);
-            roundedRect(offCtx, objectX, objectY, objectWidth, objectHeight, radius);
-        } else {
-            offCtx.rect(objectX, objectY, objectWidth, objectHeight);
+        if (spreadPhotoWidth > 0 && spreadPhotoHeight > 0) {
+            if (frameSettings.cornerStyle === 'superellipse') {
+                createSuperellipsePath(offCtx, spreadPhotoXonOffscreen, spreadPhotoYonOffscreen, spreadPhotoWidth, spreadPhotoHeight, frameSettings.superellipseN);
+            } else if (frameSettings.cornerStyle === 'rounded' && frameSettings.cornerRadiusPercent > 0) {
+                let radius = (frameSettings.cornerRadiusPercent / 100) * photoShortSidePx;
+                radius = Math.max(0, radius + spreadRadius); // スプレッドに応じて半径も調整
+                roundedRect(offCtx, spreadPhotoXonOffscreen, spreadPhotoYonOffscreen, spreadPhotoWidth, spreadPhotoHeight, radius);
+            } else {
+                offCtx.rect(spreadPhotoXonOffscreen, spreadPhotoYonOffscreen, spreadPhotoWidth, spreadPhotoHeight);
+            }
+            offCtx.fillStyle = shadowColorWithUserAlpha; // ★ユーザー指定の影の色で塗りつぶす
+            offCtx.fill();
         }
-        offCtx.fillStyle = shadowColor; // ★最終的な影の色で塗りつぶす
-        offCtx.fill();
 
-        // ステップ2: オフスクリーンCanvasにぼかしフィルタを適用 (影のオフセットはまだ適用しない)
-        //           一時Canvasを使って、ぼかし後の結果を元のオフスクリーンCanvasに戻す
+        // 2. オフスクリーンCanvasにぼかしを適用する
+        //    一時Canvasを使って、ぼかし後の結果を元のオフスクリーンCanvasに戻す
         if (blurRadius > 0.1) {
             const tempBlurCanvas = document.createElement('canvas');
             tempBlurCanvas.width = offscreenWidth;
@@ -193,15 +193,14 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
             }
         }
 
-        // ステップ3: ぼかされた影を、メインCanvasの正しい位置にオフセットを考慮して描画
-        // メインCanvasの写真の左上座標 (photoX, photoY) を基準に、
-        // オフスクリーンCanvas上での形状の描画開始位置 (shapeBaseXonOffscreen, shapeBaseYonOffscreen) と
-        // ユーザー指定の影のオフセット (userShadowOffsetX, userShadowOffsetY) を考慮して描画位置を決定
-        const finalShadowDrawX = photoX - shapeBaseXonOffscreen + userShadowOffsetX;
-        const finalShadowDrawY = photoY - shapeBaseYonOffscreen + userShadowOffsetY;
+        // 3. ぼかされた影を、メインCanvasの正しい位置にユーザー指定のオフセットを加えて描画
+        //    メインCanvasの写真の左上座標 (photoX, photoY) を基準とし、
+        //    オフスクリーンCanvas上での形状の描画開始位置 (shapeDrawXonOffscreen) と
+        //    ユーザー指定の影のオフセット (userShadowOffsetX, userShadowOffsetY) を考慮
+        const finalDrawX = photoX - shapeDrawXonOffscreen + userShadowOffsetX;
+        const finalDrawY = photoY - shapeDrawYonOffscreen + userShadowOffsetY;
 
-        ctx.drawImage(offscreenCanvas, finalShadowDrawX, finalShadowDrawY);
-
+        ctx.drawImage(offscreenCanvas, finalDrawX, finalDrawY);
 
     } else if (frameSettings.shadowType === 'inner') {
         console.log("Applying Inner Shadow (revised logic) with settings:", shadowSettings);
