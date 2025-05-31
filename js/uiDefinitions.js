@@ -10,14 +10,14 @@
 export const controlsConfig = {
     // レイアウト設定タブ
     outputAspectRatio: { defaultValue: '1:1' }, // select要素のデフォルト選択値
-    baseMarginPercent: { defaultValue: 5, min: 0, max: 100, step: 1 }, // number input
+    baseMarginPercent: { defaultValue: 5, min: 0, max: 100, step: 0.5 }, // number input
     photoPosX: { defaultValue: 0.5, min: 0, max: 1, step: 0.01 }, // range input
     photoPosY: { defaultValue: 0.5, min: 0, max: 1, step: 0.01 }, // range input
     // 背景編集タブ
     backgroundType: { defaultValue: 'color' }, // radio button のデフォルト選択値
     backgroundColor: { defaultValue: '#ffffff' }, // color input
     bgScale: { defaultValue: 2.0, min: 1, max: 5, step: 0.1 }, // range input
-    bgBlur: { defaultValue: 3, min: 0, max: 20, step: 0.5 },  // range input
+    bgBlur: { defaultValue: 3, min: 0, max: 40, step: 0.5 },  // range input
     bgBrightness: { defaultValue: 100, min: 0, max: 150, step: 1 }, // range input
     bgSaturation: { defaultValue: 100, min: 0, max: 150, step: 1 }, // range input
     // 出力タブ
@@ -27,21 +27,21 @@ export const controlsConfig = {
     textDateEnabled: { defaultValue: false }, // チェックボックス
     textDateFormat: { defaultValue: 'YYYY/MM/DD' }, // select要素用
     textDateFont: { defaultValue: 'Arial' }, // select要素用 (将来的にはGoogle Fontsと連携)
-    textDateSize: { defaultValue: 2, min: 0.1, max: 5, step: 0.1 }, // % (写真短辺比)
+    textDateSize: { defaultValue: 2, min: 0.1, max: 10, step: 0.1 }, // % (写真短辺比)
     textDateColor: { defaultValue: '#FFFFFF' }, // カラーピッカー
     textDatePosition: { defaultValue: 'bottom-right' }, // select要素用 (9箇所)
-    textDateOffsetX: { defaultValue: 2, min: -50, max: 50, step: 1 }, // %
-    textDateOffsetY: { defaultValue: 2, min: -50, max: 50, step: 1 }, // %
+    textDateOffsetX: { defaultValue: 2, min: -50, max: 50, step: 0.5 }, // %
+    textDateOffsetY: { defaultValue: 2, min: -50, max: 50, step: 0.5 }, // %
 
     // 文字入力タブ - Exif情報表示 
     textExifEnabled: { defaultValue: false }, // チェックボックス
     // textExifItems: // 表示項目選択は複数のチェックボックスになるため、個別にIDで管理 (controlsConfigには不要かも)
     textExifFont: { defaultValue: 'Arial' }, // select要素用
-    textExifSize: { defaultValue: 2, min: 1, max: 20, step: 0.5 }, // % (写真短辺比)
+    textExifSize: { defaultValue: 2, min: 0.1, max: 10, step: 0.1 }, // % (写真短辺比)
     textExifColor: { defaultValue: '#000000' }, // カラーピッカー
     textExifPosition: { defaultValue: 'bottom-left' }, // select要素用 (9箇所)
-    textExifOffsetX: { defaultValue: 2, min: -50, max: 50, step: 1 }, // %
-    textExifOffsetY: { defaultValue: 2, min: -50, max: 50, step: 1 }, // %
+    textExifOffsetX: { defaultValue: 2, min: -50, max: 50, step: 0.5 }, // %
+    textExifOffsetY: { defaultValue: 2, min: -50, max: 50, step: 0.5 }, // %
 
     // Exif表示項目選択用チェックボックスのデフォルト値 (uiControllerで直接参照する想定)
     // textExifItemMake: { defaultValue: true }, // 例
@@ -58,15 +58,15 @@ export const controlsConfig = {
     // ドロップシャドウ用
     frameDropShadowOffsetX: { defaultValue: 2, min: -25, max: 25, step: 1 },  // %
     frameDropShadowOffsetY: { defaultValue: 2, min: -25, max: 25, step: 1 },  // %
-    frameDropShadowBlur: { defaultValue: 5, min: 0, max: 30, step: 1 },     // %
+    frameDropShadowBlur: { defaultValue: 5, min: 0, max: 10, step: 0.1 },     // %
     frameDropShadowSpread: { defaultValue: 0, min: -20, max: 20, step: 1 }, // %
     frameDropShadowColor: { defaultValue: 'rgba(0,0,0,0.5)' },
 
     // インナーシャドウ用 (UIは後で実装するとしても、定義だけは先行可能)
     frameInnerShadowOffsetX: { defaultValue: 0, min: -50, max: 50, step: 1 }, // 新規追加
     frameInnerShadowOffsetY: { defaultValue: 0, min: -50, max: 50, step: 1 }, // 新規追加
-    frameInnerShadowBlur: { defaultValue: 5, min: 0, max: 30, step: 1 },     // %
-    frameInnerShadowSpreadPercent: { defaultValue: 0, min: -20, max: 20, step: 1 }, // % (マイナスで細く、プラスで太く)
+    frameInnerShadowBlur: { defaultValue: 5, min: 0, max: 10, step: 0.1 },     // %
+    frameInnerShadowSpreadPercent: { defaultValue: 0, min: 0, max: 10, step: 0.1 }, // % (マイナスで細く、プラスで太く)
     frameInnerShadowColor: { defaultValue: 'rgba(0,0,0,0.75)' },
 
     // 縁取り用

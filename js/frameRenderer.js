@@ -143,6 +143,11 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
         const baseRectWidth = photoWidth + 2 * spreadRadius;
         const baseRectHeight = photoHeight + 2 * spreadRadius;
         ctx.fillStyle = shadowSettings.color; // Or 'black' if shadowColor dictates the actual shadow
+        // 影を落とすための「物体」の色。影自体は shadowColor, shadowBlur などで描画される。
+        // 物体自体を見えなくするために、透明にするか、あるいはこの後の写真描画で
+        // 完全に隠れることを前提とする。ここでは念のため透明に近い色にする。
+        // ctx.fillStyle = 'rgba(0,0,0,0.001)'; // ほぼ透明な色で物体を描画（完全に透明だと影が出ない環境も考慮）
+
 
         if (frameSettings.cornerStyle === 'superellipse') {
             createSuperellipsePath(ctx, baseRectX, baseRectY, baseRectWidth, baseRectHeight, frameSettings.superellipseN);
