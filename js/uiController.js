@@ -53,26 +53,17 @@ export const uiElements = {
     frameShadowSettingsContainer: document.getElementById('frameShadowSettingsContainer'),
     frameShadowTypeDropRadio: document.getElementById('frameShadowTypeDrop'),
     frameShadowTypeInnerRadio: document.getElementById('frameShadowTypeInner'),
-    frameDropShadowSettingsContainer: document.getElementById('frameDropShadowSettingsContainer'),
-    frameDropShadowOffsetXSlider: document.getElementById('frameDropShadowOffsetX'),
-    frameDropShadowOffsetXValueSpan: document.getElementById('frameDropShadowOffsetXValue'),
-    frameDropShadowOffsetYSlider: document.getElementById('frameDropShadowOffsetY'),
-    frameDropShadowOffsetYValueSpan: document.getElementById('frameDropShadowOffsetYValue'),
-    frameDropShadowBlurSlider: document.getElementById('frameDropShadowBlur'),
-    frameDropShadowBlurValueSpan: document.getElementById('frameDropShadowBlurValue'),
-    frameDropShadowSpreadSlider: document.getElementById('frameDropShadowSpread'),
-    frameDropShadowSpreadValueSpan: document.getElementById('frameDropShadowSpreadValue'),
-    frameDropShadowColorInput: document.getElementById('frameDropShadowColor'),
-    frameInnerShadowSettingsContainer: document.getElementById('frameInnerShadowSettingsContainer'),
-    frameInnerShadowOffsetXSlider: document.getElementById('frameInnerShadowOffsetX'),
-    frameInnerShadowOffsetXValueSpan: document.getElementById('frameInnerShadowOffsetXValue'),
-    frameInnerShadowOffsetYSlider: document.getElementById('frameInnerShadowOffsetY'),
-    frameInnerShadowOffsetYValueSpan: document.getElementById('frameInnerShadowOffsetYValue'),
-    frameInnerShadowBlurSlider: document.getElementById('frameInnerShadowBlur'),
-    frameInnerShadowBlurValueSpan: document.getElementById('frameInnerShadowBlurValue'),
-    frameInnerShadowSpreadPercentSlider: document.getElementById('frameInnerShadowSpreadPercent'),
-    frameInnerShadowSpreadPercentValueSpan: document.getElementById('frameInnerShadowSpreadPercentValue'),
-    frameInnerShadowColorInput: document.getElementById('frameInnerShadowColor'),
+    // 共通の影パラメータUI要素への参照 (IDはindex.htmlの提案に合わせる)
+    commonShadowParamsContainer: document.getElementById('commonShadowParamsContainer'), // HTMLに追加した共通パラメータのコンテナ
+    frameShadowOffsetXSlider: document.getElementById('frameShadowOffsetX'),
+    frameShadowOffsetXValueSpan: document.getElementById('frameShadowOffsetXValue'),
+    frameShadowOffsetYSlider: document.getElementById('frameShadowOffsetY'),
+    frameShadowOffsetYValueSpan: document.getElementById('frameShadowOffsetYValue'),
+    frameShadowBlurSlider: document.getElementById('frameShadowBlur'),
+    frameShadowBlurValueSpan: document.getElementById('frameShadowBlurValue'),
+    frameShadowEffectRangeSlider: document.getElementById('frameShadowEffectRange'), // 旧spread/spreadPercent
+    frameShadowEffectRangeValueSpan: document.getElementById('frameShadowEffectRangeValue'),
+    frameShadowColorInput: document.getElementById('frameShadowColor'),
 
     frameBorderEnabledCheckbox: document.getElementById('frameBorderEnabled'),
     frameBorderDetailSettingsContainer: document.getElementById('frameBorderDetailSettingsContainer'),
@@ -174,17 +165,12 @@ export function initializeUIFromState() {
     if (uiElements.frameShadowTypeDropRadio) uiElements.frameShadowTypeDropRadio.checked = (fs.shadowType === 'drop');
     if (uiElements.frameShadowTypeInnerRadio) uiElements.frameShadowTypeInnerRadio.checked = (fs.shadowType === 'inner');
 
-    setupInputAttributesAndValue(uiElements.frameDropShadowOffsetXSlider, 'frameDropShadowOffsetX', fs.dropShadow.offsetX);
-    setupInputAttributesAndValue(uiElements.frameDropShadowOffsetYSlider, 'frameDropShadowOffsetY', fs.dropShadow.offsetY);
-    setupInputAttributesAndValue(uiElements.frameDropShadowBlurSlider, 'frameDropShadowBlur', fs.dropShadow.blur);
-    setupInputAttributesAndValue(uiElements.frameDropShadowSpreadSlider, 'frameDropShadowSpread', fs.dropShadow.spread);
-    if (uiElements.frameDropShadowColorInput) uiElements.frameDropShadowColorInput.value = fs.dropShadow.color;
-
-    setupInputAttributesAndValue(uiElements.frameInnerShadowOffsetXSlider, 'frameInnerShadowOffsetX', fs.innerShadow.offsetX);
-    setupInputAttributesAndValue(uiElements.frameInnerShadowOffsetYSlider, 'frameInnerShadowOffsetY', fs.innerShadow.offsetY);
-    setupInputAttributesAndValue(uiElements.frameInnerShadowBlurSlider, 'frameInnerShadowBlur', fs.innerShadow.blur);
-    setupInputAttributesAndValue(uiElements.frameInnerShadowSpreadPercentSlider, 'frameInnerShadowSpreadPercent', fs.innerShadow.spreadPercent);
-    if (uiElements.frameInnerShadowColorInput) uiElements.frameInnerShadowColorInput.value = fs.innerShadow.color;
+    // 共通化された影パラメータの初期化
+    setupInputAttributesAndValue(uiElements.frameShadowOffsetXSlider, 'frameShadowOffsetX', fs.shadowParams.offsetX);
+    setupInputAttributesAndValue(uiElements.frameShadowOffsetYSlider, 'frameShadowOffsetY', fs.shadowParams.offsetY);
+    setupInputAttributesAndValue(uiElements.frameShadowBlurSlider, 'frameShadowBlur', fs.shadowParams.blur);
+    setupInputAttributesAndValue(uiElements.frameShadowEffectRangeSlider, 'frameShadowEffectRange', fs.shadowParams.effectRangePercent);
+    if (uiElements.frameShadowColorInput) uiElements.frameShadowColorInput.value = fs.shadowParams.color;
 
     if (uiElements.frameBorderEnabledCheckbox) uiElements.frameBorderEnabledCheckbox.checked = fs.border.enabled;
     setupInputAttributesAndValue(uiElements.frameBorderWidthSlider, 'frameBorderWidth', fs.border.width);
@@ -268,15 +254,12 @@ export function updateSliderValueDisplays() {
     if (uiElements.frameSuperellipseNValueSpan && uiElements.frameSuperellipseNSlider) {
         uiElements.frameSuperellipseNValueSpan.textContent = fs.superellipseN;
     }
-    if (uiElements.frameDropShadowOffsetXValueSpan) uiElements.frameDropShadowOffsetXValueSpan.textContent = `${fs.dropShadow.offsetX}%`;
-    if (uiElements.frameDropShadowOffsetYValueSpan) uiElements.frameDropShadowOffsetYValueSpan.textContent = `${fs.dropShadow.offsetY}%`;
-    if (uiElements.frameDropShadowBlurValueSpan) uiElements.frameDropShadowBlurValueSpan.textContent = `${fs.dropShadow.blur}%`;
-    if (uiElements.frameDropShadowSpreadValueSpan) uiElements.frameDropShadowSpreadValueSpan.textContent = `${fs.dropShadow.spread}%`;
-    if (uiElements.frameInnerShadowOffsetXValueSpan) uiElements.frameInnerShadowOffsetXValueSpan.textContent = `${fs.innerShadow.offsetX}%`;
-    if (uiElements.frameInnerShadowOffsetYValueSpan) uiElements.frameInnerShadowOffsetYValueSpan.textContent = `${fs.innerShadow.offsetY}%`;
-    if (uiElements.frameInnerShadowBlurValueSpan) uiElements.frameInnerShadowBlurValueSpan.textContent = `${fs.innerShadow.blur}%`;
-    if (uiElements.frameInnerShadowSpreadPercentValueSpan) {
-        uiElements.frameInnerShadowSpreadPercentValueSpan.textContent = `${fs.innerShadow.spreadPercent}%`;
+    // 共通化された影パラメータの値表示
+    if (uiElements.frameShadowOffsetXValueSpan) uiElements.frameShadowOffsetXValueSpan.textContent = `${fs.shadowParams.offsetX}%`;
+    if (uiElements.frameShadowOffsetYValueSpan) uiElements.frameShadowOffsetYValueSpan.textContent = `${fs.shadowParams.offsetY}%`;
+    if (uiElements.frameShadowBlurValueSpan) uiElements.frameShadowBlurValueSpan.textContent = `${fs.shadowParams.blur}%`;
+    if (uiElements.frameShadowEffectRangeValueSpan) {
+        uiElements.frameShadowEffectRangeValueSpan.textContent = `${fs.shadowParams.effectRangePercent}%`;
     }
     if (uiElements.frameBorderWidthValueSpan && uiElements.frameBorderWidthSlider) {
         uiElements.frameBorderWidthValueSpan.textContent = `${fs.border.width}%`;
@@ -337,18 +320,10 @@ function updateFrameSettingsVisibility() {
         uiElements.frameShadowSettingsContainer.style.display = frameState.shadowEnabled ? '' : 'none';
     }
 
-    if (frameState.shadowEnabled) {
-        if (uiElements.frameDropShadowSettingsContainer) {
-            uiElements.frameDropShadowSettingsContainer.style.display = frameState.shadowType === 'drop' ? '' : 'none';
-        }
-        if (uiElements.frameInnerShadowSettingsContainer) {
-            uiElements.frameInnerShadowSettingsContainer.style.display = frameState.shadowType === 'inner' ? '' : 'none';
-        }
-    } else {
-        if (uiElements.frameDropShadowSettingsContainer) uiElements.frameDropShadowSettingsContainer.style.display = 'none';
-        if (uiElements.frameInnerShadowSettingsContainer) uiElements.frameInnerShadowSettingsContainer.style.display = 'none';
+    // 共通パラメータコンテナは shadowEnabled で表示/非表示 (shadowType による切り替えは不要に)
+    if (uiElements.commonShadowParamsContainer) { // commonShadowParamsContainer の表示制御
+        uiElements.commonShadowParamsContainer.style.display = frameState.shadowEnabled ? '' : 'none';
     }
-
     if (uiElements.frameBorderDetailSettingsContainer) {
         uiElements.frameBorderDetailSettingsContainer.style.display = frameState.border.enabled ? '' : 'none';
     }
@@ -529,16 +504,12 @@ export function setupEventListeners(redrawCallback) {
     addOptionChangeListener(uiElements.frameShadowEnabledCheckbox, 'frameSettings', 'shadowEnabled');
     addOptionChangeListener(uiElements.frameShadowTypeDropRadio, 'frameSettings', 'drop', 'shadowType');
     addOptionChangeListener(uiElements.frameShadowTypeInnerRadio, 'frameSettings', 'inner', 'shadowType');
-    addNumericInputListener(uiElements.frameDropShadowOffsetXSlider, 'frameDropShadowOffsetX', 'frameSettings', 'dropShadow', 'offsetX');
-    addNumericInputListener(uiElements.frameDropShadowOffsetYSlider, 'frameDropShadowOffsetY', 'frameSettings', 'dropShadow', 'offsetY');
-    addNumericInputListener(uiElements.frameDropShadowBlurSlider, 'frameDropShadowBlur', 'frameSettings', 'dropShadow', 'blur');
-    addNumericInputListener(uiElements.frameDropShadowSpreadSlider, 'frameDropShadowSpread', 'frameSettings', 'dropShadow', 'spread');
-    addColorInputListener(uiElements.frameDropShadowColorInput, 'frameSettings', 'dropShadow', 'color');
-    addNumericInputListener(uiElements.frameInnerShadowOffsetXSlider, 'frameInnerShadowOffsetX', 'frameSettings', 'innerShadow', 'offsetX');
-    addNumericInputListener(uiElements.frameInnerShadowOffsetYSlider, 'frameInnerShadowOffsetY', 'frameSettings', 'innerShadow', 'offsetY');
-    addNumericInputListener(uiElements.frameInnerShadowBlurSlider, 'frameInnerShadowBlur', 'frameSettings', 'innerShadow', 'blur');
-    addNumericInputListener(uiElements.frameInnerShadowSpreadPercentSlider, 'frameInnerShadowSpreadPercent', 'frameSettings', 'innerShadow', 'spreadPercent');
-    addColorInputListener(uiElements.frameInnerShadowColorInput, 'frameSettings', 'innerShadow', 'color');
+    // 共通化された影パラメータへのリスナー設定
+    addNumericInputListener(uiElements.frameShadowOffsetXSlider, 'frameShadowOffsetX', 'frameSettings', 'shadowParams', 'offsetX');
+    addNumericInputListener(uiElements.frameShadowOffsetYSlider, 'frameShadowOffsetY', 'frameSettings', 'shadowParams', 'offsetY');
+    addNumericInputListener(uiElements.frameShadowBlurSlider, 'frameShadowBlur', 'frameSettings', 'shadowParams', 'blur');
+    addNumericInputListener(uiElements.frameShadowEffectRangeSlider, 'frameShadowEffectRange', 'frameSettings', 'shadowParams', 'effectRangePercent');
+    addColorInputListener(uiElements.frameShadowColorInput, 'frameSettings', 'shadowParams', 'color');
 
     addOptionChangeListener(uiElements.frameBorderEnabledCheckbox, 'frameSettings', 'border', 'enabled');
     addNumericInputListener(uiElements.frameBorderWidthSlider, 'frameBorderWidth', 'frameSettings', 'border', 'width');
