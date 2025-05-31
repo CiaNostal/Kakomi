@@ -126,12 +126,20 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
     }
 
     if (frameSettings.shadowType === 'drop') {
-        console.log("Applying Drop Shadow (Offscreen method) with settings:", shadowSettings);
+        // console.log("Applying Drop Shadow (Offscreen method) with settings:", shadowSettings);
+        console.log("--- applyShadow (drop) ---"); // ★ログ追加
+        console.log("shadowSettings:", JSON.parse(JSON.stringify(shadowSettings))); // ★ログ追加 (内容はディープコピーして表示)
+        console.log("frameSettings (for corner):", JSON.parse(JSON.stringify(frameSettings))); // ★ログ追加
+        console.log(`photoX: ${photoX}, photoY: ${photoY}, photoWidth: ${photoWidth}, photoHeight: ${photoHeight}, photoShortSidePx: ${photoShortSidePx}`); // ★ログ追加
+
         const offsetX = (shadowSettings.offsetX / 100) * photoShortSidePx;
         const offsetY = (shadowSettings.offsetY / 100) * photoShortSidePx;
         const blurRadius = Math.max(0, (shadowSettings.blur / 100) * photoShortSidePx); // ぼかしは0以上
         const spreadRadius = (shadowSettings.spread !== undefined ? (shadowSettings.spread / 100) * photoShortSidePx : 0);
         const shadowColor = shadowSettings.color;
+
+        console.log(`Calculated - offsetXpx: ${offsetX}, offsetYpx: ${offsetY}, blurRadius: ${blurRadius}, spreadRadius: ${spreadRadius}`); // ★ログ追加
+
 
         // 影の描画範囲を考慮してオフスクリーンCanvasのサイズと描画オフセットを決定
         // スプレッドとぼかしで最大どれくらい広がるかを見積もる
@@ -147,7 +155,9 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
         offscreenCanvas.width = offscreenWidth;
         offscreenCanvas.height = offscreenHeight;
         const offCtx = offscreenCanvas.getContext('2d');
-        if (!offCtx) return;
+        if (!offCtx) { console.error("Failed to get offscreen context for drop shadow"); return; } // ★エラーなら早期リターン
+
+        console.log(`Offscreen canvas created: ${offscreenWidth}x${offscreenHeight}`); // ★ログ追加
 
         // 1. オフスクリーンに、スプレッドを考慮した「影を落とす物体」の形状を描画
         //    この物体の色は、最終的な影の色とは無関係（影の形状を作るためだけ）
@@ -169,6 +179,14 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
         }
         offCtx.fillStyle = 'black'; // 影を生成するためのダミーの塗りつぶし（不透明）
         offCtx.fill();
+
+        // ★デバッグ用: オフスクリーンCanvasの内容を一時的にメインCanvasに描画して確認
+        // このdrawImageはデバッグ後に削除またはコメントアウトしてください。
+        ctx.save();
+        ctx.globalAlpha = 0.5; // 半透明にして写真と重なっても見えるように
+        ctx.drawImage(offscreenCanvas, photoX - shapeOffsetXonOffscreen, photoY - shapeOffsetYonOffscreen);
+        ctx.restore();
+        console.log("Debug: Drew offscreen 'object' to main canvas temporarily."); // ★ログ追加
 
         // 2. オフスクリーンCanvasに影を設定し、影だけを描画する
         //    現在のオフスクリーンCanvasの内容（黒い物体）をソースとして、
