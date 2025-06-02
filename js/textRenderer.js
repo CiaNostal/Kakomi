@@ -11,8 +11,13 @@ import { googleFonts } from './uiDefinitions.js'; // Google Fontsリストをイ
 // value: { promise: Promise, status: 'idle' | 'loading' | 'loaded' | 'error' }
 const fontLoadStates = new Map();
 
-googleFonts.forEach(font => {
-    fontLoadStates.set(font.apiName, { promise: null, status: 'idle' });
+// Initialize fontLoadStates. It's good practice to ensure this is done once.
+// If this file is imported multiple times in a complex setup (though unlikely with ES modules),
+// this could be guarded, but for now, direct initialization is fine.
+googleFonts.forEach(font => { // This assumes googleFonts is populated when this module is initialized.
+    if (!fontLoadStates.has(font.apiName)) {
+        fontLoadStates.set(font.apiName, { promise: null, status: 'idle' });
+    }
 });
 
 /**
@@ -21,22 +26,31 @@ googleFonts.forEach(font => {
  * @param {string} fontApiName - 読み込むフォントのAPI名 (e.g., "Roboto:wght@400")
  * @returns {Promise} フォント読み込み完了を示すPromise
  */
-function loadSingleGoogleFont(fontApiName) {
+async function loadSingleGoogleFont(fontApiName) {
+    const fontObject = googleFonts.find(f => f.apiName === fontApiName);
+    if (!fontObject) {
+        console.warn(`[TextRenderer] Font object for ${fontApiName} not found in definition.`);
+        return Promise.reject(new Error(`Font object for ${fontApiName} not defined.`));
+    }
     const existingState = fontLoadStates.get(fontApiName);
 
-    if (!existingState) {
-        console.warn(`[TextRenderer] Font ${fontApiName} not found in definition.`);
-        return Promise.reject(new Error(`Font ${fontApiName} not defined.`));
-    }
+    // Should always find an existingState due to initialization, but good to be safe.
+    // if (!existingState) {
+    //     console.error(`[TextRenderer] State for font ${fontApiName} not initialized.`);
+    //     return Promise.reject(new Error(`State for font ${fontApiName} not initialized.`));
+    // }
 
     if (existingState.status === 'loaded') {
+        // console.log(`[TextRenderer] Font ${fontApiName} already loaded and ready.`);
         return Promise.resolve();
     }
 
     if (existingState.status === 'loading' && existingState.promise) {
+        // console.log(`[TextRenderer] Font ${fontApiName} is currently loading, returning existing promise.`);
         return existingState.promise;
     }
 
+    // console.log(`[TextRenderer] Initiating load for font: ${fontApiName}`);
     const fontQuery = fontApiName.replace(/ /g, '+');
     const link = document.createElement('link');
     link.rel = 'stylesheet';
@@ -44,18 +58,36 @@ function loadSingleGoogleFont(fontApiName) {
 
     const loadPromise = new Promise((resolve, reject) => {
         link.onload = () => {
-            fontLoadStates.set(fontApiName, { ...existingState, status: 'loaded', promise: loadPromise });
-            console.log(`[TextRenderer] Font ${fontApiName} loaded.`);
-            resolve();
+            console.log(`[TextRenderer] CSS for font ${fontApiName} loaded (link.onload). Now checking document.fonts.`);
+            // CSSの font-style-weight-stretch-size family の形式で指定。サイズは必須。ウェイトも指定。
+            const fontCheckString = `${fontObject.fontWeightForCanvas} 1em "${fontObject.fontFamilyForCanvas}"`;
+
+            document.fonts.load(fontCheckString)
+                .then((loadedFontFaces) => {
+                    if (loadedFontFaces.length > 0) {
+                        fontLoadStates.set(fontApiName, { status: 'loaded', promise: loadPromise }); // Update state
+                        console.log(`[TextRenderer] Font ${fontApiName} (${fontCheckString}) is ready for use (document.fonts.load resolved).`);
+                        resolve();
+                    } else {
+                        console.error(`[TextRenderer] document.fonts.load reported no fonts loaded for: ${fontCheckString} despite link.onload.`);
+                        fontLoadStates.set(fontApiName, { status: 'error', promise: loadPromise }); // Update state
+                        reject(new Error(`Font not made available by browser after download: ${fontApiName}`));
+                    }
+                })
+                .catch(err => {
+                    console.error(`[TextRenderer] document.fonts.load() rejected for ${fontApiName} (${fontCheckString}):`, err);
+                    fontLoadStates.set(fontApiName, { status: 'error', promise: loadPromise }); // Update state
+                    reject(new Error(`document.fonts.load() failed for ${fontApiName}.`));
+                });
         };
         link.onerror = (err) => {
-            fontLoadStates.set(fontApiName, { ...existingState, status: 'error', promise: loadPromise });
-            console.error(`[TextRenderer] Failed to load font ${fontApiName}:`, err);
-            reject(new Error(`Failed to load font ${fontApiName}.`));
+            console.error(`[TextRenderer] Failed to load CSS for font ${fontApiName} (link.onerror):`, err);
+            fontLoadStates.set(fontApiName, { status: 'error', promise: loadPromise }); // Update state
+            reject(new Error(`Failed to load CSS for font ${fontApiName}.`));
         };
     });
 
-    fontLoadStates.set(fontApiName, { status: 'loading', promise: loadPromise });
+    fontLoadStates.set(fontApiName, { status: 'loading', promise: loadPromise }); // Set initial loading state
     document.head.appendChild(link);
     return loadPromise;
 }
