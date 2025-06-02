@@ -1,19 +1,19 @@
 // js/uiController.js
 import { getState, updateState } from './stateManager.js';
-import { controlsConfig } from './uiDefinitions.js';
-// requestRedraw は main.js からコールバックとして渡される
+import { controlsConfig, googleFonts } from './uiDefinitions.js'; // googleFonts をインポート
+import { loadGoogleFonts } from './textRenderer.js'; // loadGoogleFonts (実体は loadSingleGoogleFont) をインポート
 
 export const uiElements = {
     imageLoader: document.getElementById('imageLoader'),
     previewCanvas: document.getElementById('previewCanvas'),
-    previewCtx: null, // main.jsで初期化
+    previewCtx: null,
     downloadButton: document.getElementById('downloadButton'),
     canvasContainer: document.querySelector('.canvas-container'),
 
     // レイアウト設定タブ
     outputAspectRatioSelect: document.getElementById('outputAspectRatio'),
     baseMarginPercentInput: document.getElementById('baseMarginPercent'),
-    baseMarginPercentValueSpan: document.getElementById('baseMarginPercentValue'), // ★追加
+    baseMarginPercentValueSpan: document.getElementById('baseMarginPercentValue'),
     photoPosXSlider: document.getElementById('photoPosX'),
     photoPosYSlider: document.getElementById('photoPosY'),
     photoPosXValueSpan: document.getElementById('photoPosXValue'),
@@ -38,7 +38,7 @@ export const uiElements = {
     jpgQualitySlider: document.getElementById('jpgQuality'),
     jpgQualityValueSpan: document.getElementById('jpgQualityValue'),
 
-    // フレーム加工タブ UI要素
+    // フレーム加工タブ
     frameCornerStyleNoneRadio: document.getElementById('frameCornerStyleNone'),
     frameCornerStyleRoundedRadio: document.getElementById('frameCornerStyleRounded'),
     frameCornerStyleSuperellipseRadio: document.getElementById('frameCornerStyleSuperellipse'),
@@ -48,23 +48,20 @@ export const uiElements = {
     frameCornerSuperellipseSettingsContainer: document.getElementById('frameCornerSuperellipseSettingsContainer'),
     frameSuperellipseNSlider: document.getElementById('frameSuperellipseN'),
     frameSuperellipseNValueSpan: document.getElementById('frameSuperellipseNValue'),
-
     frameShadowEnabledCheckbox: document.getElementById('frameShadowEnabled'),
     frameShadowSettingsContainer: document.getElementById('frameShadowSettingsContainer'),
     frameShadowTypeDropRadio: document.getElementById('frameShadowTypeDrop'),
     frameShadowTypeInnerRadio: document.getElementById('frameShadowTypeInner'),
-    // 共通の影パラメータUI要素への参照 (IDはindex.htmlの提案に合わせる)
-    commonShadowParamsContainer: document.getElementById('commonShadowParamsContainer'), // HTMLに追加した共通パラメータのコンテナ
+    commonShadowParamsContainer: document.getElementById('commonShadowParamsContainer'),
     frameShadowOffsetXSlider: document.getElementById('frameShadowOffsetX'),
     frameShadowOffsetXValueSpan: document.getElementById('frameShadowOffsetXValue'),
     frameShadowOffsetYSlider: document.getElementById('frameShadowOffsetY'),
     frameShadowOffsetYValueSpan: document.getElementById('frameShadowOffsetYValue'),
     frameShadowBlurSlider: document.getElementById('frameShadowBlur'),
     frameShadowBlurValueSpan: document.getElementById('frameShadowBlurValue'),
-    frameShadowEffectRangeSlider: document.getElementById('frameShadowEffectRange'), // 旧spread/spreadPercent
+    frameShadowEffectRangeSlider: document.getElementById('frameShadowEffectRange'),
     frameShadowEffectRangeValueSpan: document.getElementById('frameShadowEffectRangeValue'),
     frameShadowColorInput: document.getElementById('frameShadowColor'),
-
     frameBorderEnabledCheckbox: document.getElementById('frameBorderEnabled'),
     frameBorderDetailSettingsContainer: document.getElementById('frameBorderDetailSettingsContainer'),
     frameBorderWidthSlider: document.getElementById('frameBorderWidth'),
@@ -74,11 +71,11 @@ export const uiElements = {
 
     exifDataContainer: document.getElementById('exifDataContainer'),
 
-    // 文字入力タブ - 撮影日表示 UI要素
+    // 文字入力タブ - 撮影日表示
     textDateEnabledCheckbox: document.getElementById('textDateEnabled'),
     textDateSettingsContainer: document.getElementById('textDateSettingsContainer'),
     textDateFormatSelect: document.getElementById('textDateFormat'),
-    textDateFontSelect: document.getElementById('textDateFont'),
+    textDateFontSelect: document.getElementById('textDateFont'), // Select element
     textDateSizeSlider: document.getElementById('textDateSize'),
     textDateSizeValueSpan: document.getElementById('textDateSizeValue'),
     textDateColorInput: document.getElementById('textDateColor'),
@@ -88,17 +85,17 @@ export const uiElements = {
     textDateOffsetYSlider: document.getElementById('textDateOffsetY'),
     textDateOffsetYValueSpan: document.getElementById('textDateOffsetYValue'),
 
-    // 文字入力タブ - Exif表示 UI要素
+    // 文字入力タブ - Exif表示
     textExifEnabledCheckbox: document.getElementById('textExifEnabled'),
     textExifSettingsContainer: document.getElementById('textExifSettingsContainer'),
     textExifItemMakeCheckbox: document.getElementById('textExifItemMake'),
     textExifItemModelCheckbox: document.getElementById('textExifItemModel'),
+    textExifItemLensModelCheckbox: document.getElementById('textExifItemLensModel'),
     textExifItemFNumberCheckbox: document.getElementById('textExifItemFNumber'),
     textExifItemExposureTimeCheckbox: document.getElementById('textExifItemExposureTime'),
     textExifItemISOSpeedRatingsCheckbox: document.getElementById('textExifItemISOSpeedRatings'),
     textExifItemFocalLengthCheckbox: document.getElementById('textExifItemFocalLength'),
-    textExifItemLensModelCheckbox: document.getElementById('textExifItemLensModel'),
-    textExifFontSelect: document.getElementById('textExifFont'),
+    textExifFontSelect: document.getElementById('textExifFont'), // Select element
     textExifSizeSlider: document.getElementById('textExifSize'),
     textExifSizeValueSpan: document.getElementById('textExifSizeValue'),
     textExifColorInput: document.getElementById('textExifColor'),
@@ -109,11 +106,38 @@ export const uiElements = {
     textExifOffsetYValueSpan: document.getElementById('textExifOffsetYValue'),
 };
 
+function populateFontSelect(selectElement, selectedFontDisplayName) {
+    if (!selectElement) return;
+    selectElement.innerHTML = ''; // Clear existing options
+
+    // 仕様書ではGoogle Fontsの動的読み込みとあるので、システムフォントは一旦除外
+    // const systemFonts = [
+    //     { displayName: "Arial", apiName: "Arial", fontFamilyForCanvas: "Arial", fontWeightForCanvas: "normal" },
+    //     { displayName: "Helvetica", apiName: "Helvetica", fontFamilyForCanvas: "Helvetica", fontWeightForCanvas: "normal" },
+    //     { displayName: "Times New Roman", apiName: "Times New Roman", fontFamilyForCanvas: "Times New Roman", fontWeightForCanvas: "normal" },
+    //     { displayName: "Verdana", apiName: "Verdana", fontFamilyForCanvas: "Verdana", fontWeightForCanvas: "normal" },
+    // ];
+    // const allFonts = [...systemFonts, ...googleFonts];
+
+    googleFonts.forEach(font => {
+        const option = document.createElement('option');
+        option.value = font.displayName; // stateにはdisplayNameを保存
+        option.textContent = font.displayName;
+        selectElement.appendChild(option);
+    });
+    selectElement.value = selectedFontDisplayName;
+}
+
+
 export function initializeUIFromState() {
     const state = getState();
 
+    // Populate font selects first
+    populateFontSelect(uiElements.textDateFontSelect, state.textSettings.date.font);
+    populateFontSelect(uiElements.textExifFontSelect, state.textSettings.exif.font);
+
     const setupInputAttributesAndValue = (element, configKey, stateValue) => {
-        if (!element) return; // 要素が存在しない場合は何もしない
+        if (!element) return;
         if (controlsConfig[configKey]) {
             const config = controlsConfig[configKey];
             if (element.type === 'range' || element.type === 'number') {
@@ -121,16 +145,15 @@ export function initializeUIFromState() {
                 if (config.max !== undefined) element.max = config.max;
                 if (config.step !== undefined) element.step = config.step;
             }
-            element.value = String(stateValue);
-        } else { // controlsConfigに定義がない場合でも、stateValueで初期化を試みる
+        }
+        // For select, value is set by populateFontSelect or direct assignment later
+        if (element.type !== 'select-one') { // Avoid re-setting select value here if already populated
             element.value = String(stateValue);
         }
-        // チェックボックスとラジオボタンのcheckedプロパティも設定
+
         if (element.type === 'checkbox') {
             element.checked = Boolean(stateValue);
         } else if (element.type === 'radio' && element.value === String(stateValue)) {
-            // name属性でグループ化されたラジオボタン群の中で、
-            // stateValueと一致するvalueを持つものをチェックする
             element.checked = true;
         }
     };
@@ -165,7 +188,6 @@ export function initializeUIFromState() {
     if (uiElements.frameShadowTypeDropRadio) uiElements.frameShadowTypeDropRadio.checked = (fs.shadowType === 'drop');
     if (uiElements.frameShadowTypeInnerRadio) uiElements.frameShadowTypeInnerRadio.checked = (fs.shadowType === 'inner');
 
-    // 共通化された影パラメータの初期化
     setupInputAttributesAndValue(uiElements.frameShadowOffsetXSlider, 'frameShadowOffsetX', fs.shadowParams.offsetX);
     setupInputAttributesAndValue(uiElements.frameShadowOffsetYSlider, 'frameShadowOffsetY', fs.shadowParams.offsetY);
     setupInputAttributesAndValue(uiElements.frameShadowBlurSlider, 'frameShadowBlur', fs.shadowParams.blur);
@@ -181,7 +203,7 @@ export function initializeUIFromState() {
     const tds = state.textSettings.date;
     if (uiElements.textDateEnabledCheckbox) uiElements.textDateEnabledCheckbox.checked = tds.enabled;
     if (uiElements.textDateFormatSelect) uiElements.textDateFormatSelect.value = tds.format;
-    if (uiElements.textDateFontSelect) uiElements.textDateFontSelect.value = tds.font;
+    if (uiElements.textDateFontSelect) uiElements.textDateFontSelect.value = tds.font; // Already set by populateFontSelect
     setupInputAttributesAndValue(uiElements.textDateSizeSlider, 'textDateSize', tds.size);
     if (uiElements.textDateColorInput) uiElements.textDateColorInput.value = tds.color;
     if (uiElements.textDatePositionSelect) uiElements.textDatePositionSelect.value = tds.position;
@@ -191,20 +213,16 @@ export function initializeUIFromState() {
     // 文字入力 - Exif設定
     const tes = state.textSettings.exif;
     if (uiElements.textExifEnabledCheckbox) uiElements.textExifEnabledCheckbox.checked = tes.enabled;
-    // 表示項目チェックボックスの初期化
     const exifItemCheckboxes = [
-        { el: uiElements.textExifItemMakeCheckbox, key: 'Make' },
-        { el: uiElements.textExifItemModelCheckbox, key: 'Model' },
-        { el: uiElements.textExifItemFNumberCheckbox, key: 'FNumber' },
-        { el: uiElements.textExifItemExposureTimeCheckbox, key: 'ExposureTime' },
-        { el: uiElements.textExifItemISOSpeedRatingsCheckbox, key: 'ISOSpeedRatings' },
+        { el: uiElements.textExifItemMakeCheckbox, key: 'Make' }, { el: uiElements.textExifItemModelCheckbox, key: 'Model' },
+        { el: uiElements.textExifItemLensModelCheckbox, key: 'LensModel' }, { el: uiElements.textExifItemFNumberCheckbox, key: 'FNumber' },
+        { el: uiElements.textExifItemExposureTimeCheckbox, key: 'ExposureTime' }, { el: uiElements.textExifItemISOSpeedRatingsCheckbox, key: 'ISOSpeedRatings' },
         { el: uiElements.textExifItemFocalLengthCheckbox, key: 'FocalLength' },
-        { el: uiElements.textExifItemLensModelCheckbox, key: 'LensModel' },
     ];
     exifItemCheckboxes.forEach(item => {
         if (item.el) item.el.checked = tes.items.includes(item.key);
     });
-    if (uiElements.textExifFontSelect) uiElements.textExifFontSelect.value = tes.font;
+    if (uiElements.textExifFontSelect) uiElements.textExifFontSelect.value = tes.font; // Already set by populateFontSelect
     setupInputAttributesAndValue(uiElements.textExifSizeSlider, 'textExifSize', tes.size);
     if (uiElements.textExifColorInput) uiElements.textExifColorInput.value = tes.color;
     if (uiElements.textExifPositionSelect) uiElements.textExifPositionSelect.value = tes.position;
@@ -218,9 +236,9 @@ export function initializeUIFromState() {
     updateSliderValueDisplays();
 }
 
+
 export function updateSliderValueDisplays() {
     const state = getState();
-
     if (uiElements.photoPosXValueSpan && uiElements.photoPosXSlider) {
         const val = parseFloat(state.photoViewParams.offsetX);
         const displayVal = Math.round((val - 0.5) * 2 * 100);
@@ -230,6 +248,9 @@ export function updateSliderValueDisplays() {
         const val = parseFloat(state.photoViewParams.offsetY);
         const displayVal = Math.round((val - 0.5) * 2 * 100);
         uiElements.photoPosYValueSpan.textContent = displayVal === 0 ? '中央' : `${displayVal}%`;
+    }
+    if (uiElements.baseMarginPercentValueSpan && uiElements.baseMarginPercentInput) {
+        uiElements.baseMarginPercentValueSpan.textContent = `${state.baseMarginPercent}%`;
     }
     if (uiElements.bgScaleValueSpan && uiElements.bgScaleSlider) {
         uiElements.bgScaleValueSpan.textContent = `${parseFloat(state.imageBlurBackgroundParams.scale).toFixed(1)}x`;
@@ -246,7 +267,6 @@ export function updateSliderValueDisplays() {
     if (uiElements.jpgQualityValueSpan && uiElements.jpgQualitySlider) {
         uiElements.jpgQualityValueSpan.textContent = `${state.outputSettings.quality}`;
     }
-    // フレーム加工スライダーの値表示
     const fs = state.frameSettings;
     if (uiElements.frameCornerRadiusPercentValueSpan && uiElements.frameCornerRadiusPercentSlider) {
         uiElements.frameCornerRadiusPercentValueSpan.textContent = `${fs.cornerRadiusPercent}%`;
@@ -254,7 +274,6 @@ export function updateSliderValueDisplays() {
     if (uiElements.frameSuperellipseNValueSpan && uiElements.frameSuperellipseNSlider) {
         uiElements.frameSuperellipseNValueSpan.textContent = fs.superellipseN;
     }
-    // 共通化された影パラメータの値表示
     if (uiElements.frameShadowOffsetXValueSpan) uiElements.frameShadowOffsetXValueSpan.textContent = `${fs.shadowParams.offsetX}%`;
     if (uiElements.frameShadowOffsetYValueSpan) uiElements.frameShadowOffsetYValueSpan.textContent = `${fs.shadowParams.offsetY}%`;
     if (uiElements.frameShadowBlurValueSpan) uiElements.frameShadowBlurValueSpan.textContent = `${fs.shadowParams.blur}%`;
@@ -264,12 +283,6 @@ export function updateSliderValueDisplays() {
     if (uiElements.frameBorderWidthValueSpan && uiElements.frameBorderWidthSlider) {
         uiElements.frameBorderWidthValueSpan.textContent = `${fs.border.width}%`;
     }
-    // レイアウト設定タブ - 基準余白スライダーの値表示 ★追加
-    if (uiElements.baseMarginPercentValueSpan && uiElements.baseMarginPercentInput) { // baseMarginPercentInput はスライダーになった
-        uiElements.baseMarginPercentValueSpan.textContent = `${state.baseMarginPercent}%`;
-    }
-
-    // 文字入力 - 撮影日スライダーの値表示
     const tds = state.textSettings.date;
     if (uiElements.textDateSizeValueSpan && uiElements.textDateSizeSlider) {
         uiElements.textDateSizeValueSpan.textContent = `${tds.size}%`;
@@ -280,8 +293,6 @@ export function updateSliderValueDisplays() {
     if (uiElements.textDateOffsetYValueSpan && uiElements.textDateOffsetYSlider) {
         uiElements.textDateOffsetYValueSpan.textContent = `${tds.offsetY}%`;
     }
-
-    // 文字入力 - Exifスライダーの値表示
     const tes = state.textSettings.exif;
     if (uiElements.textExifSizeValueSpan && uiElements.textExifSizeSlider) {
         uiElements.textExifSizeValueSpan.textContent = `${tes.size}%`;
@@ -297,31 +308,22 @@ export function updateSliderValueDisplays() {
 export function toggleBackgroundSettingsVisibility() {
     if (!uiElements.bgColorSettingsContainer || !uiElements.imageBlurSettingsContainer) return;
     const currentBackgroundType = getState().backgroundType;
-    if (currentBackgroundType === 'color') {
-        uiElements.bgColorSettingsContainer.classList.remove('hidden');
-        uiElements.imageBlurSettingsContainer.classList.add('hidden');
-    } else if (currentBackgroundType === 'imageBlur') {
-        uiElements.bgColorSettingsContainer.classList.add('hidden');
-        uiElements.imageBlurSettingsContainer.classList.remove('hidden');
-    }
+    uiElements.bgColorSettingsContainer.classList.toggle('hidden', currentBackgroundType !== 'color');
+    uiElements.imageBlurSettingsContainer.classList.toggle('hidden', currentBackgroundType !== 'imageBlur');
 }
 
 function updateFrameSettingsVisibility() {
     const frameState = getState().frameSettings;
-
     if (uiElements.frameCornerRoundedSettingsContainer) {
         uiElements.frameCornerRoundedSettingsContainer.style.display = frameState.cornerStyle === 'rounded' ? '' : 'none';
     }
     if (uiElements.frameCornerSuperellipseSettingsContainer) {
         uiElements.frameCornerSuperellipseSettingsContainer.style.display = frameState.cornerStyle === 'superellipse' ? '' : 'none';
     }
-
     if (uiElements.frameShadowSettingsContainer) {
         uiElements.frameShadowSettingsContainer.style.display = frameState.shadowEnabled ? '' : 'none';
     }
-
-    // 共通パラメータコンテナは shadowEnabled で表示/非表示 (shadowType による切り替えは不要に)
-    if (uiElements.commonShadowParamsContainer) { // commonShadowParamsContainer の表示制御
+    if (uiElements.commonShadowParamsContainer) {
         uiElements.commonShadowParamsContainer.style.display = frameState.shadowEnabled ? '' : 'none';
     }
     if (uiElements.frameBorderDetailSettingsContainer) {
@@ -338,139 +340,108 @@ function updateTextDateSettingsVisibility() {
 
 function updateTextExifSettingsVisibility() {
     const exifSettingsEnabled = getState().textSettings.exif.enabled;
-    // ★デバッグログ追加
-    console.log('[updateTextExifSettingsVisibility] Called. Current textSettings.exif.enabled:', exifSettingsEnabled);
     if (uiElements.textExifSettingsContainer) {
-        const newDisplayValue = exifSettingsEnabled ? '' : 'none';
-        // ★デバッグログ追加
-        console.log(`[updateTextExifSettingsVisibility] textExifSettingsContainer: setting display to '${newDisplayValue}'`);
         uiElements.textExifSettingsContainer.style.display = exifSettingsEnabled ? '' : 'none';
     }
 }
 
 export function setupEventListeners(redrawCallback) {
-    // 汎用数値入力リスナー (スライダー、数値入力)
     const addNumericInputListener = (element, configKey, stateKey, nestedKey = '', subNestedKey = '') => {
         if (!element) return;
         element.addEventListener('input', (e) => {
             let value = parseFloat(e.target.value);
             const config = controlsConfig[configKey];
-
             if (config) {
                 if (isNaN(value)) value = parseFloat(config.defaultValue) || 0;
                 if (config.min !== undefined) value = Math.max(config.min, value);
                 if (config.max !== undefined) value = Math.min(config.max, value);
             }
             e.target.value = String(value);
-
             let updatePayload;
-            if (subNestedKey && nestedKey) {
-                updatePayload = { [stateKey]: { [nestedKey]: { [subNestedKey]: value } } };
-            } else if (nestedKey) {
-                updatePayload = { [stateKey]: { [nestedKey]: value } };
-            } else {
-                updatePayload = { [stateKey]: value };
-            }
+            if (subNestedKey && nestedKey) updatePayload = { [stateKey]: { [nestedKey]: { [subNestedKey]: value } } };
+            else if (nestedKey) updatePayload = { [stateKey]: { [nestedKey]: value } };
+            else updatePayload = { [stateKey]: value };
             updateState(updatePayload);
             updateSliderValueDisplays();
             redrawCallback();
         });
     };
 
-    // 汎用選択肢変更リスナー (ラジオボタン、セレクトボックス、チェックボックス)
-    // 引数: element, stateKey, p1, p2, p3
-    // p1: radioValue (radio) | nestedKey (checkbox/select)
-    // p2: nestedKey (radio)  | subNestedKey (checkbox/select)
-    // p3: subNestedKey (radio)| (not used for checkbox/select)
     const addOptionChangeListener = (element, stateKey, p1, p2 = '', p3 = '') => {
         if (!element) return;
         const eventType = (element.type === 'checkbox' || element.type === 'radio') ? 'change' : 'change';
-
-        element.addEventListener(eventType, (e) => {
+        element.addEventListener(eventType, async (e) => { // Make async for font loading
             let valueToSet;
             let updatePayload;
-
             let actualNestedKey = '';
             let actualSubNestedKey = '';
 
-            // ★特定の要素のデバッグログ (textExifEnabledCheckbox にも適用)
-            if (element.id === 'textExifEnabledCheckbox' || element.id === 'frameBorderEnabledCheckbox' || element.id === 'frameShadowEnabledCheckbox' || element.id === 'textDateEnabledCheckbox') {
-                console.log(`[UIController] Event on: ${element.id}, type: ${eventType}, checked: ${e.target.checked}`);
-                console.log(`[UIController] addOptionChangeListener params for ${element.id}: stateKey=${stateKey}, p1=${p1}, p2=${p2}, p3=${p3}`);
-            }
-
             if (element.type === 'checkbox') {
-                valueToSet = e.target.checked;
-                actualNestedKey = p1;
-                actualSubNestedKey = p2;
+                valueToSet = e.target.checked; actualNestedKey = p1; actualSubNestedKey = p2;
             } else if (element.type === 'radio') {
                 if (!e.target.checked) return;
-                valueToSet = p1;
-                actualNestedKey = p2;
-                actualSubNestedKey = p3;
+                valueToSet = p1; actualNestedKey = p2; actualSubNestedKey = p3;
             } else { // select
-                valueToSet = e.target.value;
-                actualNestedKey = p1;
-                actualSubNestedKey = p2;
+                valueToSet = e.target.value; actualNestedKey = p1; actualSubNestedKey = p2;
             }
 
-            if (actualSubNestedKey && actualNestedKey) {
-                updatePayload = { [stateKey]: { [actualNestedKey]: { [actualSubNestedKey]: valueToSet } } };
-            } else if (actualNestedKey) {
-                updatePayload = { [stateKey]: { [actualNestedKey]: valueToSet } };
-            } else {
-                updatePayload = { [stateKey]: valueToSet };
+            // --- Font loading logic for font selects ---
+            let fontJustLoaded = false;
+            if ((element.id === 'textDateFontSelect' || element.id === 'textExifFontSelect') && valueToSet) {
+                const selectedFontObject = googleFonts.find(f => f.displayName === valueToSet);
+                if (selectedFontObject) {
+                    try {
+                        console.log(`[UIController] Loading font: ${selectedFontObject.apiName}`);
+                        // Potentially disable UI elements or show loader here
+                        element.disabled = true;
+                        await loadGoogleFonts(selectedFontObject.apiName);
+                        console.log(`[UIController] Font ${selectedFontObject.apiName} loaded successfully.`);
+                        fontJustLoaded = true;
+                    } catch (error) {
+                        console.error(`[UIController] Failed to load font ${selectedFontObject.apiName}:`, error);
+                        alert(`フォントの読み込みに失敗しました: ${selectedFontObject.displayName}`);
+                        // Revert to previous font or a default? For now, just re-enable and proceed.
+                        element.disabled = false;
+                        return; // Prevent state update and redraw if font fails
+                    } finally {
+                        element.disabled = false;
+                        // Hide loader here
+                    }
+                }
             }
+            // --- End Font loading logic ---
 
-            if (element.id === 'textExifEnabledCheckbox' || element.id === 'frameBorderEnabledCheckbox') { // ★デバッグログ追加
-                console.log(`[UIController] ${element.id} - updatePayload:`, JSON.stringify(updatePayload));
-            }
+            if (actualSubNestedKey && actualNestedKey) updatePayload = { [stateKey]: { [actualNestedKey]: { [actualSubNestedKey]: valueToSet } } };
+            else if (actualNestedKey) updatePayload = { [stateKey]: { [actualNestedKey]: valueToSet } };
+            else updatePayload = { [stateKey]: valueToSet };
+
             updateState(updatePayload);
 
-            // UI表示切替判定 - actualNestedKey と actualSubNestedKey を使用
-            let visibilityFunctionCalled = false;
-            if (stateKey === 'backgroundType') {
-                toggleBackgroundSettingsVisibility();
-                visibilityFunctionCalled = true;
-            } else if (stateKey === 'frameSettings') {
+            if (stateKey === 'backgroundType') toggleBackgroundSettingsVisibility();
+            else if (stateKey === 'frameSettings') {
                 if (actualNestedKey === 'cornerStyle' || actualNestedKey === 'shadowEnabled' || actualNestedKey === 'shadowType' || (actualNestedKey === 'border' && actualSubNestedKey === 'enabled')) {
-                    console.log(`[UIController] Calling updateFrameSettingsVisibility. Triggered by: ${actualNestedKey}.${actualSubNestedKey || ''}`);
                     updateFrameSettingsVisibility();
-                    visibilityFunctionCalled = true;
                 }
             } else if (stateKey === 'textSettings') {
-                if (actualNestedKey === 'date' && actualSubNestedKey === 'enabled') {
-                    updateTextDateSettingsVisibility();
-                    visibilityFunctionCalled = true;
-                } else if (actualNestedKey === 'exif' && actualSubNestedKey === 'enabled') { // ★この条件で呼び出し
-                    console.log(`[UIController] Calling updateTextExifSettingsVisibility for ${element.id}`);
-                    updateTextExifSettingsVisibility();
-                    visibilityFunctionCalled = true;
-                }
-            }
-
-            if ((element.id === 'textExifEnabledCheckbox' || element.id === 'frameBorderEnabledCheckbox') && !visibilityFunctionCalled) {
-                console.warn(`[UIController] ${element.id} changed, but no specific visibility function was called. actualNestedKey: ${actualNestedKey}, actualSubNestedKey: ${actualSubNestedKey}`);
+                if (actualNestedKey === 'date' && actualSubNestedKey === 'enabled') updateTextDateSettingsVisibility();
+                else if (actualNestedKey === 'exif' && actualSubNestedKey === 'enabled') updateTextExifSettingsVisibility();
             }
 
             updateSliderValueDisplays();
+            // If a font was just loaded, redrawCallback might already be implicitly handled or needs to be ensured
+            // For font changes, the redraw MUST happen after the font is loaded.
             redrawCallback();
         });
     };
 
-    // カラーピッカー専用リスナー
     const addColorInputListener = (element, stateKey, nestedKey = '', subNestedKey = '') => {
         if (!element) return;
         element.addEventListener('input', (e) => {
             const colorValue = e.target.value;
             let updatePayload;
-            if (subNestedKey && nestedKey) {
-                updatePayload = { [stateKey]: { [nestedKey]: { [subNestedKey]: colorValue } } };
-            } else if (nestedKey) {
-                updatePayload = { [stateKey]: { [nestedKey]: colorValue } };
-            } else {
-                updatePayload = { [stateKey]: colorValue };
-            }
+            if (subNestedKey && nestedKey) updatePayload = { [stateKey]: { [nestedKey]: { [subNestedKey]: colorValue } } };
+            else if (nestedKey) updatePayload = { [stateKey]: { [nestedKey]: colorValue } };
+            else updatePayload = { [stateKey]: colorValue };
             updateState(updatePayload);
             redrawCallback();
         });
@@ -500,17 +471,14 @@ export function setupEventListeners(redrawCallback) {
     addOptionChangeListener(uiElements.frameCornerStyleSuperellipseRadio, 'frameSettings', 'superellipse', 'cornerStyle');
     addNumericInputListener(uiElements.frameCornerRadiusPercentSlider, 'frameCornerRadiusPercent', 'frameSettings', 'cornerRadiusPercent');
     addNumericInputListener(uiElements.frameSuperellipseNSlider, 'frameSuperellipseN', 'frameSettings', 'superellipseN');
-
     addOptionChangeListener(uiElements.frameShadowEnabledCheckbox, 'frameSettings', 'shadowEnabled');
     addOptionChangeListener(uiElements.frameShadowTypeDropRadio, 'frameSettings', 'drop', 'shadowType');
     addOptionChangeListener(uiElements.frameShadowTypeInnerRadio, 'frameSettings', 'inner', 'shadowType');
-    // 共通化された影パラメータへのリスナー設定
     addNumericInputListener(uiElements.frameShadowOffsetXSlider, 'frameShadowOffsetX', 'frameSettings', 'shadowParams', 'offsetX');
     addNumericInputListener(uiElements.frameShadowOffsetYSlider, 'frameShadowOffsetY', 'frameSettings', 'shadowParams', 'offsetY');
     addNumericInputListener(uiElements.frameShadowBlurSlider, 'frameShadowBlur', 'frameSettings', 'shadowParams', 'blur');
     addNumericInputListener(uiElements.frameShadowEffectRangeSlider, 'frameShadowEffectRange', 'frameSettings', 'shadowParams', 'effectRangePercent');
     addColorInputListener(uiElements.frameShadowColorInput, 'frameSettings', 'shadowParams', 'color');
-
     addOptionChangeListener(uiElements.frameBorderEnabledCheckbox, 'frameSettings', 'border', 'enabled');
     addNumericInputListener(uiElements.frameBorderWidthSlider, 'frameBorderWidth', 'frameSettings', 'border', 'width');
     addColorInputListener(uiElements.frameBorderColorInput, 'frameSettings', 'border', 'color');
@@ -519,7 +487,7 @@ export function setupEventListeners(redrawCallback) {
     // --- 文字入力タブ - 撮影日 ---
     addOptionChangeListener(uiElements.textDateEnabledCheckbox, 'textSettings', 'date', 'enabled');
     addOptionChangeListener(uiElements.textDateFormatSelect, 'textSettings', 'date', 'format');
-    addOptionChangeListener(uiElements.textDateFontSelect, 'textSettings', 'date', 'font');
+    addOptionChangeListener(uiElements.textDateFontSelect, 'textSettings', 'date', 'font'); // This will now trigger font loading
     addNumericInputListener(uiElements.textDateSizeSlider, 'textDateSize', 'textSettings', 'date', 'size');
     addColorInputListener(uiElements.textDateColorInput, 'textSettings', 'date', 'color');
     addOptionChangeListener(uiElements.textDatePositionSelect, 'textSettings', 'date', 'position');
@@ -527,46 +495,30 @@ export function setupEventListeners(redrawCallback) {
     addNumericInputListener(uiElements.textDateOffsetYSlider, 'textDateOffsetY', 'textSettings', 'date', 'offsetY');
 
     // --- 文字入力タブ - Exif情報 ---
-    addOptionChangeListener(uiElements.textExifEnabledCheckbox, 'textSettings', 'exif', 'enabled'); // ★呼び出し方を確認
-
-
+    addOptionChangeListener(uiElements.textExifEnabledCheckbox, 'textSettings', 'exif', 'enabled');
     const exifItemCheckboxes = [
-        uiElements.textExifItemMakeCheckbox,
-        uiElements.textExifItemModelCheckbox,
-        uiElements.textExifItemFNumberCheckbox,
-        uiElements.textExifItemExposureTimeCheckbox,
-        uiElements.textExifItemISOSpeedRatingsCheckbox,
-        uiElements.textExifItemFocalLengthCheckbox,
-        uiElements.textExifItemLensModelCheckbox,
+        uiElements.textExifItemMakeCheckbox, uiElements.textExifItemModelCheckbox, uiElements.textExifItemLensModelCheckbox,
+        uiElements.textExifItemFNumberCheckbox, uiElements.textExifItemExposureTimeCheckbox,
+        uiElements.textExifItemISOSpeedRatingsCheckbox, uiElements.textExifItemFocalLengthCheckbox,
     ];
     exifItemCheckboxes.forEach(checkbox => {
         if (checkbox) {
             checkbox.addEventListener('change', () => {
                 const currentItems = getState().textSettings.exif.items || [];
                 const itemName = checkbox.value;
-                console.log(`[ExifCheckbox] Changed: ${checkbox.id} (${itemName}), Checked: ${checkbox.checked}`);
-                console.log("[ExifCheckbox] currentItems before change:", JSON.stringify(currentItems));
-
                 let newItems;
                 if (checkbox.checked) {
-                    if (!currentItems.includes(itemName)) {
-                        console.log(`[ExifCheckbox] Adding ${itemName} to items.`);
-                        newItems = [...currentItems, itemName];
-                    } else {
-                        newItems = [...currentItems];
-                    }
+                    if (!currentItems.includes(itemName)) newItems = [...currentItems, itemName];
+                    else newItems = [...currentItems];
                 } else {
                     newItems = currentItems.filter(item => item !== itemName);
-                    console.log(`[ExifCheckbox] Removing ${itemName}. newItems after filter:`, JSON.stringify(newItems));
                 }
                 updateState({ textSettings: { exif: { items: newItems } } });
-                console.log("[UIController] After updateState, exif.items in state:", JSON.stringify(getState().textSettings.exif.items)); // ★追加
-                console.log("[UIController] After updateState, exif.items in state (from ExifCheckbox):", JSON.stringify(getState().textSettings.exif.items));
                 redrawCallback();
             });
         }
     });
-    addOptionChangeListener(uiElements.textExifFontSelect, 'textSettings', 'exif', 'font');
+    addOptionChangeListener(uiElements.textExifFontSelect, 'textSettings', 'exif', 'font'); // This will now trigger font loading
     addNumericInputListener(uiElements.textExifSizeSlider, 'textExifSize', 'textSettings', 'exif', 'size');
     addColorInputListener(uiElements.textExifColorInput, 'textSettings', 'exif', 'color');
     addOptionChangeListener(uiElements.textExifPositionSelect, 'textSettings', 'exif', 'position');

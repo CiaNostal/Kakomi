@@ -2,6 +2,32 @@
 // アプリケーションのUIコントロール設定値を定義します。
 
 /**
+ * 使用するGoogle Fontsのリスト
+ * displayName: UI表示用の名前
+ * apiName: Google Fonts APIに渡す名前 (ウェイト指定含む)
+ * fontFamilyForCanvas: ctx.font で使用するフォントファミリー名
+ * fontWeightForCanvas: ctx.font で使用するウェイト
+ */
+export const googleFonts = [
+    { displayName: "Roboto Thin", apiName: "Roboto:wght@100", fontFamilyForCanvas: "Roboto", fontWeightForCanvas: "100" },
+    { displayName: "Roboto Light", apiName: "Roboto:wght@300", fontFamilyForCanvas: "Roboto", fontWeightForCanvas: "300" },
+    { displayName: "Lato Thin", apiName: "Lato:wght@100", fontFamilyForCanvas: "Lato", fontWeightForCanvas: "100" },
+    { displayName: "Lato Light", apiName: "Lato:wght@300", fontFamilyForCanvas: "Lato", fontWeightForCanvas: "300" },
+    { displayName: "Montserrat Thin", apiName: "Montserrat:wght@100", fontFamilyForCanvas: "Montserrat", fontWeightForCanvas: "100" },
+    { displayName: "Montserrat Light", apiName: "Montserrat:wght@300", fontFamilyForCanvas: "Montserrat", fontWeightForCanvas: "300" },
+    { displayName: "Raleway Thin", apiName: "Raleway:wght@100", fontFamilyForCanvas: "Raleway", fontWeightForCanvas: "100" },
+    { displayName: "Raleway Light", apiName: "Raleway:wght@300", fontFamilyForCanvas: "Raleway", fontWeightForCanvas: "300" },
+    { displayName: "Josefin Slab Thin", apiName: "Josefin Slab:wght@100", fontFamilyForCanvas: "Josefin Slab", fontWeightForCanvas: "100" },
+    { displayName: "Oswald ExtraLight", apiName: "Oswald:wght@200", fontFamilyForCanvas: "Oswald", fontWeightForCanvas: "200" },
+    { displayName: "Orbiton Regular", apiName: "Orbiton:wght@400", fontFamilyForCanvas: "Orbiton", fontWeightForCanvas: "400" },
+    { displayName: "Cormorant Garamond Light", apiName: "Cormorant Garamond:wght@300", fontFamilyForCanvas: "Cormorant Garamond", fontWeightForCanvas: "300" },
+    { displayName: "Open Sans Light", apiName: "Open Sans:wght@300", fontFamilyForCanvas: "Open Sans", fontWeightForCanvas: "300" },
+    { displayName: "Julius Sans One Regular", apiName: "Julius Sans One:wght@400", fontFamilyForCanvas: "Julius Sans One", fontWeightForCanvas: "400" },
+    { displayName: "Caveat Regular", apiName: "Caveat:wght@400", fontFamilyForCanvas: "Caveat", fontWeightForCanvas: "400" },
+    { displayName: "Cookie Regular", apiName: "Cookie:wght@400", fontFamilyForCanvas: "Cookie", fontWeightForCanvas: "400" }
+];
+
+/**
  * 各UIコントロールの設定値 (min, max, step, defaultValue)
  * これにより、HTMLからこれらの値を分離し、JavaScriptで一元管理します。
  * defaultValue は主にUI要素の初期表示に使われ、
@@ -26,26 +52,21 @@ export const controlsConfig = {
     // 文字入力タブ - 撮影日表示
     textDateEnabled: { defaultValue: false }, // チェックボックス
     textDateFormat: { defaultValue: 'YYYY/MM/DD' }, // select要素用
-    textDateFont: { defaultValue: 'Arial' }, // select要素用 (将来的にはGoogle Fontsと連携)
+    textDateFont: { defaultValue: googleFonts[0].displayName }, // ★Google Fontsリストの最初のフォントをデフォルトに
     textDateSize: { defaultValue: 2, min: 0.1, max: 10, step: 0.1 }, // % (写真短辺比)
     textDateColor: { defaultValue: '#FFFFFF' }, // カラーピッカー
     textDatePosition: { defaultValue: 'bottom-right' }, // select要素用 (9箇所)
     textDateOffsetX: { defaultValue: 2, min: -50, max: 50, step: 0.5 }, // %
     textDateOffsetY: { defaultValue: 2, min: -50, max: 50, step: 0.5 }, // %
 
-    // 文字入力タブ - Exif情報表示 
+    // 文字入力タブ - Exif情報表示
     textExifEnabled: { defaultValue: false }, // チェックボックス
-    // textExifItems: // 表示項目選択は複数のチェックボックスになるため、個別にIDで管理 (controlsConfigには不要かも)
-    textExifFont: { defaultValue: 'Arial' }, // select要素用
+    textExifFont: { defaultValue: googleFonts[0].displayName }, // ★Google Fontsリストの最初のフォントをデフォルトに
     textExifSize: { defaultValue: 2, min: 0.1, max: 10, step: 0.1 }, // % (写真短辺比)
     textExifColor: { defaultValue: '#000000' }, // カラーピッカー
     textExifPosition: { defaultValue: 'bottom-left' }, // select要素用 (9箇所)
     textExifOffsetX: { defaultValue: 2, min: -50, max: 50, step: 0.5 }, // %
     textExifOffsetY: { defaultValue: 2, min: -50, max: 50, step: 0.5 }, // %
-
-    // Exif表示項目選択用チェックボックスのデフォルト値 (uiControllerで直接参照する想定)
-    // textExifItemMake: { defaultValue: true }, // 例
-    // textExifItemModel: { defaultValue: true }, // 例
 
     // フレーム加工タブ
     frameCornerStyle: { defaultValue: 'none' }, // ラジオボタンまたはselect用
@@ -56,15 +77,15 @@ export const controlsConfig = {
     frameShadowType: { defaultValue: 'drop' },   // ラジオボタンまたはselect用 ('none', 'drop', 'inner')
 
     // 共通の影パラメータ用UI定義
-    frameShadowOffsetX: { defaultValue: 0, min: -25, max: 25, step: 0.2 },  // % (共通化後のオフセットXのデフォルトを0に)
-    frameShadowOffsetY: { defaultValue: 0, min: -25, max: 25, step: 0.2 },  // % (共通化後のオフセットYのデフォルトを0に)
-    frameShadowBlur: { defaultValue: 5, min: 0, max: 10, step: 0.1 },     // %
-    frameShadowEffectRange: { defaultValue: 0, min: 0, max: 10, step: 0.1 }, // % (新しい「効果の範囲」、正の値のみ)
-    frameShadowColor: { defaultValue: 'rgba(0,0,0,0.5)' }, // カラーピッカー用 (共通の初期色)
+    frameShadowOffsetX: { defaultValue: 0, min: -25, max: 25, step: 0.2 },
+    frameShadowOffsetY: { defaultValue: 0, min: -25, max: 25, step: 0.2 },
+    frameShadowBlur: { defaultValue: 5, min: 0, max: 10, step: 0.1 },
+    frameShadowEffectRange: { defaultValue: 0, min: 0, max: 10, step: 0.1 },
+    frameShadowColor: { defaultValue: 'rgba(0,0,0,0.5)' },
 
     // 縁取り用
     frameBorderEnabled: { defaultValue: false }, // チェックボックス
-    frameBorderWidth: { defaultValue: 1, min: 0, max: 3, step: 0.05 },   // %
+    frameBorderWidth: { defaultValue: 1, min: 0, max: 3, step: 0.05 },
     frameBorderColor: { defaultValue: '#000000' },
-    frameBorderStyle: { defaultValue: 'solid' }, // select用
+    frameBorderStyle: { defaultValue: 'solid' },
 };
