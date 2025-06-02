@@ -63,10 +63,15 @@ function drawBlurredImageBackground(ctx, canvasWidth, canvasHeight, img, blurPar
     // 元画像のアスペクト比を保ちつつ、Canvas全体を覆うように拡大描画
     const imgAspectRatio = img.width / img.height;
     // const canvasAspectRatio = canvasWidth / canvasHeight;
-    let sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight;
+    let sx, sy, sWidth, sHeight;
+    let dx, dy, dWidth, dHeight;
 
+    // 描画先の寸法は、指定されたスケールに基づいてCanvas全体を覆うようにする
     dWidth = canvasWidth * blurParams.scale;
     dHeight = canvasHeight * blurParams.scale;
+
+    // 中心からのオフセットを計算 (dx, dy は描画開始位置)
+    // まず中央に配置
     dx = (canvasWidth - dWidth) / 2; // 中央に配置
     dy = (canvasHeight - dHeight) / 2;
 
@@ -82,6 +87,13 @@ function drawBlurredImageBackground(ctx, canvasWidth, canvasHeight, img, blurPar
         sx = 0;
         sy = (img.height - sHeight) / 2;
     }
+
+    // ユーザー指定のオフセットを適用 (仕様書に基づき、写真短辺基準の%をピクセルに変換して適用)
+    // basePhotoShortSideForBlurPx は、プレビュー/出力時の実際の写真短辺の長さ(px)
+    const pixelOffsetX = (blurParams.offsetXPercent / 100) * basePhotoShortSideForBlurPx;
+    const pixelOffsetY = (blurParams.offsetYPercent / 100) * basePhotoShortSideForBlurPx;
+    dx += pixelOffsetX;
+    dy += pixelOffsetY;
 
     ctx.drawImage(img, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight);
     ctx.restore(); // フィルターをリセット

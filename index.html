@@ -103,6 +103,16 @@
                                 <input type="range" id="bgSaturation">
                                 <span id="bgSaturationValue">100%</span>
                             </div>
+                            <div class="form-row-slider">
+                                <label for="bgOffsetX">Xオフセット (%):</label>
+                                <input type="range" id="bgOffsetX">
+                                <span id="bgOffsetXValue">0%</span>
+                            </div>
+                            <div class="form-row-slider">
+                                <label for="bgOffsetY">Yオフセット (%):</label>
+                                <input type="range" id="bgOffsetY">
+                                <span id="bgOffsetYValue">0%</span>
+                            </div>
                         </fieldset>
                     </div>
                     <div id="tab-frame" class="tab-pane">
@@ -229,9 +239,9 @@
                                 <div class="form-row-simple">
                                     <label for="textDateFormat">区切り形式:</label>
                                     <select id="textDateFormat">
+                                        <option value="YYYY.MM.DD">YYYY.MM.DD</option>
                                         <option value="YYYY/MM/DD">YYYY/MM/DD</option>
                                         <option value="YY/MM/DD">YY/MM/DD</option>
-                                        <option value="YYYY.MM.DD">YYYY.MM.DD</option>
                                         <option value="YY.MM.DD">YY.MM.DD</option>
                                         <option value="YYYY年MM月DD日">YYYY年MM月DD日</option>
                                     </select>
@@ -239,7 +249,7 @@
                                 <div class="form-row-simple">
                                     <label for="textDateFont">フォント:</label>
                                     <select id="textDateFont">
-                                        </select>
+                                    </select>
                                 </div>
                                 <div class="form-row-slider">
                                     <label for="textDateSize">サイズ (%):</label>
@@ -256,9 +266,9 @@
                                         <option value="top-left">左上</option>
                                         <option value="top-center">中央上</option>
                                         <option value="top-right">右上</option>
-                                        <option value="middle-left">左中央</option>
+                                        <!-- <option value="middle-left">左中央</option>
                                         <option value="middle-center">中央</option>
-                                        <option value="middle-right">右中央</option>
+                                        <option value="middle-right">右中央</option> -->
                                         <option value="bottom-left">左下</option>
                                         <option value="bottom-center">中央下</option>
                                         <option value="bottom-right">右下</option>
@@ -322,7 +332,7 @@
                                 <div class="form-row-simple">
                                     <label for="textExifFont">フォント:</label>
                                     <select id="textExifFont">
-                                        </select>
+                                    </select>
                                 </div>
                                 <div class="form-row-slider">
                                     <label for="textExifSize">サイズ (%):</label>
@@ -339,9 +349,9 @@
                                         <option value="top-left">左上</option>
                                         <option value="top-center">中央上</option>
                                         <option value="top-right">右上</option>
-                                        <option value="middle-left">左中央</option>
+                                        <!-- <option value="middle-left">左中央</option>
                                         <option value="middle-center">中央</option>
-                                        <option value="middle-right">右中央</option>
+                                        <option value="middle-right">右中央</option> -->
                                         <option value="bottom-left">左下</option>
                                         <option value="bottom-center">中央下</option>
                                         <option value="bottom-right">右下</option>

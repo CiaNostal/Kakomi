@@ -33,6 +33,10 @@ export const uiElements = {
     bgBlurValueSpan: document.getElementById('bgBlurValue'),
     bgBrightnessValueSpan: document.getElementById('bgBrightnessValue'),
     bgSaturationValueSpan: document.getElementById('bgSaturationValue'),
+    bgOffsetXSlider: document.getElementById('bgOffsetX'), // ★追加
+    bgOffsetXValueSpan: document.getElementById('bgOffsetXValue'), // ★追加
+    bgOffsetYSlider: document.getElementById('bgOffsetY'), // ★追加
+    bgOffsetYValueSpan: document.getElementById('bgOffsetYValue'), // ★追加
 
     // 出力タブ
     jpgQualitySlider: document.getElementById('jpgQuality'),
@@ -172,6 +176,9 @@ export function initializeUIFromState() {
     setupInputAttributesAndValue(uiElements.bgBlurSlider, 'bgBlur', state.imageBlurBackgroundParams.blurAmountPercent);
     setupInputAttributesAndValue(uiElements.bgBrightnessSlider, 'bgBrightness', state.imageBlurBackgroundParams.brightness);
     setupInputAttributesAndValue(uiElements.bgSaturationSlider, 'bgSaturation', state.imageBlurBackgroundParams.saturation);
+    setupInputAttributesAndValue(uiElements.bgOffsetXSlider, 'bgOffsetX', state.imageBlurBackgroundParams.offsetXPercent); // ★追加
+    setupInputAttributesAndValue(uiElements.bgOffsetYSlider, 'bgOffsetY', state.imageBlurBackgroundParams.offsetYPercent); // ★追加
+
 
     // 出力設定
     setupInputAttributesAndValue(uiElements.jpgQualitySlider, 'jpgQuality', state.outputSettings.quality);
@@ -263,6 +270,12 @@ export function updateSliderValueDisplays() {
     }
     if (uiElements.bgSaturationValueSpan && uiElements.bgSaturationSlider) {
         uiElements.bgSaturationValueSpan.textContent = `${state.imageBlurBackgroundParams.saturation}%`;
+    }
+    if (uiElements.bgOffsetXValueSpan && uiElements.bgOffsetXSlider) { // ★追加
+        uiElements.bgOffsetXValueSpan.textContent = `${state.imageBlurBackgroundParams.offsetXPercent}%`;
+    }
+    if (uiElements.bgOffsetYValueSpan && uiElements.bgOffsetYSlider) { // ★追加
+        uiElements.bgOffsetYValueSpan.textContent = `${state.imageBlurBackgroundParams.offsetYPercent}%`;
     }
     if (uiElements.jpgQualityValueSpan && uiElements.jpgQualitySlider) {
         uiElements.jpgQualityValueSpan.textContent = `${state.outputSettings.quality}`;
@@ -461,6 +474,9 @@ export function setupEventListeners(redrawCallback) {
     addNumericInputListener(uiElements.bgBlurSlider, 'bgBlur', 'imageBlurBackgroundParams', 'blurAmountPercent');
     addNumericInputListener(uiElements.bgBrightnessSlider, 'bgBrightness', 'imageBlurBackgroundParams', 'brightness');
     addNumericInputListener(uiElements.bgSaturationSlider, 'bgSaturation', 'imageBlurBackgroundParams', 'saturation');
+    addNumericInputListener(uiElements.bgOffsetXSlider, 'bgOffsetX', 'imageBlurBackgroundParams', 'offsetXPercent'); // ★追加
+    addNumericInputListener(uiElements.bgOffsetYSlider, 'bgOffsetY', 'imageBlurBackgroundParams', 'offsetYPercent'); // ★追加
+
 
     // --- 出力タブ ---
     addNumericInputListener(uiElements.jpgQualitySlider, 'jpgQuality', 'outputSettings', 'quality');

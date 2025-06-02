@@ -24,7 +24,9 @@ let editState = {
         scale: 2.0,
         blurAmountPercent: 3,
         brightness: 100,
-        saturation: 100
+        saturation: 100,
+        offsetXPercent: 0, // 追加 (背景Xオフセット%)
+        offsetYPercent: 0  // 追加 (背景Yオフセット%)
     },
     photoDrawConfig: {
         sourceX: 0, sourceY: 0, sourceWidth: 0, sourceHeight: 0,
@@ -63,11 +65,11 @@ let editState = {
     textSettings: {
         date: {
             enabled: false,
-            format: 'YYYY/MM/DD',
+            format: 'YYYY.MM.DD',
             font: googleFonts[0].displayName, // ★初期値をGoogle Fontsリストの最初のフォントに
             size: 2,
             color: '#000000', // 仕様書では白背景が多いので、日付は濃い色が良いかもしれないが、現状維持
-            position: 'bottom-right',
+            position: 'bottom-left',
             offsetX: 0,
             offsetY: 0
         },
@@ -77,7 +79,7 @@ let editState = {
             font: googleFonts[0].displayName, // ★初期値をGoogle Fontsリストの最初のフォントに
             size: 2,
             color: '#000000',
-            position: 'bottom-left',
+            position: 'bottom-right',
             offsetX: 0,
             offsetY: 0
         }
@@ -203,7 +205,14 @@ function resetState() {
         baseMarginPercent: 5,
         backgroundColor: '#ffffff',
         backgroundType: 'color',
-        imageBlurBackgroundParams: { scale: 2.0, blurAmountPercent: 3, brightness: 100, saturation: 100 },
+        imageBlurBackgroundParams: {
+            scale: 2.0, 
+            blurAmountPercent: 3, 
+            brightness: 100, 
+            saturation: 100,
+            offsetXPercent: 0, // リセット時のデフォルト値
+            offsetYPercent: 0  // リセット時のデフォルト値 
+        },
         photoDrawConfig: { sourceX: 0, sourceY: 0, sourceWidth: 0, sourceHeight: 0, destWidth: 0, destHeight: 0, destXonOutputCanvas: 0, destYonOutputCanvas: 0 },
         outputCanvasConfig: { width: 0, height: 0 },
         frameSettings: {
@@ -246,11 +255,8 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
     // Reset relevant parts of the state for the new image
     editState.photoViewParams = { offsetX: 0.5, offsetY: 0.5 };
     // editState.backgroundType = 'color'; // Reset to default or keep current? For now, keep.
-    editState.cropSettings = { aspectRatio: 'original', zoom: 1.0, offsetX: 0.5, offsetY: 0.5 };
+    // editState.cropSettings = { aspectRatio: 'original', zoom: 1.0, offsetX: 0.5, offsetY: 0.5 };
     // Consider if text settings font should reset or persist. For now, persist.
-    // editState.textSettings.date.font = googleFonts[0].displayName;
-    // editState.textSettings.exif.font = googleFonts[0].displayName;
-
     notifyStateChange();
 }
 

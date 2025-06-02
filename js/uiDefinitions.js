@@ -42,10 +42,13 @@ export const controlsConfig = {
     // 背景編集タブ
     backgroundType: { defaultValue: 'color' }, // radio button のデフォルト選択値
     backgroundColor: { defaultValue: '#ffffff' }, // color input
-    bgScale: { defaultValue: 2.0, min: 1, max: 5, step: 0.1 }, // range input
-    bgBlur: { defaultValue: 3, min: 0, max: 40, step: 0.5 },  // range input
+    bgScale: { defaultValue: 2.0, min: 1, max: 8, step: 0.1 }, // range input
+    bgBlur: { defaultValue: 3, min: 0, max: 50, step: 0.5 },  // range input
     bgBrightness: { defaultValue: 100, min: 0, max: 150, step: 1 }, // range input
     bgSaturation: { defaultValue: 100, min: 0, max: 150, step: 1 }, // range input
+    bgOffsetX: { defaultValue: 0, min: -500, max: 500, step: 1 }, // ★追加: 背景Xオフセット%
+    bgOffsetY: { defaultValue: 0, min: -500, max: 500, step: 1 }, // ★追加: 背景Yオフセット%
+
     // 出力タブ
     jpgQuality: { defaultValue: 100, min: 1, max: 100, step: 1 }, // range input (UI表示用1-100)
 
