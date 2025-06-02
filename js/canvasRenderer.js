@@ -4,9 +4,8 @@ import { createAndApplyClippingPath, applyShadow, applyBorder } from './frameRen
 import { drawText } from './textRenderer.js'; // テキスト描画もインポートしておく
 import { drawImageWithPrecision } from './utils/canvasUtils.js';
 
-// drawOrRenderBackground 関数は削除されている前提
 
-export function drawPreview(currentState, previewCanvas, previewCtx) {
+export async function drawPreview(currentState, previewCanvas, previewCtx) { // async追加
     if (!currentState.image) {
         if (previewCtx && previewCanvas) previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
         return;
@@ -86,9 +85,8 @@ export function drawPreview(currentState, previewCanvas, previewCtx) {
     // 7. テキスト描画
     if (currentState.textSettings.date.enabled || currentState.textSettings.exif.enabled) {
         // Google Fonts のロードは別途考慮
-        // プレビュー表示における写真の実際の短辺を渡す
-        drawText(ctx, currentState, previewCanvas.width, previewCanvas.height, photoShortSidePx);
-
+        // プレビュー表示における写真の実際の短辺を渡し、フォント読み込みと描画を待つ
+        await drawText(ctx, currentState, previewCanvas.width, previewCanvas.height, photoShortSidePx); // await追加
     }
 }
 

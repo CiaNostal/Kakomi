@@ -13,7 +13,7 @@ import { initializeTabs } from './tabManager.js';
  * プレビューの再描画を要求します。
  * editStateが更新された後や、UIの変更がプレビューに影響する場合に呼び出されます。
  */
-export function requestRedraw() {
+export async function requestRedraw() {
     const currentState = getState(); // 状態を一度だけ取得
 
     if (!currentState.image) {
@@ -40,7 +40,7 @@ export function requestRedraw() {
     const freshStateForDraw = getState();
 
     if (uiElements.previewCanvas && uiElements.previewCtx) {
-        drawPreview(freshStateForDraw, uiElements.previewCanvas, uiElements.previewCtx);
+        await drawPreview(freshStateForDraw, uiElements.previewCanvas, uiElements.previewCtx); // await追加
     } else {
         console.error("[Main] Preview canvas or context not available for redraw.");
     }
@@ -76,6 +76,9 @@ document.addEventListener('DOMContentLoaded', () => {
         uiElements.imageLoader.addEventListener('change', (event) => {
             const file = event.target.files[0];
             if (file) {
+                // processImageFile自体は非同期だが、requestRedrawがasyncになったことによる直接的な影響は少ない
+                // processImageFile内でrequestRedrawを呼び出すため、その完了をここで待つ必要は通常ない
+                // ただし、もしprocessImageFileの完了後に何か処理が必要なら、ここもasync/awaitする
                 processImageFile(file, requestRedraw);
             }
         });
@@ -100,6 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
             uiElements.canvasContainer.classList.remove('dragover');
             const files = event.dataTransfer.files;
             if (files.length > 0) {
+                // 同上
                 processImageFile(files[0], requestRedraw);
             }
         });
