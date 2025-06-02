@@ -19,7 +19,7 @@ export const googleFonts = [
     { displayName: "Raleway Light", apiName: "Raleway:wght@300", fontFamilyForCanvas: "Raleway", fontWeightForCanvas: "300" },
     { displayName: "Josefin Slab Thin", apiName: "Josefin Slab:wght@100", fontFamilyForCanvas: "Josefin Slab", fontWeightForCanvas: "100" },
     { displayName: "Oswald ExtraLight", apiName: "Oswald:wght@200", fontFamilyForCanvas: "Oswald", fontWeightForCanvas: "200" },
-    { displayName: "Orbiton Regular", apiName: "Orbiton:wght@400", fontFamilyForCanvas: "Orbiton", fontWeightForCanvas: "400" },
+    { displayName: "Orbitron Regular", apiName: "Orbitron:wght@400", fontFamilyForCanvas: "Orbitron", fontWeightForCanvas: "400" },
     { displayName: "Cormorant Garamond Light", apiName: "Cormorant Garamond:wght@300", fontFamilyForCanvas: "Cormorant Garamond", fontWeightForCanvas: "300" },
     { displayName: "Open Sans Light", apiName: "Open Sans:wght@300", fontFamilyForCanvas: "Open Sans", fontWeightForCanvas: "300" },
     { displayName: "Julius Sans One Regular", apiName: "Julius Sans One:wght@400", fontFamilyForCanvas: "Julius Sans One", fontWeightForCanvas: "400" },
