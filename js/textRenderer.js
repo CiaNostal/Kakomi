@@ -69,7 +69,7 @@ function loadSingleGoogleFont(fontApiName) {
  * @param {number} canvasHeight - キャンバスの高さ
  * @param {number} basePhotoShortSideForTextPx - テキストサイズ計算の基準となる写真の短辺の実際のピクセル長
  */
-function drawText(ctx, currentState, canvasWidth, canvasHeight, basePhotoShortSideForTextPx) {
+export async function drawText(ctx, currentState, canvasWidth, canvasHeight, basePhotoShortSideForTextPx) {
     console.log("[TextRenderer] drawText called. basePhotoShortSideForTextPx:", basePhotoShortSideForTextPx);
 
     if (basePhotoShortSideForTextPx <= 0) {
@@ -77,27 +77,32 @@ function drawText(ctx, currentState, canvasWidth, canvasHeight, basePhotoShortSi
         return;
     }
 
+    const textDrawPromises = [];
+
     // 撮影日の表示
     if (currentState.textSettings.date.enabled) {
         const exifDateTime = currentState.exifData ? currentState.exifData["0th"]?.[piexif.ImageIFD.DateTime] : null;
         if (exifDateTime) {
             const selectedDateFont = googleFonts.find(f => f.displayName === currentState.textSettings.date.font);
             if (selectedDateFont) { // フォントが見つかれば描画
-                // フォントがロードされているか確認 (loadSingleGoogleFontはロード済みなら即座に解決するPromiseを返す)
-                loadSingleGoogleFont(selectedDateFont.apiName).then(() => {
-                    drawDateText(
-                        ctx,
-                        currentState.textSettings.date,
-                        selectedDateFont, // フォントオブジェクトを渡す
-                        exifDateTime,
-                        basePhotoShortSideForTextPx,
-                        canvasWidth,
-                        canvasHeight
-                    );
-                }).catch(error => {
-                    console.error("[TextRenderer] Date font could not be loaded for drawing:", error);
-                    // フォールバック描画や何もしないなどのエラー処理
-                });
+                const dateFontPromise = loadSingleGoogleFont(selectedDateFont.apiName)
+                    .then(() => {
+                        drawDateText(
+                            ctx,
+                            currentState.textSettings.date,
+                            selectedDateFont, // フォントオブジェクトを渡す
+                            exifDateTime,
+                            basePhotoShortSideForTextPx,
+                            canvasWidth,
+                            canvasHeight
+                        );
+                    })
+                    .catch(error => {
+                        console.error(`[TextRenderer] Date font ${selectedDateFont.apiName} could not be loaded for drawing:`, error);
+                        // エラーを投げずに解決することで Promise.all が中断しないようにする
+                        // あるいは、ここでエラーを再throwして呼び出し元でキャッチする
+                    });
+                textDrawPromises.push(dateFontPromise);
             } else {
                 console.warn(`[TextRenderer] Date font definition not found for: ${currentState.textSettings.date.font}`);
             }
@@ -110,22 +115,31 @@ function drawText(ctx, currentState, canvasWidth, canvasHeight, basePhotoShortSi
     if (currentState.textSettings.exif.enabled && currentState.exifData) {
         const selectedExifFont = googleFonts.find(f => f.displayName === currentState.textSettings.exif.font);
         if (selectedExifFont) { // フォントが見つかれば描画
-             loadSingleGoogleFont(selectedExifFont.apiName).then(() => {
-                drawExifInfo(
-                    ctx,
-                    currentState.textSettings.exif,
-                    selectedExifFont, // フォントオブジェクトを渡す
-                    currentState.exifData,
-                    basePhotoShortSideForTextPx,
-                    canvasWidth,
-                    canvasHeight
-                );
-            }).catch(error => {
-                console.error("[TextRenderer] Exif font could not be loaded for drawing:", error);
-            });
+            const exifFontPromise = loadSingleGoogleFont(selectedExifFont.apiName)
+                .then(() => {
+                    drawExifInfo(
+                        ctx,
+                        currentState.textSettings.exif,
+                        selectedExifFont, // フォントオブジェクトを渡す
+                        currentState.exifData,
+                        basePhotoShortSideForTextPx,
+                        canvasWidth,
+                        canvasHeight
+                    );
+                })
+                .catch(error => {
+                    console.error(`[TextRenderer] Exif font ${selectedExifFont.apiName} could not be loaded for drawing:`, error);
+                });
+            textDrawPromises.push(exifFontPromise);
         } else {
             console.warn(`[TextRenderer] Exif font definition not found for: ${currentState.textSettings.exif.font}`);
         }
+    }
+    try {
+        await Promise.all(textDrawPromises); // すべてのフォント読み込みと関連する描画試行を待つ
+    } catch (error) {
+        // textDrawPromises内の個々のcatchで処理されていれば、ここは呼ばれない可能性がある
+        console.error("[TextRenderer] Error during Promise.all in drawText:", error);
     }
 }
 
@@ -385,5 +399,6 @@ function getExifValue(exifDataFromState, itemKey) {
     }
 }
 
-// モジュールとしてエクスポート (loadSingleGoogleFont も含めるが、主には drawText)
-export { drawText, loadSingleGoogleFont as loadGoogleFonts }; // 外部にはloadGoogleFontsとして公開
+// The original full code for textRenderer.js had `export { drawText, loadGoogleFonts };`
+// Now, drawText is async. loadGoogleFonts was already an alias for loadSingleGoogleFont.
+export { loadSingleGoogleFont as loadGoogleFonts };

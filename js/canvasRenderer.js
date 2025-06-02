@@ -92,7 +92,7 @@ export function drawPreview(currentState, previewCanvas, previewCtx) {
     }
 }
 
-export function renderFinal(currentState) {
+export async function renderFinal(currentState) { // async追加
     if (!currentState.image || !currentState.outputCanvasConfig || currentState.outputCanvasConfig.width <= 0 || currentState.outputCanvasConfig.height <= 0) {
         console.error("Render Final: Invalid state or image not loaded."); return null;
     }
@@ -146,7 +146,6 @@ export function renderFinal(currentState) {
 
         // 5. インナーシャドウ描画
         if (currentState.frameSettings.shadowEnabled && currentState.frameSettings.shadowType === 'inner') {
-            // applyShadow(ctx, currentState.frameSettings.innerShadow, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
             applyShadow(ctx, currentState.frameSettings.shadowParams, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
         }
 
@@ -163,7 +162,7 @@ export function renderFinal(currentState) {
     if (currentState.textSettings.date.enabled || currentState.textSettings.exif.enabled) {
         // Google Fonts のロードは別途考慮
         // 出力解像度における写真の実際の短辺を渡す
-        drawText(ctx, currentState, outputWidth, outputHeight, photoShortSidePx);
+        await drawText(ctx, currentState, outputWidth, outputHeight, photoShortSidePx); // await追加
     }
 
     return finalCanvas;

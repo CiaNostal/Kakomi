@@ -10,7 +10,7 @@ export async function processImageFile(file, redrawCallback) {
     if (file && file.type.startsWith('image/')) {
         const originalFileName = file.name;
         const reader = new FileReader();
-        
+
         reader.onload = async (e) => {
             const img = new Image();
             img.onload = async () => {
@@ -20,18 +20,18 @@ export async function processImageFile(file, redrawCallback) {
                 } catch (exifError) {
                     console.warn("Exifデータの抽出に失敗しました (processImageFile):", exifError);
                 }
-                
+
                 setImage(img, exifData, originalFileName); // stateManagerのsetImageを呼び出し
-                
+
                 initializeUIFromState(); // uiControllerを使ってUIを最新の状態に更新
                 redrawCallback();      // main.jsのrequestRedrawを呼び出し
 
                 if (uiElements.downloadButton) uiElements.downloadButton.disabled = false;
                 if (uiElements.imageLoader) uiElements.imageLoader.value = '';
             };
-            img.onerror = () => { 
-                alert('画像の読み込みに失敗しました。'); 
-                if (uiElements.imageLoader) uiElements.imageLoader.value = ''; 
+            img.onerror = () => {
+                alert('画像の読み込みに失敗しました。');
+                if (uiElements.imageLoader) uiElements.imageLoader.value = '';
             };
             if (e.target && typeof e.target.result === 'string') {
                 img.src = e.target.result;
@@ -40,9 +40,9 @@ export async function processImageFile(file, redrawCallback) {
                 if (uiElements.imageLoader) uiElements.imageLoader.value = '';
             }
         };
-        reader.onerror = () => { 
-            alert('ファイルの読み込みに失敗しました。'); 
-            if (uiElements.imageLoader) uiElements.imageLoader.value = ''; 
+        reader.onerror = () => {
+            alert('ファイルの読み込みに失敗しました。');
+            if (uiElements.imageLoader) uiElements.imageLoader.value = '';
         };
         reader.readAsDataURL(file);
     } else {
@@ -55,11 +55,11 @@ export async function handleDownload() {
     const currentState = getState();
 
     if (!currentState.image) {
-        alert('画像が選択されていません。'); 
-        return; 
+        alert('画像が選択されていません。');
+        return;
     }
-    
-    const finalCanvas = renderFinal(currentState); 
+
+    const finalCanvas = await renderFinal(currentState);
 
     if (finalCanvas) {
         const uiQualityValue = currentState.outputSettings.quality;
@@ -83,12 +83,12 @@ export async function handleDownload() {
                             console.warn("Exif埋め込み後のBlob変換に失敗しました。元の画像を使用します。");
                         }
                     } else if (newJpegDataUrlWithExif === jpegDataUrl) {
-                         console.log("Exifデータが存在しないか、埋め込み処理がスキップされました。元の画像を使用します。");
+                        console.log("Exifデータが存在しないか、埋め込み処理がスキップされました。元の画像を使用します。");
                     } else { // newJpegDataUrlWithExif が null の場合など
                         console.warn("Exif埋め込み処理でエラーまたは変更なし。元の画像を使用します。");
                     }
                 } else {
-                     console.warn("BlobからDataURLへの変換に失敗しました。Exifは埋め込まれません。");
+                    console.warn("BlobからDataURLへの変換に失敗しました。Exifは埋め込まれません。");
                 }
             } else {
                 console.log("Exifを保持する設定でないか、Exifデータが存在しないため、埋め込みは行いません。");
@@ -100,7 +100,7 @@ export async function handleDownload() {
                 baseName = currentState.originalFileName.substring(0, currentState.originalFileName.lastIndexOf('.')) || 'image';
             }
             // 仕様書では「_framed.jpg」。 現在は "_kakomi_framed.jpg" を維持。
-            const fileName = `${baseName}_kakomi_framed.jpg`; 
+            const fileName = `${baseName}_kakomi_framed.jpg`;
             const a = document.createElement('a');
             a.href = url; a.download = fileName;
             document.body.appendChild(a); a.click();
