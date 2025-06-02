@@ -395,7 +395,7 @@ function getExifValue(exifDataFromState, itemKey) {
             if (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.FNumber !== undefined) {
                 const fVal = exifIFD[ExifIFD_CONSTANTS.FNumber];
                 if (fVal && Array.isArray(fVal) && fVal.length === 2 && fVal[1] !== 0) {
-                    return `F${(fVal[0] / fVal[1]).toFixed(1)}`;
+                    return `f/${(fVal[0] / fVal[1]).toFixed(1)}`;
                 }
             }
             return '';
@@ -404,9 +404,9 @@ function getExifValue(exifDataFromState, itemKey) {
                 const etVal = exifIFD[ExifIFD_CONSTANTS.ExposureTime];
                 if (etVal && Array.isArray(etVal) && etVal.length === 2 && etVal[1] !== 0) {
                     const et = etVal[0] / etVal[1];
-                    if (et >= 1) return `${et.toFixed(1)}秒`;
-                    if (et >= 0.1) return `${et.toFixed(2)}秒`;
-                    return `1/${Math.round(1 / et)}秒`;
+                    if (et >= 1) return `${et.toFixed(1)}s`;
+                    if (et >= 0.1) return `${et.toFixed(2)}s`;
+                    return `1/${Math.round(1 / et)}s`;
                 }
             }
             return '';

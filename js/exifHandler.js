@@ -98,16 +98,16 @@ function formatExifForDisplay(exifData) {
     if (exifIFD) {
         const fNumberVal = getTagValue(exifIFD, ExifIFD_CONSTANTS.FNumber);
         if (fNumberVal && Array.isArray(fNumberVal) && fNumberVal.length === 2 && fNumberVal[1] !== 0) {
-            formatted.fNumber = `F${(fNumberVal[0] / fNumberVal[1]).toFixed(1)}`;
+            formatted.fNumber = `f/${(fNumberVal[0] / fNumberVal[1]).toFixed(1)}`;
         }
 
         const exposureTimeVal = getTagValue(exifIFD, ExifIFD_CONSTANTS.ExposureTime);
         if (exposureTimeVal && Array.isArray(exposureTimeVal) && exposureTimeVal.length === 2 && exposureTimeVal[1] !== 0) {
             const et = exposureTimeVal[0] / exposureTimeVal[1];
             if (et < 1) {
-                formatted.exposureTime = `1/${Math.round(1 / et)}秒`;
+                formatted.exposureTime = `1/${Math.round(1 / et)}s`;
             } else {
-                formatted.exposureTime = `${et.toFixed(2)}秒`;
+                formatted.exposureTime = `${et.toFixed(2)}s`;
             }
         }
 
