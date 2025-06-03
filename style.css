@@ -406,13 +406,13 @@ fieldset div span {
         margin-bottom: 1rem;
         max-height: none;
         /* 縦積みの場合は高さ制限をなくす */
-        order: 2;
+        order: 1;
         /* コントロールを下に */
     }
 
     .preview-exif-area {
         width: 100%;
-        order: 1;
+        order: 2;
         /* プレビューを上に */
     }
 
