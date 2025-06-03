@@ -40,8 +40,8 @@ let editState = {
     frameSettings: {
         // 角のスタイル関連
         cornerStyle: 'none',
-        cornerRadiusPercent: 0,
-        superellipseN: 4,
+        cornerRadiusPercent: 10,
+        superellipseN: 10,
         // 影関連
         shadowEnabled: false,
         shadowType: 'drop',
@@ -51,7 +51,8 @@ let editState = {
             offsetY: 0,
             blur: 2,
             effectRangePercent: 2,
-            color: 'rgba(0,0,0,0.5)',
+            color: '#000000', // RGBカラー (例: HEX)
+            opacity: 0.5      // 不透明度 (0.0 - 1.0)
         },
         // 縁取り／線関連
         border: {
@@ -206,9 +207,9 @@ function resetState() {
         backgroundColor: '#ffffff',
         backgroundType: 'color',
         imageBlurBackgroundParams: {
-            scale: 2.0, 
-            blurAmountPercent: 3, 
-            brightness: 100, 
+            scale: 2.0,
+            blurAmountPercent: 3,
+            brightness: 100,
             saturation: 100,
             offsetXPercent: 0, // リセット時のデフォルト値
             offsetYPercent: 0  // リセット時のデフォルト値 
@@ -216,10 +217,25 @@ function resetState() {
         photoDrawConfig: { sourceX: 0, sourceY: 0, sourceWidth: 0, sourceHeight: 0, destWidth: 0, destHeight: 0, destXonOutputCanvas: 0, destYonOutputCanvas: 0 },
         outputCanvasConfig: { width: 0, height: 0 },
         frameSettings: {
-            cornerStyle: 'none', cornerRadiusPercent: 0, superellipseN: 4,
-            shadowEnabled: false, shadowType: 'drop',
-            shadowParams: { offsetX: 0, offsetY: 0, blur: 2, effectRangePercent: 2, color: 'rgba(0,0,0,0.5)' },
-            border: { enabled: false, width: 1, color: '#000000', style: 'solid' }
+            cornerStyle: 'none',
+            cornerRadiusPercent: 0,
+            superellipseN: 4,
+            shadowEnabled: false,
+            shadowType: 'drop',
+            shadowParams: {
+                offsetX: 0,
+                offsetY: 0,
+                blur: 2,
+                effectRangePercent: 2,
+                color: '#000000', // RGBカラー
+                opacity: 0.5      // 不透明度
+            },
+            border: {
+                enabled: false,
+                width: 1,
+                color: '#000000',
+                style: 'solid'
+            }
         },
         textSettings: {
             date: {

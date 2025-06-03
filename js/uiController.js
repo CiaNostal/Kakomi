@@ -66,6 +66,8 @@ export const uiElements = {
     frameShadowEffectRangeSlider: document.getElementById('frameShadowEffectRange'),
     frameShadowEffectRangeValueSpan: document.getElementById('frameShadowEffectRangeValue'),
     frameShadowColorInput: document.getElementById('frameShadowColor'),
+    frameShadowOpacitySlider: document.getElementById('frameShadowOpacity'),
+    frameShadowOpacityValueSpan: document.getElementById('frameShadowOpacityValue'),
     frameBorderEnabledCheckbox: document.getElementById('frameBorderEnabled'),
     frameBorderDetailSettingsContainer: document.getElementById('frameBorderDetailSettingsContainer'),
     frameBorderWidthSlider: document.getElementById('frameBorderWidth'),
@@ -200,6 +202,7 @@ export function initializeUIFromState() {
     setupInputAttributesAndValue(uiElements.frameShadowBlurSlider, 'frameShadowBlur', fs.shadowParams.blur);
     setupInputAttributesAndValue(uiElements.frameShadowEffectRangeSlider, 'frameShadowEffectRange', fs.shadowParams.effectRangePercent);
     if (uiElements.frameShadowColorInput) uiElements.frameShadowColorInput.value = fs.shadowParams.color;
+    setupInputAttributesAndValue(uiElements.frameShadowOpacitySlider, 'frameShadowOpacity', fs.shadowParams.opacity);
 
     if (uiElements.frameBorderEnabledCheckbox) uiElements.frameBorderEnabledCheckbox.checked = fs.border.enabled;
     setupInputAttributesAndValue(uiElements.frameBorderWidthSlider, 'frameBorderWidth', fs.border.width);
@@ -292,6 +295,9 @@ export function updateSliderValueDisplays() {
     if (uiElements.frameShadowBlurValueSpan) uiElements.frameShadowBlurValueSpan.textContent = `${fs.shadowParams.blur}%`;
     if (uiElements.frameShadowEffectRangeValueSpan) {
         uiElements.frameShadowEffectRangeValueSpan.textContent = `${fs.shadowParams.effectRangePercent}%`;
+    }
+    if (uiElements.frameShadowOpacityValueSpan && uiElements.frameShadowOpacitySlider) { // ★追加
+        uiElements.frameShadowOpacityValueSpan.textContent = parseFloat(fs.shadowParams.opacity).toFixed(2);
     }
     if (uiElements.frameBorderWidthValueSpan && uiElements.frameBorderWidthSlider) {
         uiElements.frameBorderWidthValueSpan.textContent = `${fs.border.width}%`;
@@ -495,6 +501,7 @@ export function setupEventListeners(redrawCallback) {
     addNumericInputListener(uiElements.frameShadowBlurSlider, 'frameShadowBlur', 'frameSettings', 'shadowParams', 'blur');
     addNumericInputListener(uiElements.frameShadowEffectRangeSlider, 'frameShadowEffectRange', 'frameSettings', 'shadowParams', 'effectRangePercent');
     addColorInputListener(uiElements.frameShadowColorInput, 'frameSettings', 'shadowParams', 'color');
+    addNumericInputListener(uiElements.frameShadowOpacitySlider, 'frameShadowOpacity', 'frameSettings', 'shadowParams', 'opacity');
     addOptionChangeListener(uiElements.frameBorderEnabledCheckbox, 'frameSettings', 'border', 'enabled');
     addNumericInputListener(uiElements.frameBorderWidthSlider, 'frameBorderWidth', 'frameSettings', 'border', 'width');
     addColorInputListener(uiElements.frameBorderColorInput, 'frameSettings', 'border', 'color');

@@ -84,7 +84,8 @@ export const controlsConfig = {
     frameShadowOffsetY: { defaultValue: 0, min: -25, max: 25, step: 0.2 },
     frameShadowBlur: { defaultValue: 5, min: 0, max: 10, step: 0.1 },
     frameShadowEffectRange: { defaultValue: 0, min: 0, max: 10, step: 0.1 },
-    frameShadowColor: { defaultValue: 'rgba(0,0,0,0.5)' },
+    frameShadowColor: { defaultValue: '#000000' }, // カラーピッカー用 (RGB HEX)
+    frameShadowOpacity: { defaultValue: 0.5, min: 0, max: 1, step: 0.01 }, // ★追加: 影の不透明度スライダー
 
     // 縁取り用
     frameBorderEnabled: { defaultValue: false }, // チェックボックス

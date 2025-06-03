@@ -116,7 +116,27 @@ function createAndApplyClippingPath(ctx, frameSettings, photoX, photoY, photoWid
     ctx.clip();
 }
 
-// REMOVED: applyFrameEffects 関数は canvasRenderer.js 側の描画順序制御に役割を移譲
+/**
+ * HEXカラーコードとアルファ値からRGBAカラー文字列を生成する
+ * @param {string} hex - HEXカラーコード (例: #RRGGBB)
+ * @param {number} alpha - アルファ値 (0.0 - 1.0)
+ * @returns {string} RGBAカラー文字列 (例: rgba(r,g,b,a))
+ */
+function hexToRgba(hex, alpha) {
+    if (!hex || typeof hex !== 'string') return `rgba(0,0,0,${alpha})`; // フォールバック
+    let r = 0, g = 0, b = 0;
+    if (hex.length === 4) { // #RGB
+        r = parseInt(hex[1] + hex[1], 16);
+        g = parseInt(hex[2] + hex[2], 16);
+        b = parseInt(hex[3] + hex[3], 16);
+    } else if (hex.length === 7) { // #RRGGBB
+        r = parseInt(hex.slice(1, 3), 16);
+        g = parseInt(hex.slice(3, 5), 16);
+        b = parseInt(hex.slice(5, 7), 16);
+    }
+    return `rgba(${r},${g},${b},${alpha})`;
+}
+
 
 function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx) {
     // shadowEnabled のチェックは呼び出し元(canvasRenderer.js)で行われている。
@@ -132,7 +152,9 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
         const userShadowOffsetY = (shadowSettings.offsetY / 100) * photoShortSidePx; // 共通パラメータから取得
         const blurRadius = Math.max(0, (shadowSettings.blur / 100) * photoShortSidePx);
         const spreadRadius = (shadowSettings.effectRangePercent / 100) * photoShortSidePx; // ★共通の effectRangePercent を使用
-        const shadowColor = shadowSettings.color; // 共通パラメータから取得
+        const baseShadowColor = shadowSettings.color; // HEX形式を想定
+        const shadowOpacity = shadowSettings.opacity;
+        const finalShadowColor = hexToRgba(baseShadowColor, shadowOpacity);
 
         if (photoWidth <= 0 || photoHeight <= 0) return;
 
@@ -178,7 +200,7 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
             } else {
                 offCtx.rect(spreadPhotoXonOffscreen, spreadPhotoYonOffscreen, spreadPhotoWidth, spreadPhotoHeight);
             }
-            offCtx.fillStyle = shadowColor; // ★共通の影の色で塗りつぶす
+            offCtx.fillStyle = finalShadowColor; // ★RGBAカラーで塗りつぶす
             offCtx.fill();
         }
 
@@ -208,12 +230,15 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
         ctx.drawImage(offscreenCanvas, finalDrawX, finalDrawY);
 
     } else if (frameSettings.shadowType === 'inner') {
-        console.log("Applying Inner Shadow (Common Params) with settings:", shadowSettings);
+        // console.log("Applying Inner Shadow (Common Params) with settings:", shadowSettings);
         // 共通パラメータ shadowParams を使用
         const blurAmountPx = (shadowSettings.blur / 100) * photoShortSidePx;
         const offsetXpx = (shadowSettings.offsetX / 100) * photoShortSidePx;
         const offsetYpx = (shadowSettings.offsetY / 100) * photoShortSidePx;
         const spreadPx = (shadowSettings.effectRangePercent / 100) * photoShortSidePx; // ★共通の effectRangePercent を使用
+        const baseShadowColor = shadowSettings.color; // HEX形式を想定
+        const shadowOpacity = shadowSettings.opacity;
+        const finalShadowColor = hexToRgba(baseShadowColor, shadowOpacity);
 
         if (photoWidth <= 0 || photoHeight <= 0) return;
 
@@ -227,7 +252,7 @@ function applyShadow(ctx, shadowSettings, frameSettings, photoX, photoY, photoWi
         }
 
         // ステップ2a: オフスクリーン全体を影の色で塗りつぶす
-        offCtx.fillStyle = shadowSettings.color;// 共通の影の色を使用
+        offCtx.fillStyle = finalShadowColor; // ★RGBAカラーで塗りつぶす
         offCtx.fillRect(0, 0, photoWidth, photoHeight);
 
         // ステップ2b: オフセットした写真の形状でくり抜く (destination-out)
