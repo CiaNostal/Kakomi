@@ -63,30 +63,28 @@ function drawBlurredImageBackground(ctx, canvasWidth, canvasHeight, img, blurPar
     // 元画像のアスペクト比を保ちつつ、Canvas全体を覆うように拡大描画
     const imgAspectRatio = img.width / img.height;
     // const canvasAspectRatio = canvasWidth / canvasHeight;
-    let sx, sy, sWidth, sHeight;
-    let dx, dy, dWidth, dHeight;
+    let sx = 0, sy = 0, sWidth = img.width, sHeight = img.height; // ★ 元画像の全体を使用
+    let dx, dy, finalDrawWidth, finalDrawHeight;
 
-    // 描画先の寸法は、指定されたスケールに基づいてCanvas全体を覆うようにする
-    dWidth = canvasWidth * blurParams.scale;
-    dHeight = canvasHeight * blurParams.scale;
+    // 1. 元画像がCanvasを「カバー」するように基本スケールを計算
+    let coverScale;
+    if (canvasWidth / canvasHeight > imgAspectRatio) {
+        // Canvasが画像より横長の場合、画像の幅をCanvasの幅に合わせるスケール
+        coverScale = canvasWidth / img.width;
+    } else {
+        // Canvasが画像より縦長（または同じ比率）の場合、画像の高さをCanvasの高さに合わせるスケール
+        coverScale = canvasHeight / img.height;
+    }
+
+    // 2. 基本スケールにユーザー指定の拡大率を適用
+    const totalScale = coverScale * blurParams.scale;
+    finalDrawWidth = img.width * totalScale;
+    finalDrawHeight = img.height * totalScale;
 
     // 中心からのオフセットを計算 (dx, dy は描画開始位置)
     // まず中央に配置
-    dx = (canvasWidth - dWidth) / 2; // 中央に配置
-    dy = (canvasHeight - dHeight) / 2;
-
-    // 元画像から切り出す領域を決定（アスペクト比を維持しつつ中央から）
-    if (imgAspectRatio > (dWidth / dHeight)) { // 元画像が描画領域より横長
-        sHeight = img.height;
-        sWidth = sHeight * (dWidth / dHeight);
-        sx = (img.width - sWidth) / 2;
-        sy = 0;
-    } else { // 元画像が描画領域より縦長または同じアスペクト比
-        sWidth = img.width;
-        sHeight = sWidth / (dWidth / dHeight);
-        sx = 0;
-        sy = (img.height - sHeight) / 2;
-    }
+    dx = (canvasWidth - finalDrawWidth) / 2;
+    dy = (canvasHeight - finalDrawHeight) / 2;
 
     // ユーザー指定のオフセットを適用 (仕様書に基づき、写真短辺基準の%をピクセルに変換して適用)
     // basePhotoShortSideForBlurPx は、プレビュー/出力時の実際の写真短辺の長さ(px)
@@ -95,7 +93,9 @@ function drawBlurredImageBackground(ctx, canvasWidth, canvasHeight, img, blurPar
     dx += pixelOffsetX;
     dy += pixelOffsetY;
 
-    ctx.drawImage(img, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight);
+    // 元画像の全体 (sx, sy, sWidth, sHeight) を、計算された finalDrawWidth, finalDrawHeight で
+    // dx, dy の位置に描画する
+    ctx.drawImage(img, sx, sy, sWidth, sHeight, dx, dy, finalDrawWidth, finalDrawHeight);
     ctx.restore(); // フィルターをリセット
 }
 
