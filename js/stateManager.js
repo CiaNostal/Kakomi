@@ -269,7 +269,7 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName ãƒ
     editState.originalFileName = typeof fileName === 'string' ? fileName : 'image';
 
     // Reset relevant parts of the state for the new image
-    editState.photoViewParams = { offsetX: 0.5, offsetY: 0.5 };
+    // editState.photoViewParams = { offsetX: 0.5, offsetY: 0.5 };
     // editState.backgroundType = 'color'; // Reset to default or keep current? For now, keep.
     // editState.cropSettings = { aspectRatio: 'original', zoom: 1.0, offsetX: 0.5, offsetY: 0.5 };
     // Consider if text settings font should reset or persist. For now, persist.

@@ -46,8 +46,8 @@ export const controlsConfig = {
     bgBlur: { defaultValue: 3, min: 0, max: 50, step: 0.5 },  // range input
     bgBrightness: { defaultValue: 100, min: 0, max: 150, step: 1 }, // range input
     bgSaturation: { defaultValue: 100, min: 0, max: 150, step: 1 }, // range input
-    bgOffsetX: { defaultValue: 0, min: -500, max: 500, step: 1 }, // ★追加: 背景Xオフセット%
-    bgOffsetY: { defaultValue: 0, min: -500, max: 500, step: 1 }, // ★追加: 背景Yオフセット%
+    bgOffsetX: { defaultValue: 0, min: -500, max: 500, step: 2 }, // 背景Xオフセット%
+    bgOffsetY: { defaultValue: 0, min: -500, max: 500, step: 2 }, // 背景Yオフセット%
 
     // 出力タブ
     jpgQuality: { defaultValue: 100, min: 1, max: 100, step: 1 }, // range input (UI表示用1-100)
