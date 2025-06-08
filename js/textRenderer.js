@@ -16,6 +16,22 @@ googleFonts.forEach(font => { // This assumes googleFonts is populated when this
     }
 });
 
+// ★追加: HEXカラーとアルファ値からRGBA文字列を生成するヘルパー関数
+function hexToRgba(hex, alpha) {
+    if (!hex || typeof hex !== 'string') return `rgba(0,0,0,${alpha})`; // フォールバック
+    let r = 0, g = 0, b = 0;
+    if (hex.length === 4) { // #RGB
+        r = parseInt(hex[1] + hex[1], 16);
+        g = parseInt(hex[2] + hex[2], 16);
+        b = parseInt(hex[3] + hex[3], 16);
+    } else if (hex.length === 7) { // #RRGGBB
+        r = parseInt(hex.slice(1, 3), 16);
+        g = parseInt(hex.slice(3, 5), 16);
+        b = parseInt(hex.slice(5, 7), 16);
+    }
+    return `rgba(${r},${g},${b},${alpha})`;
+}
+
 /**
  * 指定されたGoogle Font (apiName) を読み込む。
  * 既に読み込み試行中または完了済みの場合はそのPromiseを返す。
@@ -207,7 +223,7 @@ function drawDateText(ctx, dateSettings, fontObject, exifDateTimeString, basePho
     ctx.save();
     // フォントオブジェクトからフォントファミリーとウェイトを取得して設定
     ctx.font = `${fontObject.fontWeightForCanvas} ${fontSizePx}px "${fontObject.fontFamilyForCanvas}"`;
-    ctx.fillStyle = dateSettings.color;
+    ctx.fillStyle = hexToRgba(dateSettings.color, dateSettings.opacity); // ★変更
 
     let textAlign = 'left';
     let textBaseline = 'alphabetic';
@@ -262,7 +278,7 @@ function drawExifInfo(ctx, exifSettings, fontObject, exifDataFromState, basePhot
 
     ctx.save();
     ctx.font = `${fontObject.fontWeightForCanvas} ${fontSizePx}px "${fontObject.fontFamilyForCanvas}"`;
-    ctx.fillStyle = exifSettings.color;
+    ctx.fillStyle = hexToRgba(exifSettings.color, exifSettings.opacity); // ★変更
 
     const textAlign = exifSettings.textAlign || 'left';
     let textBaseline = 'top';
@@ -273,7 +289,7 @@ function drawExifInfo(ctx, exifSettings, fontObject, exifDataFromState, basePhot
     ctx.textBaseline = textBaseline;
 
     const lines = exifString.split('\n');
-    const lineHeight = fontSizePx * 1.4;
+    const lineHeight = fontSizePx * 1.3;
 
     let maxWidth = 0;
     if (lines.length > 0) {
@@ -334,7 +350,7 @@ function drawFreeText(ctx, freeTextSettings, fontObject, basePhotoShortSidePx, c
 
     ctx.save();
     ctx.font = `${fontObject.fontWeightForCanvas} ${fontSizePx}px "${fontObject.fontFamilyForCanvas}"`;
-    ctx.fillStyle = freeTextSettings.color;
+    ctx.fillStyle = hexToRgba(freeTextSettings.color, freeTextSettings.opacity); // ★変更
 
     const textAlign = freeTextSettings.textAlign || 'left';
     let textBaseline = 'top';
@@ -345,7 +361,7 @@ function drawFreeText(ctx, freeTextSettings, fontObject, basePhotoShortSidePx, c
     ctx.textBaseline = textBaseline;
 
     const lines = textToDraw.split('\n');
-    const lineHeight = fontSizePx * 1.4;
+    const lineHeight = fontSizePx * 1.3;
 
     let maxWidth = 0;
     if (lines.length > 0) {

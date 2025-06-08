@@ -99,6 +99,9 @@ export const controlsConfig = {
     textFreeOffsetX: { defaultValue: 0, min: -100, max: 100, step: 0.5 },
     textFreeOffsetY: { defaultValue: 0, min: -100, max: 100, step: 0.5 },
 
+    // テキスト共通の透過度設定
+    textOpacity: { defaultValue: 1, min: 0, max: 1, step: 0.01 },
+
     // フレーム加工タブ
     frameCornerStyle: { defaultValue: 'none' }, // ラジオボタンまたはselect用
     frameCornerRadiusPercent: { defaultValue: 0, min: 0, max: 50, step: 1 }, // %

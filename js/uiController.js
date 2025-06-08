@@ -1,7 +1,7 @@
 // js/uiController.js
 import { getState, updateState } from './stateManager.js';
-import { controlsConfig, googleFonts } from './uiDefinitions.js'; // googleFonts をインポート
-import { loadGoogleFonts } from './textRenderer.js'; // loadGoogleFonts (実体は loadSingleGoogleFont) をインポート
+import { controlsConfig, googleFonts } from './uiDefinitions.js';
+import { loadGoogleFonts } from './textRenderer.js';
 
 export const uiElements = {
     imageLoader: document.getElementById('imageLoader'),
@@ -33,10 +33,10 @@ export const uiElements = {
     bgBlurValueSpan: document.getElementById('bgBlurValue'),
     bgBrightnessValueSpan: document.getElementById('bgBrightnessValue'),
     bgSaturationValueSpan: document.getElementById('bgSaturationValue'),
-    bgOffsetXSlider: document.getElementById('bgOffsetX'), // ★追加
-    bgOffsetXValueSpan: document.getElementById('bgOffsetXValue'), // ★追加
-    bgOffsetYSlider: document.getElementById('bgOffsetY'), // ★追加
-    bgOffsetYValueSpan: document.getElementById('bgOffsetYValue'), // ★追加
+    bgOffsetXSlider: document.getElementById('bgOffsetX'),
+    bgOffsetXValueSpan: document.getElementById('bgOffsetXValue'),
+    bgOffsetYSlider: document.getElementById('bgOffsetY'),
+    bgOffsetYValueSpan: document.getElementById('bgOffsetYValue'),
 
     // 出力タブ
     jpgQualitySlider: document.getElementById('jpgQuality'),
@@ -81,7 +81,7 @@ export const uiElements = {
     textDateEnabledCheckbox: document.getElementById('textDateEnabled'),
     textDateSettingsContainer: document.getElementById('textDateSettingsContainer'),
     textDateFormatSelect: document.getElementById('textDateFormat'),
-    textDateFontSelect: document.getElementById('textDateFont'), // Select element
+    textDateFontSelect: document.getElementById('textDateFont'),
     textDateSizeSlider: document.getElementById('textDateSize'),
     textDateSizeValueSpan: document.getElementById('textDateSizeValue'),
     textDateColorInput: document.getElementById('textDateColor'),
@@ -90,6 +90,8 @@ export const uiElements = {
     textDateOffsetXValueSpan: document.getElementById('textDateOffsetXValue'),
     textDateOffsetYSlider: document.getElementById('textDateOffsetY'),
     textDateOffsetYValueSpan: document.getElementById('textDateOffsetYValue'),
+    textDateOpacitySlider: document.getElementById('textDateOpacity'),
+    textDateOpacityValueSpan: document.getElementById('textDateOpacityValue'),
 
     // 文字入力タブ - Exif表示
     textExifEnabledCheckbox: document.getElementById('textExifEnabled'),
@@ -101,11 +103,11 @@ export const uiElements = {
     textExifItemExposureTimeCheckbox: document.getElementById('textExifItemExposureTime'),
     textExifItemISOSpeedRatingsCheckbox: document.getElementById('textExifItemISOSpeedRatings'),
     textExifItemFocalLengthCheckbox: document.getElementById('textExifItemFocalLength'),
-    textExifCustomTextArea: document.getElementById('textExifCustomTextArea'), // ★追加
-    textExifAlignLeftRadio: document.getElementById('textExifAlignLeft'),     // ★追加
-    textExifAlignCenterRadio: document.getElementById('textExifAlignCenter'), // ★追加
-    textExifAlignRightRadio: document.getElementById('textExifAlignRight'),   // ★追加
-    textExifFontSelect: document.getElementById('textExifFont'), // Select element
+    textExifCustomTextArea: document.getElementById('textExifCustomTextArea'),
+    textExifAlignLeftRadio: document.getElementById('textExifAlignLeft'),
+    textExifAlignCenterRadio: document.getElementById('textExifAlignCenter'),
+    textExifAlignRightRadio: document.getElementById('textExifAlignRight'),
+    textExifFontSelect: document.getElementById('textExifFont'),
     textExifSizeSlider: document.getElementById('textExifSize'),
     textExifSizeValueSpan: document.getElementById('textExifSizeValue'),
     textExifColorInput: document.getElementById('textExifColor'),
@@ -114,6 +116,8 @@ export const uiElements = {
     textExifOffsetXValueSpan: document.getElementById('textExifOffsetXValue'),
     textExifOffsetYSlider: document.getElementById('textExifOffsetY'),
     textExifOffsetYValueSpan: document.getElementById('textExifOffsetYValue'),
+    textExifOpacitySlider: document.getElementById('textExifOpacity'),
+    textExifOpacityValueSpan: document.getElementById('textExifOpacityValue'),
 
     // 自由入力テキスト
     textFreeEnabledCheckbox: document.getElementById('textFreeEnabled'),
@@ -131,6 +135,8 @@ export const uiElements = {
     textFreeOffsetXValueSpan: document.getElementById('textFreeOffsetXValue'),
     textFreeOffsetYSlider: document.getElementById('textFreeOffsetY'),
     textFreeOffsetYValueSpan: document.getElementById('textFreeOffsetYValue'),
+    textFreeOpacitySlider: document.getElementById('textFreeOpacity'),
+    textFreeOpacityValueSpan: document.getElementById('textFreeOpacityValue'),
 };
 
 let redrawDebounced = null; // ★追加: デバウンスされた再描画関数を保持する変数
@@ -195,8 +201,8 @@ export function initializeUIFromState() {
     setupInputAttributesAndValue(uiElements.bgBlurSlider, 'bgBlur', state.imageBlurBackgroundParams.blurAmountPercent);
     setupInputAttributesAndValue(uiElements.bgBrightnessSlider, 'bgBrightness', state.imageBlurBackgroundParams.brightness);
     setupInputAttributesAndValue(uiElements.bgSaturationSlider, 'bgSaturation', state.imageBlurBackgroundParams.saturation);
-    setupInputAttributesAndValue(uiElements.bgOffsetXSlider, 'bgOffsetX', state.imageBlurBackgroundParams.offsetXPercent); // ★追加
-    setupInputAttributesAndValue(uiElements.bgOffsetYSlider, 'bgOffsetY', state.imageBlurBackgroundParams.offsetYPercent); // ★追加
+    setupInputAttributesAndValue(uiElements.bgOffsetXSlider, 'bgOffsetX', state.imageBlurBackgroundParams.offsetXPercent);
+    setupInputAttributesAndValue(uiElements.bgOffsetYSlider, 'bgOffsetY', state.imageBlurBackgroundParams.offsetYPercent);
 
 
     // 出力設定
@@ -230,12 +236,13 @@ export function initializeUIFromState() {
     const tds = state.textSettings.date;
     if (uiElements.textDateEnabledCheckbox) uiElements.textDateEnabledCheckbox.checked = tds.enabled;
     if (uiElements.textDateFormatSelect) uiElements.textDateFormatSelect.value = tds.format;
-    if (uiElements.textDateFontSelect) uiElements.textDateFontSelect.value = tds.font; // Already set by populateFontSelect
+    if (uiElements.textDateFontSelect) uiElements.textDateFontSelect.value = tds.font;
     setupInputAttributesAndValue(uiElements.textDateSizeSlider, 'textDateSize', tds.size);
     if (uiElements.textDateColorInput) uiElements.textDateColorInput.value = tds.color;
     if (uiElements.textDatePositionSelect) uiElements.textDatePositionSelect.value = tds.position;
     setupInputAttributesAndValue(uiElements.textDateOffsetXSlider, 'textDateOffsetX', tds.offsetX);
     setupInputAttributesAndValue(uiElements.textDateOffsetYSlider, 'textDateOffsetY', tds.offsetY);
+    setupInputAttributesAndValue(uiElements.textDateOpacitySlider, 'textOpacity', tds.opacity);
 
     // 文字入力 - Exif設定
     const tes = state.textSettings.exif;
@@ -254,12 +261,13 @@ export function initializeUIFromState() {
     if (uiElements.textExifAlignLeftRadio) uiElements.textExifAlignLeftRadio.checked = (tes.textAlign === 'left');
     if (uiElements.textExifAlignCenterRadio) uiElements.textExifAlignCenterRadio.checked = (tes.textAlign === 'center');
     if (uiElements.textExifAlignRightRadio) uiElements.textExifAlignRightRadio.checked = (tes.textAlign === 'right');
-    if (uiElements.textExifFontSelect) uiElements.textExifFontSelect.value = tes.font; // Already set by populateFontSelect
+    if (uiElements.textExifFontSelect) uiElements.textExifFontSelect.value = tes.font;
     setupInputAttributesAndValue(uiElements.textExifSizeSlider, 'textExifSize', tes.size);
     if (uiElements.textExifColorInput) uiElements.textExifColorInput.value = tes.color;
     if (uiElements.textExifPositionSelect) uiElements.textExifPositionSelect.value = tes.position;
     setupInputAttributesAndValue(uiElements.textExifOffsetXSlider, 'textExifOffsetX', tes.offsetX);
     setupInputAttributesAndValue(uiElements.textExifOffsetYSlider, 'textExifOffsetY', tes.offsetY);
+    setupInputAttributesAndValue(uiElements.textExifOpacitySlider, 'textOpacity', tes.opacity);
 
     // ★追加: 文字入力 - 自由テキスト設定
     const tfs = state.textSettings.freeText;
@@ -269,11 +277,12 @@ export function initializeUIFromState() {
     if (uiElements.textFreeAlignCenterRadio) uiElements.textFreeAlignCenterRadio.checked = (tfs.textAlign === 'center');
     if (uiElements.textFreeAlignRightRadio) uiElements.textFreeAlignRightRadio.checked = (tfs.textAlign === 'right');
     if (uiElements.textFreeFontSelect) uiElements.textFreeFontSelect.value = tfs.font;
-    setupInputAttributesAndValue(uiElements.textFreeSizeSlider, 'textFreeSize', tfs.size); // ★キーを修正
+    setupInputAttributesAndValue(uiElements.textFreeSizeSlider, 'textFreeSize', tfs.size);
     if (uiElements.textFreeColorInput) uiElements.textFreeColorInput.value = tfs.color;
     if (uiElements.textFreePositionSelect) uiElements.textFreePositionSelect.value = tfs.position;
-    setupInputAttributesAndValue(uiElements.textFreeOffsetXSlider, 'textFreeOffsetX', tfs.offsetX); // ★キーを修正
-    setupInputAttributesAndValue(uiElements.textFreeOffsetYSlider, 'textFreeOffsetY', tfs.offsetY); // ★キーをまた修正
+    setupInputAttributesAndValue(uiElements.textFreeOffsetXSlider, 'textFreeOffsetX', tfs.offsetX);
+    setupInputAttributesAndValue(uiElements.textFreeOffsetYSlider, 'textFreeOffsetY', tfs.offsetY);
+    setupInputAttributesAndValue(uiElements.textFreeOpacitySlider, 'textOpacity', tfs.opacity);
 
     toggleBackgroundSettingsVisibility();
     updateFrameSettingsVisibility();
@@ -311,10 +320,10 @@ export function updateSliderValueDisplays() {
     if (uiElements.bgSaturationValueSpan && uiElements.bgSaturationSlider) {
         uiElements.bgSaturationValueSpan.textContent = `${state.imageBlurBackgroundParams.saturation}%`;
     }
-    if (uiElements.bgOffsetXValueSpan && uiElements.bgOffsetXSlider) { // ★追加
+    if (uiElements.bgOffsetXValueSpan && uiElements.bgOffsetXSlider) {
         uiElements.bgOffsetXValueSpan.textContent = `${state.imageBlurBackgroundParams.offsetXPercent}%`;
     }
-    if (uiElements.bgOffsetYValueSpan && uiElements.bgOffsetYSlider) { // ★追加
+    if (uiElements.bgOffsetYValueSpan && uiElements.bgOffsetYSlider) {
         uiElements.bgOffsetYValueSpan.textContent = `${state.imageBlurBackgroundParams.offsetYPercent}%`;
     }
     if (uiElements.jpgQualityValueSpan && uiElements.jpgQualitySlider) {
@@ -333,7 +342,7 @@ export function updateSliderValueDisplays() {
     if (uiElements.frameShadowEffectRangeValueSpan) {
         uiElements.frameShadowEffectRangeValueSpan.textContent = `${fs.shadowParams.effectRangePercent}%`;
     }
-    if (uiElements.frameShadowOpacityValueSpan && uiElements.frameShadowOpacitySlider) { // ★追加
+    if (uiElements.frameShadowOpacityValueSpan && uiElements.frameShadowOpacitySlider) {
         uiElements.frameShadowOpacityValueSpan.textContent = parseFloat(fs.shadowParams.opacity).toFixed(2);
     }
     if (uiElements.frameBorderWidthValueSpan && uiElements.frameBorderWidthSlider) {
@@ -349,6 +358,9 @@ export function updateSliderValueDisplays() {
     if (uiElements.textDateOffsetYValueSpan && uiElements.textDateOffsetYSlider) {
         uiElements.textDateOffsetYValueSpan.textContent = `${tds.offsetY}%`;
     }
+    if (uiElements.textDateOpacityValueSpan && uiElements.textDateOpacitySlider) {
+        uiElements.textDateOpacityValueSpan.textContent = tds.opacity.toFixed(2);
+    }
     const tes = state.textSettings.exif;
     if (uiElements.textExifSizeValueSpan && uiElements.textExifSizeSlider) {
         uiElements.textExifSizeValueSpan.textContent = `${tes.size}%`;
@@ -359,6 +371,9 @@ export function updateSliderValueDisplays() {
     if (uiElements.textExifOffsetYValueSpan && uiElements.textExifOffsetYSlider) {
         uiElements.textExifOffsetYValueSpan.textContent = `${tes.offsetY}%`;
     }
+    if (uiElements.textExifOpacityValueSpan && uiElements.textExifOpacitySlider) {
+        uiElements.textExifOpacityValueSpan.textContent = tes.opacity.toFixed(2);
+    }
     const tfs = state.textSettings.freeText;
     if (uiElements.textFreeSizeValueSpan && uiElements.textFreeSizeSlider) {
         uiElements.textFreeSizeValueSpan.textContent = `${tfs.size}%`;
@@ -368,6 +383,9 @@ export function updateSliderValueDisplays() {
     }
     if (uiElements.textFreeOffsetYValueSpan && uiElements.textFreeOffsetYSlider) {
         uiElements.textFreeOffsetYValueSpan.textContent = `${tfs.offsetY}%`;
+    }
+    if (uiElements.textFreeOpacityValueSpan && uiElements.textFreeOpacitySlider) {
+        uiElements.textFreeOpacityValueSpan.textContent = tfs.opacity.toFixed(2);
     }
 }
 
@@ -600,6 +618,8 @@ export function setupEventListeners(redrawCallback) {
     addOptionChangeListener(uiElements.textDatePositionSelect, 'textSettings', 'date', 'position');
     addNumericInputListener(uiElements.textDateOffsetXSlider, 'textDateOffsetX', 'textSettings', 'date', 'offsetX');
     addNumericInputListener(uiElements.textDateOffsetYSlider, 'textDateOffsetY', 'textSettings', 'date', 'offsetY');
+    addNumericInputListener(uiElements.textDateOpacitySlider, 'textOpacity', 'textSettings', 'date', 'opacity');
+
 
     // --- 文字入力タブ - Exif情報 ---
     // ★【重要】Exif関連のリスナーをここに再構成します
@@ -654,9 +674,11 @@ export function setupEventListeners(redrawCallback) {
     addOptionChangeListener(uiElements.textExifPositionSelect, 'textSettings', 'exif', 'position');
     addNumericInputListener(uiElements.textExifOffsetXSlider, 'textExifOffsetX', 'textSettings', 'exif', 'offsetX');
     addNumericInputListener(uiElements.textExifOffsetYSlider, 'textExifOffsetY', 'textSettings', 'exif', 'offsetY');
+    addNumericInputListener(uiElements.textExifOpacitySlider, 'textOpacity', 'textSettings', 'exif', 'opacity');
 
-    +    // --- 文字入力タブ - 自由テキスト ---
-        addOptionChangeListener(uiElements.textFreeEnabledCheckbox, 'textSettings', 'freeText', 'enabled');
+
+    // --- 文字入力タブ - 自由テキスト ---
+    addOptionChangeListener(uiElements.textFreeEnabledCheckbox, 'textSettings', 'freeText', 'enabled');
 
     if (uiElements.textFreeCustomTextArea) {
         uiElements.textFreeCustomTextArea.addEventListener('input', debounce((e) => {
@@ -675,4 +697,5 @@ export function setupEventListeners(redrawCallback) {
     addOptionChangeListener(uiElements.textFreePositionSelect, 'textSettings', 'freeText', 'position');
     addNumericInputListener(uiElements.textFreeOffsetXSlider, 'textFreeOffsetX', 'textSettings', 'freeText', 'offsetX'); // ★キーを修正
     addNumericInputListener(uiElements.textFreeOffsetYSlider, 'textFreeOffsetY', 'textSettings', 'freeText', 'offsetY'); // ★キーを修正
+    addNumericInputListener(uiElements.textFreeOpacitySlider, 'textOpacity', 'textSettings', 'freeText', 'opacity');
 }

@@ -70,6 +70,7 @@ let editState = {
             font: googleFonts[0].displayName, // ★初期値をGoogle Fontsリストの最初のフォントに
             size: 2,
             color: '#000000', // 仕様書では白背景が多いので、日付は濃い色が良いかもしれないが、現状維持
+            opacity: 1, 
             position: 'bottom-left',
             offsetX: 0,
             offsetY: 0
@@ -81,7 +82,8 @@ let editState = {
             textAlign: 'left', // 水平方向の配置 'left', 'center', 'right'
             font: googleFonts[0].displayName, // 初期値をGoogle Fontsリストの最初のフォントに
             size: 2,
-            color: '#333333',
+            color: '#000000',
+            opacity: 1, 
             position: 'bottom-right',
             offsetX: 0,
             offsetY: 0
@@ -92,7 +94,8 @@ let editState = {
             textAlign: 'left',
             font: googleFonts[0].displayName,
             size: 4, // デフォルトサイズを少し大きめに
-            color: '#000000',
+            color: '#333333',
+            opacity: 1, 
             position: 'middle-center', // デフォルトは中央に
             offsetX: 0,
             offsetY: 0
