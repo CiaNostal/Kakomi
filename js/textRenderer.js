@@ -10,10 +10,6 @@ import { googleFonts } from './uiDefinitions.js'; // Google Fontsリストをイ
 // key: apiName (e.g., "Roboto:wght@400")
 // value: { promise: Promise, status: 'idle' | 'loading' | 'loaded' | 'error' }
 const fontLoadStates = new Map();
-
-// Initialize fontLoadStates. It's good practice to ensure this is done once.
-// If this file is imported multiple times in a complex setup (though unlikely with ES modules),
-// this could be guarded, but for now, direct initialization is fine.
 googleFonts.forEach(font => { // This assumes googleFonts is populated when this module is initialized.
     if (!fontLoadStates.has(font.apiName)) {
         fontLoadStates.set(font.apiName, { promise: null, status: 'idle' });
@@ -34,23 +30,14 @@ async function loadSingleGoogleFont(fontApiName) {
     }
     const existingState = fontLoadStates.get(fontApiName);
 
-    // Should always find an existingState due to initialization, but good to be safe.
-    // if (!existingState) {
-    //     console.error(`[TextRenderer] State for font ${fontApiName} not initialized.`);
-    //     return Promise.reject(new Error(`State for font ${fontApiName} not initialized.`));
-    // }
-
     if (existingState.status === 'loaded') {
-        // console.log(`[TextRenderer] Font ${fontApiName} already loaded and ready.`);
         return Promise.resolve();
     }
 
     if (existingState.status === 'loading' && existingState.promise) {
-        // console.log(`[TextRenderer] Font ${fontApiName} is currently loading, returning existing promise.`);
         return existingState.promise;
     }
 
-    // console.log(`[TextRenderer] Initiating load for font: ${fontApiName}`);
     const fontQuery = fontApiName.replace(/ /g, '+');
     const link = document.createElement('link');
     link.rel = 'stylesheet';
@@ -240,26 +227,9 @@ function drawDateText(ctx, dateSettings, fontObject, exifDateTimeString, basePho
  * @param {number} canvasHeight - キャンバスの高さ (px)
  */
 function drawExifInfo(ctx, exifSettings, fontObject, exifDataFromState, basePhotoShortSidePx, canvasWidth, canvasHeight) {
-    if (!exifDataFromState || !exifSettings.items || exifSettings.items.length === 0) return;
-
-    const displayedExifValues = [];
-    const displayOrder = ['Make', 'Model', 'LensModel', 'FNumber', 'ExposureTime', 'ISOSpeedRatings', 'FocalLength'];
-
-    for (const itemKey of displayOrder) {
-        if (exifSettings.items.includes(itemKey)) {
-            const value = getExifValue(exifDataFromState, itemKey);
-            if (value) {
-                let displayValue = value;
-                if (itemKey === 'ISOSpeedRatings' && !String(value).toUpperCase().startsWith('ISO')) {
-                    displayValue = `ISO ${value}`;
-                }
-                displayedExifValues.push(displayValue);
-            }
-        }
-    }
-
-    if (displayedExifValues.length === 0) return;
-    const exifString = displayedExifValues.join('  '); // 区切り文字をスペース2つに
+    // ★変更: exifSettings.customText を直接使用するように変更
+    const exifString = exifSettings.customText || '';
+    if (exifString.trim() === '') return;
 
     const fontSizePx = (exifSettings.size / 100) * basePhotoShortSidePx;
     if (fontSizePx <= 0) return;
@@ -268,26 +238,33 @@ function drawExifInfo(ctx, exifSettings, fontObject, exifDataFromState, basePhot
     ctx.font = `${fontObject.fontWeightForCanvas} ${fontSizePx}px "${fontObject.fontFamilyForCanvas}"`;
     ctx.fillStyle = exifSettings.color;
 
-    let textAlign = 'left';
-    let textBaseline = 'alphabetic';
-    if (exifSettings.position.endsWith('-center')) textAlign = 'center';
-    else if (exifSettings.position.endsWith('-right')) textAlign = 'right';
-    if (exifSettings.position.startsWith('top-')) textBaseline = 'top';
+    // ★変更: positionに応じてtextBaselineを動的に設定
+    const textAlign = exifSettings.textAlign || 'left';
+    let textBaseline = 'top'; // デフォルト
+    if (exifSettings.position.startsWith('bottom-')) textBaseline = 'bottom';
     else if (exifSettings.position.startsWith('middle-')) textBaseline = 'middle';
 
+    // ★変更: ユーザー指定のtextAlignを最終的に適用
     ctx.textAlign = textAlign;
     ctx.textBaseline = textBaseline;
 
-    const textMetrics = ctx.measureText(exifString);
-    const textWidth = textMetrics.width;
-    const textHeight = fontSizePx;
+    const lines = exifString.split('\n');
+    const lineHeight = fontSizePx * 1.1; // 行の高さをフォントサイズの1.1倍に（調整可能）
+    // const textBlockHeight = lines.length * lineHeight;
+
+    let maxWidth = 0;
+    if (lines.length > 0) {
+        const textMetrics = lines.map(line => ctx.measureText(line).width);
+        maxWidth = Math.max(...textMetrics);
+    }
+    const textBlockHeight = (lines.length - 1) * lineHeight + fontSizePx;
 
     const { x, y } = calculateTextPosition(
         exifSettings.position,
         exifSettings.offsetX,
         exifSettings.offsetY,
-        textWidth,
-        textHeight,
+        maxWidth, // ★変更: 計算したテキストブロックの最大幅を渡す
+        textBlockHeight, // ブロック全体の高さを渡す
         basePhotoShortSidePx,
         canvasWidth,
         canvasHeight,
@@ -295,42 +272,49 @@ function drawExifInfo(ctx, exifSettings, fontObject, exifDataFromState, basePhot
         textBaseline
     );
 
-    console.log(`Drawing Exif string: "${exifString}" at (${x}, ${y}) with font: ${ctx.font} color: ${ctx.fillStyle}`);
-    ctx.fillText(exifString, x, y);
+    // ★変更: textBaselineに応じて描画ループを分岐
+    if (textBaseline === 'bottom') {
+        const reversedLines = [...lines].reverse(); // 描画順を逆にする
+        reversedLines.forEach((line, index) => {
+            const lineY = y - (index * lineHeight); // 下から上へ描画
+            ctx.fillText(line, x, lineY);
+        });
+    } else { // top or middle
+        lines.forEach((line, index) => {
+            const lineY = y + (index * lineHeight); // 上から下へ描画
+            ctx.fillText(line, x, lineY);
+        });
+    }
     ctx.restore();
 }
 
-
-// calculateTextPosition, getFormattedDate, getExifLabel, getExifValue は変更なしのため省略
-// ... (これらの関数の既存のコードをここに含める)
 // calculateTextPosition (変更なし)
 function calculateTextPosition(position, offsetXPercent, offsetYPercent, textWidth, textHeight, photoShortSidePx, canvasWidth, canvasHeight, textAlign = 'left', textBaseline = 'top') {
     const margin = 0;
     const offsetXPx = (offsetXPercent / 100) * photoShortSidePx;
     const offsetYPx = (offsetYPercent / 100) * photoShortSidePx;
     let baseX, baseY;
-    if (position.startsWith('top-')) {
-        baseY = margin;
-        if (textBaseline === 'middle') baseY += textHeight / 2;
-        else if (textBaseline === 'alphabetic' || textBaseline === 'bottom') baseY += textHeight;
+
+    // ★変更: X座標の計算ロジックを全面的に修正
+    if (position.endsWith('-left')) { // ブロック全体を左寄せ
+        if (textAlign === 'left') baseX = margin;
+        else if (textAlign === 'center') baseX = margin + textWidth / 2;
+        else baseX = margin + textWidth;
+    } else if (position.endsWith('-right')) { // ブロック全体を右寄せ
+        if (textAlign === 'left') baseX = canvasWidth - margin - textWidth;
+        else if (textAlign === 'center') baseX = canvasWidth - margin - textWidth / 2;
+        else baseX = canvasWidth - margin;
+    } else { // ブロック全体を中央寄せ (position.endsWith('-center'))
+        if (textAlign === 'left') baseX = canvasWidth / 2 - textWidth / 2;
+        else if (textAlign === 'center') baseX = canvasWidth / 2;
+        else baseX = canvasWidth / 2 + textWidth / 2;
     }
-    else if (position.startsWith('middle-')) {
-        baseY = canvasHeight / 2;
-        if (textBaseline === 'top') baseY -= textHeight / 2;
-        else if (textBaseline === 'alphabetic' || textBaseline === 'bottom') baseY += textHeight / 2;
-    }
-    else if (position.startsWith('bottom-')) {
-        baseY = canvasHeight - margin;
-        if (textBaseline === 'top') baseY -= textHeight;
-        else if (textBaseline === 'middle') baseY -= textHeight / 2;
-    }
-    if (position.endsWith('-left')) {
-        baseX = margin;
-    } else if (position.endsWith('-center')) {
-        baseX = canvasWidth / 2;
-    } else if (position.endsWith('-right')) {
-        baseX = canvasWidth - margin;
-    }
+
+    // ★変更: Y座標の計算をtextBaselineに合わせて単純化
+    if (textBaseline === 'top') { baseY = margin; }
+    else if (textBaseline === 'middle') { baseY = canvasHeight / 2 - textHeight / 2; }
+    else { baseY = canvasHeight - margin; } // bottomの場合
+
     if (baseX === undefined || baseY === undefined) {
         baseX = margin;
         baseY = canvasHeight - margin;
@@ -361,74 +345,6 @@ function getFormattedDate(exifDateTimeString, displayFormat = 'YYYY/MM/DD') {
     result = result.replace('MM', month);
     result = result.replace('DD', day);
     return result;
-}
-
-// getExifLabel (変更なし)
-function getExifLabel(itemKey) {
-    const labels = {
-        'Make': 'メーカー',
-        'Model': '機種名',
-        'FNumber': 'F値',
-        'ExposureTime': 'シャッタースピード',
-        'ISOSpeedRatings': 'ISO感度',
-        'FocalLength': '焦点距離',
-        'LensModel': 'レンズ情報',
-    };
-    return labels[itemKey] || itemKey;
-}
-
-// getExifValue (変更なし)
-function getExifValue(exifDataFromState, itemKey) {
-    if (!exifDataFromState || typeof piexif === 'undefined') return '';
-    const zerothIFD = exifDataFromState["0th"];
-    const exifIFD = exifDataFromState["Exif"];
-    const ImageIFD_CONSTANTS = piexif.ImageIFD;
-    const ExifIFD_CONSTANTS = piexif.ExifIFD;
-    if (!zerothIFD && !exifIFD) return '';
-
-    switch (itemKey) {
-        case 'Make':
-            return (zerothIFD && ImageIFD_CONSTANTS && ImageIFD_CONSTANTS.Make !== undefined) ? zerothIFD[ImageIFD_CONSTANTS.Make] : '';
-        case 'Model':
-            return (zerothIFD && ImageIFD_CONSTANTS && ImageIFD_CONSTANTS.Model !== undefined) ? zerothIFD[ImageIFD_CONSTANTS.Model] : '';
-        case 'FNumber':
-            if (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.FNumber !== undefined) {
-                const fVal = exifIFD[ExifIFD_CONSTANTS.FNumber];
-                if (fVal && Array.isArray(fVal) && fVal.length === 2 && fVal[1] !== 0) {
-                    return `f/${(fVal[0] / fVal[1]).toFixed(1)}`;
-                }
-            }
-            return '';
-        case 'ExposureTime':
-            if (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.ExposureTime !== undefined) {
-                const etVal = exifIFD[ExifIFD_CONSTANTS.ExposureTime];
-                if (etVal && Array.isArray(etVal) && etVal.length === 2 && etVal[1] !== 0) {
-                    const et = etVal[0] / etVal[1];
-                    if (et >= 1) return `${et.toFixed(1)}s`;
-                    if (et >= 0.1) return `${et.toFixed(2)}s`;
-                    return `1/${Math.round(1 / et)}s`;
-                }
-            }
-            return '';
-        case 'ISOSpeedRatings':
-            if (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.ISOSpeedRatings !== undefined) {
-                const iso = exifIFD[ExifIFD_CONSTANTS.ISOSpeedRatings];
-                return iso ? `${Array.isArray(iso) ? iso[0] : iso}` : '';
-            }
-            return '';
-        case 'FocalLength':
-            if (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.FocalLength !== undefined) {
-                const flVal = exifIFD[ExifIFD_CONSTANTS.FocalLength];
-                if (flVal && Array.isArray(flVal) && flVal.length === 2 && flVal[1] !== 0) {
-                    return `${Math.round(flVal[0] / flVal[1])}mm`;
-                }
-            }
-            return '';
-        case 'LensModel':
-            return (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.LensModel !== undefined) ? exifIFD[ExifIFD_CONSTANTS.LensModel] : '';
-        default:
-            return '';
-    }
 }
 
 // The original full code for textRenderer.js had `export { drawText, loadGoogleFonts };`

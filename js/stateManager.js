@@ -77,7 +77,9 @@ let editState = {
         exif: {
             enabled: false,
             items: ['Make', 'Model', 'FNumber', 'ExposureTime', 'ISOSpeedRatings', 'FocalLength', 'LensModel'],
-            font: googleFonts[0].displayName, // ★初期値をGoogle Fontsリストの最初のフォントに
+            customText: '', // ユーザーが編集するテキストエリアの内容
+            textAlign: 'left', // 水平方向の配置 'left', 'center', 'right'
+            font: googleFonts[0].displayName, // 初期値をGoogle Fontsリストの最初のフォントに
             size: 2,
             color: '#000000',
             position: 'bottom-right',

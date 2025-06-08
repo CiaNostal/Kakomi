@@ -101,6 +101,10 @@ export const uiElements = {
     textExifItemExposureTimeCheckbox: document.getElementById('textExifItemExposureTime'),
     textExifItemISOSpeedRatingsCheckbox: document.getElementById('textExifItemISOSpeedRatings'),
     textExifItemFocalLengthCheckbox: document.getElementById('textExifItemFocalLength'),
+    textExifCustomTextArea: document.getElementById('textExifCustomTextArea'), // ★追加
+    textExifAlignLeftRadio: document.getElementById('textExifAlignLeft'),     // ★追加
+    textExifAlignCenterRadio: document.getElementById('textExifAlignCenter'), // ★追加
+    textExifAlignRightRadio: document.getElementById('textExifAlignRight'),   // ★追加
     textExifFontSelect: document.getElementById('textExifFont'), // Select element
     textExifSizeSlider: document.getElementById('textExifSize'),
     textExifSizeValueSpan: document.getElementById('textExifSizeValue'),
@@ -232,6 +236,11 @@ export function initializeUIFromState() {
     exifItemCheckboxes.forEach(item => {
         if (item.el) item.el.checked = tes.items.includes(item.key);
     });
+    // ★追加: テキストエリアと配置ラジオボタンの初期化
+    if (uiElements.textExifCustomTextArea) uiElements.textExifCustomTextArea.value = tes.customText;
+    if (uiElements.textExifAlignLeftRadio) uiElements.textExifAlignLeftRadio.checked = (tes.textAlign === 'left');
+    if (uiElements.textExifAlignCenterRadio) uiElements.textExifAlignCenterRadio.checked = (tes.textAlign === 'center');
+    if (uiElements.textExifAlignRightRadio) uiElements.textExifAlignRightRadio.checked = (tes.textAlign === 'right');
     if (uiElements.textExifFontSelect) uiElements.textExifFontSelect.value = tes.font; // Already set by populateFontSelect
     setupInputAttributesAndValue(uiElements.textExifSizeSlider, 'textExifSize', tes.size);
     if (uiElements.textExifColorInput) uiElements.textExifColorInput.value = tes.color;
@@ -361,6 +370,25 @@ function updateTextExifSettingsVisibility() {
     const exifSettingsEnabled = getState().textSettings.exif.enabled;
     if (uiElements.textExifSettingsContainer) {
         uiElements.textExifSettingsContainer.style.display = exifSettingsEnabled ? '' : 'none';
+    }
+}
+// ★追加: textRendererからgetExifValueヘルパー関数をこちらに移動（UIの責務のため）
+function getExifValue(exifDataFromState, itemKey) {
+    // ... (textRenderer.js から getExifValue の実装をそのままここにコピー) ...
+    // この関数は textRenderer.js からは削除します
+    if (!exifDataFromState || typeof piexif === 'undefined') return '';
+    const zerothIFD = exifDataFromState["0th"]; const exifIFD = exifDataFromState["Exif"];
+    const ImageIFD_CONSTANTS = piexif.ImageIFD; const ExifIFD_CONSTANTS = piexif.ExifIFD;
+    if (!zerothIFD && !exifIFD) return '';
+    switch (itemKey) {
+        case 'Make': return (zerothIFD && ImageIFD_CONSTANTS && ImageIFD_CONSTANTS.Make !== undefined) ? zerothIFD[ImageIFD_CONSTANTS.Make] : '';
+        case 'Model': return (zerothIFD && ImageIFD_CONSTANTS && ImageIFD_CONSTANTS.Model !== undefined) ? zerothIFD[ImageIFD_CONSTANTS.Model] : '';
+        case 'LensModel': return (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.LensModel !== undefined) ? exifIFD[ExifIFD_CONSTANTS.LensModel] : '';
+        case 'FNumber': if (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.FNumber !== undefined) { const fVal = exifIFD[ExifIFD_CONSTANTS.FNumber]; if (fVal && Array.isArray(fVal) && fVal.length === 2 && fVal[1] !== 0) { return `f/${(fVal[0] / fVal[1]).toFixed(1)}`; } } return '';
+        case 'ExposureTime': if (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.ExposureTime !== undefined) { const etVal = exifIFD[ExifIFD_CONSTANTS.ExposureTime]; if (etVal && Array.isArray(etVal) && etVal.length === 2 && etVal[1] !== 0) { const et = etVal[0] / etVal[1]; if (et >= 1) return `${et.toFixed(1)}s`; if (et >= 0.1) return `${et.toFixed(2)}s`; return `1/${Math.round(1 / et)}s`; } } return '';
+        case 'ISOSpeedRatings': if (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.ISOSpeedRatings !== undefined) { const iso = exifIFD[ExifIFD_CONSTANTS.ISOSpeedRatings]; return iso ? `${Array.isArray(iso) ? iso[0] : iso}` : ''; } return '';
+        case 'FocalLength': if (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.FocalLength !== undefined) { const flVal = exifIFD[ExifIFD_CONSTANTS.FocalLength]; if (flVal && Array.isArray(flVal) && flVal.length === 2 && flVal[1] !== 0) { return `${Math.round(flVal[0] / flVal[1])}mm`; } } return '';
+        default: return '';
     }
 }
 
@@ -527,20 +555,76 @@ export function setupEventListeners(redrawCallback) {
     exifItemCheckboxes.forEach(checkbox => {
         if (checkbox) {
             checkbox.addEventListener('change', () => {
-                const currentItems = getState().textSettings.exif.items || [];
+                const currentState = getState();
+                const currentItems = currentState.textSettings.exif.items || [];
                 const itemName = checkbox.value;
                 let newItems;
+
                 if (checkbox.checked) {
                     if (!currentItems.includes(itemName)) newItems = [...currentItems, itemName];
                     else newItems = [...currentItems];
                 } else {
                     newItems = currentItems.filter(item => item !== itemName);
                 }
-                updateState({ textSettings: { exif: { items: newItems } } });
+
+                // ★変更: チェックボックスの変更がcustomTextに反映されるようにする
+                const displayOrder = ['Make', 'Model', 'LensModel', 'FNumber', 'ExposureTime', 'ISOSpeedRatings', 'FocalLength'];
+                const displayedExifValues = [];
+                for (const itemKey of displayOrder) {
+                    if (newItems.includes(itemKey)) {
+                        const value = getExifValue(currentState.exifData, itemKey);
+                        if (value) {
+                            let displayValue = value;
+                            if (itemKey === 'ISOSpeedRatings' && !String(value).toUpperCase().startsWith('ISO')) {
+                                displayValue = `ISO${value}`;
+                            }
+                            displayedExifValues.push(displayValue);
+                        }
+                    }
+                }
+                const newCustomText = displayedExifValues.join('  ');
+
+                // テキストエリアの表示も更新
+                if (uiElements.textExifCustomTextArea) {
+                    uiElements.textExifCustomTextArea.value = newCustomText;
+                }
+
+                updateState({ textSettings: { exif: { items: newItems, customText: newCustomText } } });
                 redrawCallback();
             });
         }
     });
+
+
+    // ★追加: デバウンス関数の定義
+    const debounce = (func, delay) => {
+        let timeout;
+        return (...args) => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), delay);
+        };
+    };
+
+    // ★追加: テキストエリアへのデバウンス付きinputイベントリスナー
+    if (uiElements.textExifCustomTextArea) {
+        uiElements.textExifCustomTextArea.addEventListener('input', debounce((e) => {
+            updateState({ textSettings: { exif: { customText: e.target.value } } });
+            redrawCallback();
+        }, 300)); // 300msの待機時間
+    }
+
+    // ★追加: 水平配置ラジオボタンのイベントリスナー
+    [uiElements.textExifAlignLeftRadio, uiElements.textExifAlignCenterRadio, uiElements.textExifAlignRightRadio].forEach(radio => {
+        if (radio) {
+            radio.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    updateState({ textSettings: { exif: { textAlign: e.target.value } } });
+                    redrawCallback();
+                }
+            });
+        }
+    });
+
     addOptionChangeListener(uiElements.textExifFontSelect, 'textSettings', 'exif', 'font'); // This will now trigger font loading
     addNumericInputListener(uiElements.textExifSizeSlider, 'textExifSize', 'textSettings', 'exif', 'size');
     addColorInputListener(uiElements.textExifColorInput, 'textSettings', 'exif', 'color');
