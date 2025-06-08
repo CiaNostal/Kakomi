@@ -116,6 +116,8 @@ export const uiElements = {
     textExifOffsetYValueSpan: document.getElementById('textExifOffsetYValue'),
 };
 
+let redrawDebounced = null; // ★追加: デバウンスされた再描画関数を保持する変数
+
 function populateFontSelect(selectElement, selectedFontDisplayName) {
     if (!selectElement) return;
     selectElement.innerHTML = ''; // Clear existing options
@@ -372,6 +374,40 @@ function updateTextExifSettingsVisibility() {
         uiElements.textExifSettingsContainer.style.display = exifSettingsEnabled ? '' : 'none';
     }
 }
+
+// ★追加: Exifテキストを生成してUIとStateに適用する中心的な関数
+export function updateExifCustomText(redrawCallback) {
+    const currentState = getState();
+    const { exifData, textSettings } = currentState;
+    const itemsToDisplay = textSettings.exif.items || [];
+
+    const displayOrder = ['Make', 'Model', 'LensModel', 'FNumber', 'ExposureTime', 'ISOSpeedRatings', 'FocalLength'];
+    const displayedExifValues = [];
+
+    if (exifData) {
+        for (const itemKey of displayOrder) {
+            if (itemsToDisplay.includes(itemKey)) {
+                const value = getExifValue(exifData, itemKey);
+                if (value) {
+                    let displayValue = value;
+                    if (itemKey === 'ISOSpeedRatings' && !String(value).toUpperCase().startsWith('ISO')) {
+                        displayValue = `ISO ${value}`;
+                    }
+                    displayedExifValues.push(displayValue);
+                }
+            }
+        }
+    }
+    const newCustomText = displayedExifValues.join('  ');
+
+    // StateとUIの両方を更新
+    updateState({ textSettings: { exif: { customText: newCustomText } } });
+    if (uiElements.textExifCustomTextArea) {
+        uiElements.textExifCustomTextArea.value = newCustomText;
+    }
+    if (redrawCallback) redrawCallback();
+}
+
 // ★追加: textRendererからgetExifValueヘルパー関数をこちらに移動（UIの責務のため）
 function getExifValue(exifDataFromState, itemKey) {
     // ... (textRenderer.js から getExifValue の実装をそのままここにコピー) ...
@@ -392,7 +428,25 @@ function getExifValue(exifDataFromState, itemKey) {
     }
 }
 
+// ★追加: デバウンス関数の定義
+const debounce = (func, delay) => {
+    let timeout;
+    return (...args) => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), delay);
+    };
+};
+
 export function setupEventListeners(redrawCallback) {
+    // ★デバウンス関数はここで一度だけ生成する
+    const redrawDebounced = debounce((e) => {
+        // テキストエリアの入力イベントの場合は、e (イベントオブジェクト) を受け取る
+        if (e && e.target && e.target.id === 'textExifCustomTextArea') {
+            updateState({ textSettings: { exif: { customText: e.target.value } } });
+        }
+        redrawCallback();
+    }, 300); // 300msの遅延
+
     const addNumericInputListener = (element, configKey, stateKey, nestedKey = '', subNestedKey = '') => {
         if (!element) return;
         element.addEventListener('input', (e) => {
@@ -410,73 +464,43 @@ export function setupEventListeners(redrawCallback) {
             else updatePayload = { [stateKey]: value };
             updateState(updatePayload);
             updateSliderValueDisplays();
-            redrawCallback();
+            redrawCallback(); // スライダー等は即時反映
         });
     };
 
     const addOptionChangeListener = (element, stateKey, p1, p2 = '', p3 = '') => {
+        // (この関数の中身は変更なし)
         if (!element) return;
         const eventType = (element.type === 'checkbox' || element.type === 'radio') ? 'change' : 'change';
-        element.addEventListener(eventType, async (e) => { // Make async for font loading
-            let valueToSet;
-            let updatePayload;
-            let actualNestedKey = '';
-            let actualSubNestedKey = '';
-
-            if (element.type === 'checkbox') {
-                valueToSet = e.target.checked; actualNestedKey = p1; actualSubNestedKey = p2;
-            } else if (element.type === 'radio') {
-                if (!e.target.checked) return;
-                valueToSet = p1; actualNestedKey = p2; actualSubNestedKey = p3;
-            } else { // select
-                valueToSet = e.target.value; actualNestedKey = p1; actualSubNestedKey = p2;
-            }
-
-            // --- Font loading logic for font selects ---
-            let fontJustLoaded = false;
+        element.addEventListener(eventType, async (e) => {
+            let valueToSet; let updatePayload; let actualNestedKey = ''; let actualSubNestedKey = '';
+            if (element.type === 'checkbox') { valueToSet = e.target.checked; actualNestedKey = p1; actualSubNestedKey = p2; }
+            else if (element.type === 'radio') { if (!e.target.checked) return; valueToSet = p1; actualNestedKey = p2; actualSubNestedKey = p3; }
+            else { valueToSet = e.target.value; actualNestedKey = p1; actualSubNestedKey = p2; }
             if ((element.id === 'textDateFontSelect' || element.id === 'textExifFontSelect') && valueToSet) {
                 const selectedFontObject = googleFonts.find(f => f.displayName === valueToSet);
                 if (selectedFontObject) {
                     try {
-                        console.log(`[UIController] Loading font: ${selectedFontObject.apiName}`);
-                        // Potentially disable UI elements or show loader here
                         element.disabled = true;
                         await loadGoogleFonts(selectedFontObject.apiName);
-                        console.log(`[UIController] Font ${selectedFontObject.apiName} loaded successfully.`);
-                        fontJustLoaded = true;
                     } catch (error) {
-                        console.error(`[UIController] Failed to load font ${selectedFontObject.apiName}:`, error);
                         alert(`フォントの読み込みに失敗しました: ${selectedFontObject.displayName}`);
-                        // Revert to previous font or a default? For now, just re-enable and proceed.
-                        element.disabled = false;
-                        return; // Prevent state update and redraw if font fails
-                    } finally {
-                        element.disabled = false;
-                        // Hide loader here
-                    }
+                        element.disabled = false; return;
+                    } finally { element.disabled = false; }
                 }
             }
-            // --- End Font loading logic ---
-
             if (actualSubNestedKey && actualNestedKey) updatePayload = { [stateKey]: { [actualNestedKey]: { [actualSubNestedKey]: valueToSet } } };
             else if (actualNestedKey) updatePayload = { [stateKey]: { [actualNestedKey]: valueToSet } };
             else updatePayload = { [stateKey]: valueToSet };
-
             updateState(updatePayload);
-
             if (stateKey === 'backgroundType') toggleBackgroundSettingsVisibility();
             else if (stateKey === 'frameSettings') {
-                if (actualNestedKey === 'cornerStyle' || actualNestedKey === 'shadowEnabled' || actualNestedKey === 'shadowType' || (actualNestedKey === 'border' && actualSubNestedKey === 'enabled')) {
-                    updateFrameSettingsVisibility();
-                }
+                if (actualNestedKey === 'cornerStyle' || actualNestedKey === 'shadowEnabled' || actualNestedKey === 'shadowType' || (actualNestedKey === 'border' && actualSubNestedKey === 'enabled')) updateFrameSettingsVisibility();
             } else if (stateKey === 'textSettings') {
                 if (actualNestedKey === 'date' && actualSubNestedKey === 'enabled') updateTextDateSettingsVisibility();
                 else if (actualNestedKey === 'exif' && actualSubNestedKey === 'enabled') updateTextExifSettingsVisibility();
             }
-
             updateSliderValueDisplays();
-            // If a font was just loaded, redrawCallback might already be implicitly handled or needs to be ensured
-            // For font changes, the redraw MUST happen after the font is loaded.
             redrawCallback();
         });
     };
@@ -494,13 +518,12 @@ export function setupEventListeners(redrawCallback) {
         });
     };
 
-    // --- レイアウト設定タブ ---
+    // --- 各種イベントリスナーの設定 (大部分は変更なし) ---
     addOptionChangeListener(uiElements.outputAspectRatioSelect, 'outputTargetAspectRatioString');
     addNumericInputListener(uiElements.baseMarginPercentInput, 'baseMarginPercent', 'baseMarginPercent');
+    // ... (その他すべての addNumericInputListener と addColorInputListener の呼び出し) ...
     addNumericInputListener(uiElements.photoPosXSlider, 'photoPosX', 'photoViewParams', 'offsetX');
     addNumericInputListener(uiElements.photoPosYSlider, 'photoPosY', 'photoViewParams', 'offsetY');
-
-    // --- 背景編集タブ ---
     addOptionChangeListener(uiElements.bgTypeColorRadio, 'backgroundType', 'color');
     addOptionChangeListener(uiElements.bgTypeImageBlurRadio, 'backgroundType', 'imageBlur');
     addColorInputListener(uiElements.backgroundColorInput, 'backgroundColor');
@@ -508,14 +531,9 @@ export function setupEventListeners(redrawCallback) {
     addNumericInputListener(uiElements.bgBlurSlider, 'bgBlur', 'imageBlurBackgroundParams', 'blurAmountPercent');
     addNumericInputListener(uiElements.bgBrightnessSlider, 'bgBrightness', 'imageBlurBackgroundParams', 'brightness');
     addNumericInputListener(uiElements.bgSaturationSlider, 'bgSaturation', 'imageBlurBackgroundParams', 'saturation');
-    addNumericInputListener(uiElements.bgOffsetXSlider, 'bgOffsetX', 'imageBlurBackgroundParams', 'offsetXPercent'); // ★追加
-    addNumericInputListener(uiElements.bgOffsetYSlider, 'bgOffsetY', 'imageBlurBackgroundParams', 'offsetYPercent'); // ★追加
-
-
-    // --- 出力タブ ---
+    addNumericInputListener(uiElements.bgOffsetXSlider, 'bgOffsetX', 'imageBlurBackgroundParams', 'offsetXPercent');
+    addNumericInputListener(uiElements.bgOffsetYSlider, 'bgOffsetY', 'imageBlurBackgroundParams', 'offsetYPercent');
     addNumericInputListener(uiElements.jpgQualitySlider, 'jpgQuality', 'outputSettings', 'quality');
-
-    // --- フレーム加工タブ ---
     addOptionChangeListener(uiElements.frameCornerStyleNoneRadio, 'frameSettings', 'none', 'cornerStyle');
     addOptionChangeListener(uiElements.frameCornerStyleRoundedRadio, 'frameSettings', 'rounded', 'cornerStyle');
     addOptionChangeListener(uiElements.frameCornerStyleSuperellipseRadio, 'frameSettings', 'superellipse', 'cornerStyle');
@@ -534,19 +552,24 @@ export function setupEventListeners(redrawCallback) {
     addNumericInputListener(uiElements.frameBorderWidthSlider, 'frameBorderWidth', 'frameSettings', 'border', 'width');
     addColorInputListener(uiElements.frameBorderColorInput, 'frameSettings', 'border', 'color');
     addOptionChangeListener(uiElements.frameBorderStyleSelect, 'frameSettings', 'border', 'style');
-
-    // --- 文字入力タブ - 撮影日 ---
     addOptionChangeListener(uiElements.textDateEnabledCheckbox, 'textSettings', 'date', 'enabled');
     addOptionChangeListener(uiElements.textDateFormatSelect, 'textSettings', 'date', 'format');
-    addOptionChangeListener(uiElements.textDateFontSelect, 'textSettings', 'date', 'font'); // This will now trigger font loading
+    addOptionChangeListener(uiElements.textDateFontSelect, 'textSettings', 'date', 'font');
     addNumericInputListener(uiElements.textDateSizeSlider, 'textDateSize', 'textSettings', 'date', 'size');
     addColorInputListener(uiElements.textDateColorInput, 'textSettings', 'date', 'color');
     addOptionChangeListener(uiElements.textDatePositionSelect, 'textSettings', 'date', 'position');
     addNumericInputListener(uiElements.textDateOffsetXSlider, 'textDateOffsetX', 'textSettings', 'date', 'offsetX');
     addNumericInputListener(uiElements.textDateOffsetYSlider, 'textDateOffsetY', 'textSettings', 'date', 'offsetY');
-
+    
     // --- 文字入力タブ - Exif情報 ---
+    // ★【重要】Exif関連のリスナーをここに再構成します
     addOptionChangeListener(uiElements.textExifEnabledCheckbox, 'textSettings', 'exif', 'enabled');
+    uiElements.textExifEnabledCheckbox.addEventListener('change', e => {
+        if (e.target.checked) {
+            updateExifCustomText(redrawCallback);
+        }
+    });
+
     const exifItemCheckboxes = [
         uiElements.textExifItemMakeCheckbox, uiElements.textExifItemModelCheckbox, uiElements.textExifItemLensModelCheckbox,
         uiElements.textExifItemFNumberCheckbox, uiElements.textExifItemExposureTimeCheckbox,
@@ -555,65 +578,25 @@ export function setupEventListeners(redrawCallback) {
     exifItemCheckboxes.forEach(checkbox => {
         if (checkbox) {
             checkbox.addEventListener('change', () => {
-                const currentState = getState();
-                const currentItems = currentState.textSettings.exif.items || [];
+                const currentItems = getState().textSettings.exif.items || [];
                 const itemName = checkbox.value;
-                let newItems;
-
-                if (checkbox.checked) {
-                    if (!currentItems.includes(itemName)) newItems = [...currentItems, itemName];
-                    else newItems = [...currentItems];
-                } else {
-                    newItems = currentItems.filter(item => item !== itemName);
-                }
-
-                // ★変更: チェックボックスの変更がcustomTextに反映されるようにする
-                const displayOrder = ['Make', 'Model', 'LensModel', 'FNumber', 'ExposureTime', 'ISOSpeedRatings', 'FocalLength'];
-                const displayedExifValues = [];
-                for (const itemKey of displayOrder) {
-                    if (newItems.includes(itemKey)) {
-                        const value = getExifValue(currentState.exifData, itemKey);
-                        if (value) {
-                            let displayValue = value;
-                            if (itemKey === 'ISOSpeedRatings' && !String(value).toUpperCase().startsWith('ISO')) {
-                                displayValue = `ISO${value}`;
-                            }
-                            displayedExifValues.push(displayValue);
-                        }
-                    }
-                }
-                const newCustomText = displayedExifValues.join('  ');
-
-                // テキストエリアの表示も更新
-                if (uiElements.textExifCustomTextArea) {
-                    uiElements.textExifCustomTextArea.value = newCustomText;
-                }
-
-                updateState({ textSettings: { exif: { items: newItems, customText: newCustomText } } });
-                redrawCallback();
+                const newItems = checkbox.checked
+                    ? [...new Set([...currentItems, itemName])]
+                    : currentItems.filter(item => item !== itemName);
+                updateState({ textSettings: { exif: { items: newItems } } });
+                updateExifCustomText(redrawCallback);
             });
         }
     });
 
-
-    // ★追加: デバウンス関数の定義
-    const debounce = (func, delay) => {
-        let timeout;
-        return (...args) => {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => func.apply(this, args), delay);
-        };
-    };
-
-    // ★追加: テキストエリアへのデバウンス付きinputイベントリスナー
+    // ★【重要】テキストエリアの入力イベントリスナー
     if (uiElements.textExifCustomTextArea) {
-        uiElements.textExifCustomTextArea.addEventListener('input', debounce((e) => {
-            updateState({ textSettings: { exif: { customText: e.target.value } } });
-            redrawCallback();
-        }, 300)); // 300msの待機時間
+        uiElements.textExifCustomTextArea.addEventListener('input', (e) => {
+            // デバウンスされたコールバックを呼び出す
+            redrawDebounced(e);
+        });
     }
 
-    // ★追加: 水平配置ラジオボタンのイベントリスナー
     [uiElements.textExifAlignLeftRadio, uiElements.textExifAlignCenterRadio, uiElements.textExifAlignRightRadio].forEach(radio => {
         if (radio) {
             radio.addEventListener('change', (e) => {
@@ -625,7 +608,7 @@ export function setupEventListeners(redrawCallback) {
         }
     });
 
-    addOptionChangeListener(uiElements.textExifFontSelect, 'textSettings', 'exif', 'font'); // This will now trigger font loading
+    addOptionChangeListener(uiElements.textExifFontSelect, 'textSettings', 'exif', 'font');
     addNumericInputListener(uiElements.textExifSizeSlider, 'textExifSize', 'textSettings', 'exif', 'size');
     addColorInputListener(uiElements.textExifColorInput, 'textSettings', 'exif', 'color');
     addOptionChangeListener(uiElements.textExifPositionSelect, 'textSettings', 'exif', 'position');

@@ -226,8 +226,9 @@ function drawDateText(ctx, dateSettings, fontObject, exifDateTimeString, basePho
  * @param {number} canvasWidth - キャンバスの幅 (px)
  * @param {number} canvasHeight - キャンバスの高さ (px)
  */
+// textRenderer.js のこの関数を置き換えてください
 function drawExifInfo(ctx, exifSettings, fontObject, exifDataFromState, basePhotoShortSidePx, canvasWidth, canvasHeight) {
-    // ★変更: exifSettings.customText を直接使用するように変更
+    // ★【重要】exifSettings.customText を直接使用するように変更
     const exifString = exifSettings.customText || '';
     if (exifString.trim() === '') return;
 
@@ -238,19 +239,16 @@ function drawExifInfo(ctx, exifSettings, fontObject, exifDataFromState, basePhot
     ctx.font = `${fontObject.fontWeightForCanvas} ${fontSizePx}px "${fontObject.fontFamilyForCanvas}"`;
     ctx.fillStyle = exifSettings.color;
 
-    // ★変更: positionに応じてtextBaselineを動的に設定
     const textAlign = exifSettings.textAlign || 'left';
-    let textBaseline = 'top'; // デフォルト
+    let textBaseline = 'top';
     if (exifSettings.position.startsWith('bottom-')) textBaseline = 'bottom';
     else if (exifSettings.position.startsWith('middle-')) textBaseline = 'middle';
 
-    // ★変更: ユーザー指定のtextAlignを最終的に適用
     ctx.textAlign = textAlign;
     ctx.textBaseline = textBaseline;
 
     const lines = exifString.split('\n');
-    const lineHeight = fontSizePx * 1.1; // 行の高さをフォントサイズの1.1倍に（調整可能）
-    // const textBlockHeight = lines.length * lineHeight;
+    const lineHeight = fontSizePx * 1.4;
 
     let maxWidth = 0;
     if (lines.length > 0) {
@@ -259,12 +257,12 @@ function drawExifInfo(ctx, exifSettings, fontObject, exifDataFromState, basePhot
     }
     const textBlockHeight = (lines.length - 1) * lineHeight + fontSizePx;
 
-    const { x, y } = calculateTextPosition(
+    let { x, y } = calculateTextPosition(
         exifSettings.position,
         exifSettings.offsetX,
         exifSettings.offsetY,
-        maxWidth, // ★変更: 計算したテキストブロックの最大幅を渡す
-        textBlockHeight, // ブロック全体の高さを渡す
+        maxWidth,
+        textBlockHeight,
         basePhotoShortSidePx,
         canvasWidth,
         canvasHeight,
@@ -272,16 +270,21 @@ function drawExifInfo(ctx, exifSettings, fontObject, exifDataFromState, basePhot
         textBaseline
     );
 
-    // ★変更: textBaselineに応じて描画ループを分岐
+    // ★【重要】以前の「浮き」を補正するコード
     if (textBaseline === 'bottom') {
-        const reversedLines = [...lines].reverse(); // 描画順を逆にする
+        const visualCorrection = (lineHeight - fontSizePx) / 2;
+        y += visualCorrection;
+    }
+
+    if (textBaseline === 'bottom') {
+        const reversedLines = [...lines].reverse();
         reversedLines.forEach((line, index) => {
-            const lineY = y - (index * lineHeight); // 下から上へ描画
+            const lineY = y - (index * lineHeight);
             ctx.fillText(line, x, lineY);
         });
-    } else { // top or middle
+    } else {
         lines.forEach((line, index) => {
-            const lineY = y + (index * lineHeight); // 上から下へ描画
+            const lineY = y + (index * lineHeight);
             ctx.fillText(line, x, lineY);
         });
     }
