@@ -114,6 +114,23 @@ export const uiElements = {
     textExifOffsetXValueSpan: document.getElementById('textExifOffsetXValue'),
     textExifOffsetYSlider: document.getElementById('textExifOffsetY'),
     textExifOffsetYValueSpan: document.getElementById('textExifOffsetYValue'),
+
+    // 自由入力テキスト
+    textFreeEnabledCheckbox: document.getElementById('textFreeEnabled'),
+    textFreeSettingsContainer: document.getElementById('textFreeSettingsContainer'),
+    textFreeCustomTextArea: document.getElementById('textFreeCustomTextArea'),
+    textFreeAlignLeftRadio: document.getElementById('textFreeAlignLeft'),
+    textFreeAlignCenterRadio: document.getElementById('textFreeAlignCenter'),
+    textFreeAlignRightRadio: document.getElementById('textFreeAlignRight'),
+    textFreeFontSelect: document.getElementById('textFreeFont'),
+    textFreeSizeSlider: document.getElementById('textFreeSize'),
+    textFreeSizeValueSpan: document.getElementById('textFreeSizeValue'),
+    textFreeColorInput: document.getElementById('textFreeColor'),
+    textFreePositionSelect: document.getElementById('textFreePosition'),
+    textFreeOffsetXSlider: document.getElementById('textFreeOffsetX'),
+    textFreeOffsetXValueSpan: document.getElementById('textFreeOffsetXValue'),
+    textFreeOffsetYSlider: document.getElementById('textFreeOffsetY'),
+    textFreeOffsetYValueSpan: document.getElementById('textFreeOffsetYValue'),
 };
 
 let redrawDebounced = null; // ★追加: デバウンスされた再描画関数を保持する変数
@@ -121,15 +138,6 @@ let redrawDebounced = null; // ★追加: デバウンスされた再描画関�
 function populateFontSelect(selectElement, selectedFontDisplayName) {
     if (!selectElement) return;
     selectElement.innerHTML = ''; // Clear existing options
-
-    // 仕様書ではGoogle Fontsの動的読み込みとあるので、システムフォントは一旦除外
-    // const systemFonts = [
-    //     { displayName: "Arial", apiName: "Arial", fontFamilyForCanvas: "Arial", fontWeightForCanvas: "normal" },
-    //     { displayName: "Helvetica", apiName: "Helvetica", fontFamilyForCanvas: "Helvetica", fontWeightForCanvas: "normal" },
-    //     { displayName: "Times New Roman", apiName: "Times New Roman", fontFamilyForCanvas: "Times New Roman", fontWeightForCanvas: "normal" },
-    //     { displayName: "Verdana", apiName: "Verdana", fontFamilyForCanvas: "Verdana", fontWeightForCanvas: "normal" },
-    // ];
-    // const allFonts = [...systemFonts, ...googleFonts];
 
     googleFonts.forEach(font => {
         const option = document.createElement('option');
@@ -144,9 +152,12 @@ function populateFontSelect(selectElement, selectedFontDisplayName) {
 export function initializeUIFromState() {
     const state = getState();
 
-    // Populate font selects first
+    // フォント選択を最初に設定
     populateFontSelect(uiElements.textDateFontSelect, state.textSettings.date.font);
     populateFontSelect(uiElements.textExifFontSelect, state.textSettings.exif.font);
+    // ★追加
+    populateFontSelect(uiElements.textFreeFontSelect, state.textSettings.freeText.font);
+
 
     const setupInputAttributesAndValue = (element, configKey, stateValue) => {
         if (!element) return;
@@ -250,10 +261,25 @@ export function initializeUIFromState() {
     setupInputAttributesAndValue(uiElements.textExifOffsetXSlider, 'textExifOffsetX', tes.offsetX);
     setupInputAttributesAndValue(uiElements.textExifOffsetYSlider, 'textExifOffsetY', tes.offsetY);
 
+    // ★追加: 文字入力 - 自由テキスト設定
+    const tfs = state.textSettings.freeText;
+    if (uiElements.textFreeEnabledCheckbox) uiElements.textFreeEnabledCheckbox.checked = tfs.enabled;
+    if (uiElements.textFreeCustomTextArea) uiElements.textFreeCustomTextArea.value = tfs.text;
+    if (uiElements.textFreeAlignLeftRadio) uiElements.textFreeAlignLeftRadio.checked = (tfs.textAlign === 'left');
+    if (uiElements.textFreeAlignCenterRadio) uiElements.textFreeAlignCenterRadio.checked = (tfs.textAlign === 'center');
+    if (uiElements.textFreeAlignRightRadio) uiElements.textFreeAlignRightRadio.checked = (tfs.textAlign === 'right');
+    if (uiElements.textFreeFontSelect) uiElements.textFreeFontSelect.value = tfs.font;
+    setupInputAttributesAndValue(uiElements.textFreeSizeSlider, 'textFreeSize', tfs.size); // ★キーを修正
+    if (uiElements.textFreeColorInput) uiElements.textFreeColorInput.value = tfs.color;
+    if (uiElements.textFreePositionSelect) uiElements.textFreePositionSelect.value = tfs.position;
+    setupInputAttributesAndValue(uiElements.textFreeOffsetXSlider, 'textFreeOffsetX', tfs.offsetX); // ★キーを修正
+    setupInputAttributesAndValue(uiElements.textFreeOffsetYSlider, 'textFreeOffsetY', tfs.offsetY); // ★キーをまた修正
+
     toggleBackgroundSettingsVisibility();
     updateFrameSettingsVisibility();
     updateTextDateSettingsVisibility();
     updateTextExifSettingsVisibility();
+    updateTextFreeSettingsVisibility();
     updateSliderValueDisplays();
 }
 
@@ -333,6 +359,16 @@ export function updateSliderValueDisplays() {
     if (uiElements.textExifOffsetYValueSpan && uiElements.textExifOffsetYSlider) {
         uiElements.textExifOffsetYValueSpan.textContent = `${tes.offsetY}%`;
     }
+    const tfs = state.textSettings.freeText;
+    if (uiElements.textFreeSizeValueSpan && uiElements.textFreeSizeSlider) {
+        uiElements.textFreeSizeValueSpan.textContent = `${tfs.size}%`;
+    }
+    if (uiElements.textFreeOffsetXValueSpan && uiElements.textFreeOffsetXSlider) {
+        uiElements.textFreeOffsetXValueSpan.textContent = `${tfs.offsetX}%`;
+    }
+    if (uiElements.textFreeOffsetYValueSpan && uiElements.textFreeOffsetYSlider) {
+        uiElements.textFreeOffsetYValueSpan.textContent = `${tfs.offsetY}%`;
+    }
 }
 
 export function toggleBackgroundSettingsVisibility() {
@@ -375,7 +411,13 @@ function updateTextExifSettingsVisibility() {
     }
 }
 
-// ★追加: Exifテキストを生成してUIとStateに適用する中心的な関数
+function updateTextFreeSettingsVisibility() {
+    const freeTextSettingsEnabled = getState().textSettings.freeText.enabled;
+    if (uiElements.textFreeSettingsContainer) {
+        uiElements.textFreeSettingsContainer.style.display = freeTextSettingsEnabled ? '' : 'none';
+    }
+}
+
 export function updateExifCustomText(redrawCallback) {
     const currentState = getState();
     const { exifData, textSettings } = currentState;
@@ -410,8 +452,6 @@ export function updateExifCustomText(redrawCallback) {
 
 // ★追加: textRendererからgetExifValueヘルパー関数をこちらに移動（UIの責務のため）
 function getExifValue(exifDataFromState, itemKey) {
-    // ... (textRenderer.js から getExifValue の実装をそのままここにコピー) ...
-    // この関数は textRenderer.js からは削除します
     if (!exifDataFromState || typeof piexif === 'undefined') return '';
     const zerothIFD = exifDataFromState["0th"]; const exifIFD = exifDataFromState["Exif"];
     const ImageIFD_CONSTANTS = piexif.ImageIFD; const ExifIFD_CONSTANTS = piexif.ExifIFD;
@@ -428,7 +468,6 @@ function getExifValue(exifDataFromState, itemKey) {
     }
 }
 
-// ★追加: デバウンス関数の定義
 const debounce = (func, delay) => {
     let timeout;
     return (...args) => {
@@ -499,6 +538,7 @@ export function setupEventListeners(redrawCallback) {
             } else if (stateKey === 'textSettings') {
                 if (actualNestedKey === 'date' && actualSubNestedKey === 'enabled') updateTextDateSettingsVisibility();
                 else if (actualNestedKey === 'exif' && actualSubNestedKey === 'enabled') updateTextExifSettingsVisibility();
+                else if (actualNestedKey === 'freeText' && actualSubNestedKey === 'enabled') updateTextFreeSettingsVisibility(); // ★追加
             }
             updateSliderValueDisplays();
             redrawCallback();
@@ -560,7 +600,7 @@ export function setupEventListeners(redrawCallback) {
     addOptionChangeListener(uiElements.textDatePositionSelect, 'textSettings', 'date', 'position');
     addNumericInputListener(uiElements.textDateOffsetXSlider, 'textDateOffsetX', 'textSettings', 'date', 'offsetX');
     addNumericInputListener(uiElements.textDateOffsetYSlider, 'textDateOffsetY', 'textSettings', 'date', 'offsetY');
-    
+
     // --- 文字入力タブ - Exif情報 ---
     // ★【重要】Exif関連のリスナーをここに再構成します
     addOptionChangeListener(uiElements.textExifEnabledCheckbox, 'textSettings', 'exif', 'enabled');
@@ -614,4 +654,25 @@ export function setupEventListeners(redrawCallback) {
     addOptionChangeListener(uiElements.textExifPositionSelect, 'textSettings', 'exif', 'position');
     addNumericInputListener(uiElements.textExifOffsetXSlider, 'textExifOffsetX', 'textSettings', 'exif', 'offsetX');
     addNumericInputListener(uiElements.textExifOffsetYSlider, 'textExifOffsetY', 'textSettings', 'exif', 'offsetY');
+
+    +    // --- 文字入力タブ - 自由テキスト ---
+        addOptionChangeListener(uiElements.textFreeEnabledCheckbox, 'textSettings', 'freeText', 'enabled');
+
+    if (uiElements.textFreeCustomTextArea) {
+        uiElements.textFreeCustomTextArea.addEventListener('input', debounce((e) => {
+            updateState({ textSettings: { freeText: { text: e.target.value } } });
+            redrawCallback();
+        }, 300));
+    }
+
+    [uiElements.textFreeAlignLeftRadio, uiElements.textFreeAlignCenterRadio, uiElements.textFreeAlignRightRadio].forEach(radio => {
+        addOptionChangeListener(radio, 'textSettings', radio.value, 'freeText', 'textAlign');
+    });
+
+    addOptionChangeListener(uiElements.textFreeFontSelect, 'textSettings', 'freeText', 'font');
+    addNumericInputListener(uiElements.textFreeSizeSlider, 'textFreeSize', 'textSettings', 'freeText', 'size');
+    addColorInputListener(uiElements.textFreeColorInput, 'textSettings', 'freeText', 'color');
+    addOptionChangeListener(uiElements.textFreePositionSelect, 'textSettings', 'freeText', 'position');
+    addNumericInputListener(uiElements.textFreeOffsetXSlider, 'textFreeOffsetX', 'textSettings', 'freeText', 'offsetX'); // ★キーを修正
+    addNumericInputListener(uiElements.textFreeOffsetYSlider, 'textFreeOffsetY', 'textSettings', 'freeText', 'offsetY'); // ★キーを修正
 }

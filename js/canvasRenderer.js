@@ -83,7 +83,7 @@ export async function drawPreview(currentState, previewCanvas, previewCtx) { // 
     }
 
     // 7. テキスト描画
-    if (currentState.textSettings.date.enabled || currentState.textSettings.exif.enabled) {
+    if (currentState.textSettings.date.enabled || currentState.textSettings.exif.enabled || currentState.textSettings.freeText.enabled) {
         // Google Fonts のロードは別途考慮
         // プレビュー表示における写真の実際の短辺を渡し、フォント読み込みと描画を待つ
         await drawText(ctx, currentState, previewCanvas.width, previewCanvas.height, photoShortSidePx); // await追加
@@ -157,7 +157,7 @@ export async function renderFinal(currentState) { // async追加
 
     // 7. テキスト描画
     console.log("[CanvasRenderer] Attempting to draw text. date.enabled:", currentState.textSettings.date.enabled, "exif.enabled:", currentState.textSettings.exif.enabled, "basePhotoShortSideForTextPx:", photoShortSidePx);
-    if (currentState.textSettings.date.enabled || currentState.textSettings.exif.enabled) {
+    if (currentState.textSettings.date.enabled || currentState.textSettings.exif.enabled || currentState.textSettings.freeText.enabled) {
         // Google Fonts のロードは別途考慮
         // 出力解像度における写真の実際の短辺を渡す
         await drawText(ctx, currentState, outputWidth, outputHeight, photoShortSidePx); // await追加

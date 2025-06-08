@@ -82,8 +82,8 @@ export const controlsConfig = {
     textDateSize: { defaultValue: 2, min: 0.1, max: 10, step: 0.1 }, // % (写真短辺比)
     textDateColor: { defaultValue: '#FFFFFF' }, // カラーピッカー
     textDatePosition: { defaultValue: 'bottom-right' }, // select要素用 (9箇所)
-    textDateOffsetX: { defaultValue: 2, min: -50, max: 50, step: 0.5 }, // %
-    textDateOffsetY: { defaultValue: 2, min: -50, max: 50, step: 0.5 }, // %
+    textDateOffsetX: { defaultValue: 0, min: -50, max: 50, step: 0.5 }, // %
+    textDateOffsetY: { defaultValue: 0, min: -50, max: 50, step: 0.5 }, // %
 
     // 文字入力タブ - Exif情報表示
     textExifEnabled: { defaultValue: false }, // チェックボックス
@@ -91,8 +91,13 @@ export const controlsConfig = {
     textExifSize: { defaultValue: 2, min: 0.1, max: 10, step: 0.1 }, // % (写真短辺比)
     textExifColor: { defaultValue: '#000000' }, // カラーピッカー
     textExifPosition: { defaultValue: 'bottom-left' }, // select要素用 (9箇所)
-    textExifOffsetX: { defaultValue: 2, min: -50, max: 50, step: 0.5 }, // %
-    textExifOffsetY: { defaultValue: 2, min: -50, max: 50, step: 0.5 }, // %
+    textExifOffsetX: { defaultValue: 0, min: -50, max: 50, step: 0.5 }, // %
+    textExifOffsetY: { defaultValue: 0, min: -50, max: 50, step: 0.5 }, // %
+
+    // 文字入力タブ - 自由テキスト用の設定
+    textFreeSize: { defaultValue: 5, min: 0.1, max: 50, step: 0.1 }, // % (写真短辺比)
+    textFreeOffsetX: { defaultValue: 0, min: -100, max: 100, step: 0.5 },
+    textFreeOffsetY: { defaultValue: 0, min: -100, max: 100, step: 0.5 },
 
     // フレーム加工タブ
     frameCornerStyle: { defaultValue: 'none' }, // ラジオボタンまたはselect用

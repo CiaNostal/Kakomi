@@ -154,6 +154,31 @@ export async function drawText(ctx, currentState, canvasWidth, canvasHeight, bas
             console.warn(`[TextRenderer] Exif font definition not found for: ${currentState.textSettings.exif.font}`);
         }
     }
+
+    // ★追加: 自由テキストの表示
+    if (currentState.textSettings.freeText.enabled && currentState.textSettings.freeText.text.trim() !== '') {
+        const selectedFreeTextFont = googleFonts.find(f => f.displayName === currentState.textSettings.freeText.font);
+        if (selectedFreeTextFont) {
+            const freeTextFontPromise = loadSingleGoogleFont(selectedFreeTextFont.apiName)
+                .then(() => {
+                    drawFreeText( // 新しい描画関数を呼び出す
+                        ctx,
+                        currentState.textSettings.freeText,
+                        selectedFreeTextFont,
+                        basePhotoShortSideForTextPx,
+                        canvasWidth,
+                        canvasHeight
+                    );
+                })
+                .catch(error => {
+                    console.error(`[TextRenderer] Free text font ${selectedFreeTextFont.apiName} could not be loaded for drawing:`, error);
+                });
+            textDrawPromises.push(freeTextFontPromise);
+        } else {
+            console.warn(`[TextRenderer] Free text font definition not found for: ${currentState.textSettings.freeText.font}`);
+        }
+    }
+
     try {
         await Promise.all(textDrawPromises); // すべてのフォント読み込みと関連する描画試行を待つ
     } catch (error) {
@@ -290,6 +315,78 @@ function drawExifInfo(ctx, exifSettings, fontObject, exifDataFromState, basePhot
     }
     ctx.restore();
 }
+
+/**
+ * 自由入力テキストを描画する
+ * @param {CanvasRenderingContext2D} ctx - キャンバスのコンテキスト
+ * @param {Object} freeTextSettings - 自由テキストの設定 (currentState.textSettings.freeText)
+ * @param {Object} fontObject - 選択されたフォントオブジェクト
+ * @param {number} basePhotoShortSidePx - 基準となる写真の短辺の長さ (px)
+ * @param {number} canvasWidth - キャンバスの幅 (px)
+ * @param {number} canvasHeight - キャンバスの高さ (px)
+ */
+function drawFreeText(ctx, freeTextSettings, fontObject, basePhotoShortSidePx, canvasWidth, canvasHeight) {
+    const textToDraw = freeTextSettings.text || '';
+    if (textToDraw.trim() === '') return;
+
+    const fontSizePx = (freeTextSettings.size / 100) * basePhotoShortSidePx;
+    if (fontSizePx <= 0) return;
+
+    ctx.save();
+    ctx.font = `${fontObject.fontWeightForCanvas} ${fontSizePx}px "${fontObject.fontFamilyForCanvas}"`;
+    ctx.fillStyle = freeTextSettings.color;
+
+    const textAlign = freeTextSettings.textAlign || 'left';
+    let textBaseline = 'top';
+    if (freeTextSettings.position.startsWith('bottom-')) textBaseline = 'bottom';
+    else if (freeTextSettings.position.startsWith('middle-')) textBaseline = 'middle';
+
+    ctx.textAlign = textAlign;
+    ctx.textBaseline = textBaseline;
+
+    const lines = textToDraw.split('\n');
+    const lineHeight = fontSizePx * 1.4;
+
+    let maxWidth = 0;
+    if (lines.length > 0) {
+        const textMetrics = lines.map(line => ctx.measureText(line).width);
+        maxWidth = Math.max(...textMetrics);
+    }
+    const textBlockHeight = (lines.length - 1) * lineHeight + fontSizePx;
+
+    let { x, y } = calculateTextPosition(
+        freeTextSettings.position,
+        freeTextSettings.offsetX,
+        freeTextSettings.offsetY,
+        maxWidth,
+        textBlockHeight,
+        basePhotoShortSidePx,
+        canvasWidth,
+        canvasHeight,
+        textAlign,
+        textBaseline
+    );
+
+    if (textBaseline === 'bottom') {
+        const visualCorrection = (lineHeight - fontSizePx) / 2;
+        y += visualCorrection;
+    }
+
+    if (textBaseline === 'bottom') {
+        const reversedLines = [...lines].reverse();
+        reversedLines.forEach((line, index) => {
+            const lineY = y - (index * lineHeight);
+            ctx.fillText(line, x, lineY);
+        });
+    } else {
+        lines.forEach((line, index) => {
+            const lineY = y + (index * lineHeight);
+            ctx.fillText(line, x, lineY);
+        });
+    }
+    ctx.restore();
+}
+
 
 // calculateTextPosition (変更なし)
 function calculateTextPosition(position, offsetXPercent, offsetYPercent, textWidth, textHeight, photoShortSidePx, canvasWidth, canvasHeight, textAlign = 'left', textBaseline = 'top') {
