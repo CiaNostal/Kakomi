@@ -522,6 +522,28 @@ export function setupEventListeners(redrawCallback) {
             updateState(updatePayload);
             updateSliderValueDisplays();
             redrawCallback(); // スライダー等は即時反映
+
+            // ダブルクリックで初期値にリセットする処理
+            element.addEventListener('dblclick', () => {
+                const config = controlsConfig[configKey];
+                if (config && config.defaultValue !== undefined) {
+                    const defaultValue = config.defaultValue;
+
+                    // 1. スライダーの見た目を初期値に戻す
+                    element.value = String(defaultValue);
+
+                    // 2. アプリケーションの状態(state)を更新
+                    let resetPayload;
+                    if (subNestedKey && nestedKey) resetPayload = { [stateKey]: { [nestedKey]: { [subNestedKey]: defaultValue } } };
+                    else if (nestedKey) resetPayload = { [stateKey]: { [nestedKey]: defaultValue } };
+                    else resetPayload = { [stateKey]: defaultValue };
+                    updateState(resetPayload);
+
+                    // 3. 値のテキスト表示とプレビューを更新
+                    updateSliderValueDisplays();
+                    redrawCallback();
+                }
+            });
         });
     };
 
