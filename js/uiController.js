@@ -522,28 +522,41 @@ export function setupEventListeners(redrawCallback) {
             updateState(updatePayload);
             updateSliderValueDisplays();
             redrawCallback(); // スライダー等は即時反映
+        });
+        // ★ここから変更: ダブルクリック/ダブルタップの処理をリファクタリング
+        const resetToDefault = () => {
+            const config = controlsConfig[configKey];
+            if (config && config.defaultValue !== undefined) {
+                const defaultValue = config.defaultValue;
 
-            // ダブルクリックで初期値にリセットする処理
-            element.addEventListener('dblclick', () => {
-                const config = controlsConfig[configKey];
-                if (config && config.defaultValue !== undefined) {
-                    const defaultValue = config.defaultValue;
+                // 1. スライダーの見た目を初期値に戻す
+                element.value = String(defaultValue);
 
-                    // 1. スライダーの見た目を初期値に戻す
-                    element.value = String(defaultValue);
+                // 2. アプリケーションの状態(state)を更新
+                let resetPayload;
+                if (subNestedKey && nestedKey) resetPayload = { [stateKey]: { [nestedKey]: { [subNestedKey]: defaultValue } } };
+                else if (nestedKey) resetPayload = { [stateKey]: { [nestedKey]: defaultValue } };
+                else resetPayload = { [stateKey]: defaultValue };
+                updateState(resetPayload);
 
-                    // 2. アプリケーションの状態(state)を更新
-                    let resetPayload;
-                    if (subNestedKey && nestedKey) resetPayload = { [stateKey]: { [nestedKey]: { [subNestedKey]: defaultValue } } };
-                    else if (nestedKey) resetPayload = { [stateKey]: { [nestedKey]: defaultValue } };
-                    else resetPayload = { [stateKey]: defaultValue };
-                    updateState(resetPayload);
+                // 3. 値のテキスト表示とプレビューを更新
+                updateSliderValueDisplays();
+                redrawCallback();
+            }
+        };
+        // PC用のダブルクリックイベント
+        element.addEventListener('dblclick', resetToDefault);
 
-                    // 3. 値のテキスト表示とプレビューを更新
-                    updateSliderValueDisplays();
-                    redrawCallback();
-                }
-            });
+        // スマートフォン用のダブルタップイベントを手動で実装
+        let lastTap = 0;
+        element.addEventListener('touchstart', (event) => {
+            const currentTime = new Date().getTime();
+            const tapLength = currentTime - lastTap;
+            if (tapLength < 300 && tapLength > 0) { // 300ミリ秒以内ならダブルタップと判定
+                event.preventDefault(); // ダブルタップによるズームなどのデフォルト動作をキャンセル
+                resetToDefault();
+            }
+            lastTap = currentTime;
         });
     };
 
