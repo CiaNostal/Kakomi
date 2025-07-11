@@ -42,12 +42,21 @@ export const googleFonts = [
     { displayName: "Cormorant Garamond Light", apiName: "Cormorant Garamond:wght@300", fontFamilyForCanvas: "Cormorant Garamond", fontWeightForCanvas: "300" },
     { displayName: "Cormorant Garamond Medium", apiName: "Cormorant Garamond:wght@500", fontFamilyForCanvas: "Cormorant Garamond", fontWeightForCanvas: "500" },
     { displayName: "Cormorant Garamond Bold", apiName: "Cormorant Garamond:wght@700", fontFamilyForCanvas: "Cormorant Garamond", fontWeightForCanvas: "700" },
-    // { displayName: "Open Sans Light", apiName: "Open Sans:wght@300", fontFamilyForCanvas: "Open Sans", fontWeightForCanvas: "300" },
     { displayName: "Julius Sans One Regular", apiName: "Julius Sans One:wght@400", fontFamilyForCanvas: "Julius Sans One", fontWeightForCanvas: "400" },
+    { displayName: "Italianno", apiName: "Italianno:wght@400", fontFamilyForCanvas: "Italianno", fontWeightForCanvas: "400" },
+    { displayName: "Moon Dance", apiName: "Moon Dance:wght@400", fontFamilyForCanvas: "Moon Dance", fontWeightForCanvas: "400" },
     { displayName: "Caveat Regular", apiName: "Caveat:wght@400", fontFamilyForCanvas: "Caveat", fontWeightForCanvas: "400" },
     { displayName: "Caveat Bold", apiName: "Caveat:wght@700", fontFamilyForCanvas: "Caveat", fontWeightForCanvas: "700" },
     { displayName: "Cookie Regular", apiName: "Cookie:wght@400", fontFamilyForCanvas: "Cookie", fontWeightForCanvas: "400" },
-    { displayName: "Shadows Into Light", apiName: "Shadows Into Light:wght@400", fontFamilyForCanvas: "Shadows Into Light", fontWeightForCanvas: "400" }
+    { displayName: "Shadows Into Light", apiName: "Shadows Into Light:wght@400", fontFamilyForCanvas: "Shadows Into Light", fontWeightForCanvas: "400" },
+    { displayName: "Indie Flower", apiName: "Indie Flower:wght@400", fontFamilyForCanvas: "Indie Flower", fontWeightForCanvas: "400" },
+    { displayName: "Gloria Hallelujah", apiName: "Gloria Hallelujah:wght@400", fontFamilyForCanvas: "Gloria Hallelujah", fontWeightForCanvas: "400" },
+    { displayName: "Handlee", apiName: "Handlee:wght@400", fontFamilyForCanvas: "Handlee", fontWeightForCanvas: "400" },
+    { displayName: "Nothing You Could Do", apiName: "Nothing You Could Do:wght@400", fontFamilyForCanvas: "Nothing You Could Do", fontWeightForCanvas: "400" },
+    { displayName: "Oooh Baby", apiName: "Oooh Baby:wght@400", fontFamilyForCanvas: "Oooh Baby", fontWeightForCanvas: "400" },
+    { displayName: "Over the Rainbow", apiName: "Over the Rainbow:wght@400", fontFamilyForCanvas: "Over the Rainbow", fontWeightForCanvas: "400" },
+    { displayName: "Grape Nuts", apiName: "Grape Nuts:wght@400", fontFamilyForCanvas: "Grape Nuts", fontWeightForCanvas: "400" },
+    { displayName: "Annie Use Your Telescope", apiName: "Annie Use Your Telescope:wght@400", fontFamilyForCanvas: "Annie Use Your Telescope", fontWeightForCanvas: "400" }
 ];
 
 /**
