@@ -45,6 +45,7 @@ export const googleFonts = [
     { displayName: "Julius Sans One Regular", apiName: "Julius Sans One:wght@400", fontFamilyForCanvas: "Julius Sans One", fontWeightForCanvas: "400" },
     { displayName: "Italianno", apiName: "Italianno:wght@400", fontFamilyForCanvas: "Italianno", fontWeightForCanvas: "400" },
     { displayName: "Moon Dance", apiName: "Moon Dance:wght@400", fontFamilyForCanvas: "Moon Dance", fontWeightForCanvas: "400" },
+    // 英語フォント 手書き
     { displayName: "Caveat Regular", apiName: "Caveat:wght@400", fontFamilyForCanvas: "Caveat", fontWeightForCanvas: "400" },
     { displayName: "Caveat Bold", apiName: "Caveat:wght@700", fontFamilyForCanvas: "Caveat", fontWeightForCanvas: "700" },
     { displayName: "Cookie Regular", apiName: "Cookie:wght@400", fontFamilyForCanvas: "Cookie", fontWeightForCanvas: "400" },
@@ -56,7 +57,23 @@ export const googleFonts = [
     { displayName: "Oooh Baby", apiName: "Oooh Baby:wght@400", fontFamilyForCanvas: "Oooh Baby", fontWeightForCanvas: "400" },
     { displayName: "Over the Rainbow", apiName: "Over the Rainbow:wght@400", fontFamilyForCanvas: "Over the Rainbow", fontWeightForCanvas: "400" },
     { displayName: "Grape Nuts", apiName: "Grape Nuts:wght@400", fontFamilyForCanvas: "Grape Nuts", fontWeightForCanvas: "400" },
-    { displayName: "Annie Use Your Telescope", apiName: "Annie Use Your Telescope:wght@400", fontFamilyForCanvas: "Annie Use Your Telescope", fontWeightForCanvas: "400" }
+    { displayName: "Annie Use Your Telescope", apiName: "Annie Use Your Telescope:wght@400", fontFamilyForCanvas: "Annie Use Your Telescope", fontWeightForCanvas: "400" },
+    // 日本語フォント デザイン
+    { displayName: "解星デコール Regular", apiName: "Kaisei Decol:wght@400", fontFamilyForCanvas: "Kaisei Decol", fontWeightForCanvas: "400" },
+    { displayName: "解星デコール Medium", apiName: "Kaisei Decol:wght@500", fontFamilyForCanvas: "Kaisei Decol", fontWeightForCanvas: "500" },
+    { displayName: "解星デコール Bold", apiName: "Kaisei Decol:wght@700", fontFamilyForCanvas: "Kaisei Decol", fontWeightForCanvas: "700" },
+    { displayName: "解星オプティ Regular", apiName: "Kaisei Opti:wght@400", fontFamilyForCanvas: "Kaisei Opti", fontWeightForCanvas: "400" },
+    { displayName: "解星オプティ Medium", apiName: "Kaisei Opti:wght@500", fontFamilyForCanvas: "Kaisei Opti", fontWeightForCanvas: "500" },
+    { displayName: "解星オプティ Bold", apiName: "Kaisei Opti:wght@700", fontFamilyForCanvas: "Kaisei Opti", fontWeightForCanvas: "700" },
+    { displayName: "デラゴシックワン", apiName: "Dela Gothic One:wght@400", fontFamilyForCanvas: "Dela Gothic One", fontWeightForCanvas: "400" },
+    { displayName: "モッチーポップ", apiName: "Mochiy Pop One:wght@400", fontFamilyForCanvas: "Mochiy Pop One", fontWeightForCanvas: "400" },
+    { displayName: "あおぼし", apiName: "Aoboshi One:wght@400", fontFamilyForCanvas: "Aoboshi One", fontWeightForCanvas: "400" },
+    // 日本語フォント 手書き
+    { displayName: "ZEN紅道", apiName: "Zen Kurenaido:wght@400", fontFamilyForCanvas: "Zen Kurenaido", fontWeightForCanvas: "400" },
+    { displayName: "クレーOne Regular", apiName: "Klee One:wght@400", fontFamilyForCanvas: "Klee One", fontWeightForCanvas: "400" },
+    { displayName: "クレーOne SemiBold", apiName: "Klee One:wght@600", fontFamilyForCanvas: "Klee One", fontWeightForCanvas: "600" },
+    { displayName: "Yomogi", apiName: "Yomogi:wght@400", fontFamilyForCanvas: "Yomogi", fontWeightForCanvas: "400" },
+    { displayName: "油性マジック", apiName: "Yusei Magic:wght@400", fontFamilyForCanvas: "Yusei Magic", fontWeightForCanvas: "400" }
 ];
 
 /**
