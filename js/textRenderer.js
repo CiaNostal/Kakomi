@@ -10,13 +10,13 @@ import { googleFonts } from './uiDefinitions.js'; // Google Fontsリストをイ
 // key: apiName (e.g., "Roboto:wght@400")
 // value: { promise: Promise, status: 'idle' | 'loading' | 'loaded' | 'error' }
 const fontLoadStates = new Map();
-googleFonts.forEach(font => { // This assumes googleFonts is populated when this module is initialized.
+googleFonts.forEach(font => {
     if (!fontLoadStates.has(font.apiName)) {
         fontLoadStates.set(font.apiName, { promise: null, status: 'idle' });
     }
 });
 
-// ★追加: HEXカラーとアルファ値からRGBA文字列を生成するヘルパー関数
+// HEXカラーとアルファ値からRGBA文字列を生成するヘルパー関数
 function hexToRgba(hex, alpha) {
     if (!hex || typeof hex !== 'string') return `rgba(0,0,0,${alpha})`; // フォールバック
     let r = 0, g = 0, b = 0;
@@ -34,7 +34,6 @@ function hexToRgba(hex, alpha) {
 
 /**
  * 指定されたGoogle Font (apiName) を読み込む。
- * 既に読み込み試行中または完了済みの場合はそのPromiseを返す。
  * @param {string} fontApiName - 読み込むフォントのAPI名 (e.g., "Roboto:wght@400")
  * @returns {Promise} フォント読み込み完了を示すPromise
  */
@@ -61,40 +60,21 @@ async function loadSingleGoogleFont(fontApiName) {
 
     const loadPromise = new Promise((resolve, reject) => {
         link.onload = () => {
-            console.log(`[TextRenderer] CSS for font ${fontApiName} loaded (link.onload). Now checking document.fonts.`);
-            // CSSの font-style-weight-stretch-size family の形式で指定。サイズは必須。ウェイトも指定。
-            const fontCheckString = `${fontObject.fontWeightForCanvas} 1em "${fontObject.fontFamilyForCanvas}"`;
-
-            document.fonts.load(fontCheckString)
-                .then((loadedFontFaces) => {
-                    if (loadedFontFaces.length > 0) {
-                        fontLoadStates.set(fontApiName, { status: 'loaded', promise: loadPromise }); // Update state
-                        console.log(`[TextRenderer] Font ${fontApiName} (${fontCheckString}) is ready for use (document.fonts.load resolved).`);
-                        resolve();
-                    } else {
-                        console.error(`[TextRenderer] document.fonts.load reported no fonts loaded for: ${fontCheckString} despite link.onload.`);
-                        fontLoadStates.set(fontApiName, { status: 'error', promise: loadPromise }); // Update state
-                        reject(new Error(`Font not made available by browser after download: ${fontApiName}`));
-                    }
-                })
-                .catch(err => {
-                    console.error(`[TextRenderer] document.fonts.load() rejected for ${fontApiName} (${fontCheckString}):`, err);
-                    fontLoadStates.set(fontApiName, { status: 'error', promise: loadPromise }); // Update state
-                    reject(new Error(`document.fonts.load() failed for ${fontApiName}.`));
-                });
+            console.log(`[TextRenderer] CSS for font ${fontApiName} loaded (link.onload).`);
+            fontLoadStates.set(fontApiName, { status: 'loaded', promise: loadPromise });
+            resolve();
         };
         link.onerror = (err) => {
             console.error(`[TextRenderer] Failed to load CSS for font ${fontApiName} (link.onerror):`, err);
-            fontLoadStates.set(fontApiName, { status: 'error', promise: loadPromise }); // Update state
+            fontLoadStates.set(fontApiName, { status: 'error', promise: loadPromise });
             reject(new Error(`Failed to load CSS for font ${fontApiName}.`));
         };
     });
 
-    fontLoadStates.set(fontApiName, { status: 'loading', promise: loadPromise }); // Set initial loading state
+    fontLoadStates.set(fontApiName, { status: 'loading', promise: loadPromise });
     document.head.appendChild(link);
     return loadPromise;
 }
-
 
 /**
  * テキスト要素を描画する (メインの呼び出し関数)
@@ -105,275 +85,102 @@ async function loadSingleGoogleFont(fontApiName) {
  * @param {number} basePhotoShortSideForTextPx - テキストサイズ計算の基準となる写真の短辺の実際のピクセル長
  */
 export async function drawText(ctx, currentState, canvasWidth, canvasHeight, basePhotoShortSideForTextPx) {
-    console.log("[TextRenderer] drawText called. basePhotoShortSideForTextPx:", basePhotoShortSideForTextPx);
-
     if (basePhotoShortSideForTextPx <= 0) {
-        console.log("[TextRenderer] basePhotoShortSideForTextPx is <= 0, skipping text draw.");
         return;
     }
 
-    const textDrawPromises = [];
+    const textTasks = [];
 
-    // 撮影日の表示
+    // 撮影日の表示タスク準備
     if (currentState.textSettings.date.enabled) {
         const exifDateTime = currentState.exifData ? currentState.exifData["0th"]?.[piexif.ImageIFD.DateTime] : null;
         if (exifDateTime) {
-            const selectedDateFont = googleFonts.find(f => f.displayName === currentState.textSettings.date.font);
-            if (selectedDateFont) { // フォントが見つかれば描画
-                const dateFontPromise = loadSingleGoogleFont(selectedDateFont.apiName)
-                    .then(() => {
-                        drawDateText(
-                            ctx,
-                            currentState.textSettings.date,
-                            selectedDateFont, // フォントオブジェクトを渡す
-                            exifDateTime,
-                            basePhotoShortSideForTextPx,
-                            canvasWidth,
-                            canvasHeight
-                        );
-                    })
-                    .catch(error => {
-                        console.error(`[TextRenderer] Date font ${selectedDateFont.apiName} could not be loaded for drawing:`, error);
-                        // エラーを投げずに解決することで Promise.all が中断しないようにする
-                        // あるいは、ここでエラーを再throwして呼び出し元でキャッチする
-                    });
-                textDrawPromises.push(dateFontPromise);
-            } else {
-                console.warn(`[TextRenderer] Date font definition not found for: ${currentState.textSettings.date.font}`);
-            }
-        } else {
-            console.log("[TextRenderer] No exifDateTime found for date display.");
+            const settings = currentState.textSettings.date;
+            const text = getFormattedDate(exifDateTime, settings.format);
+            if (text) textTasks.push({ settings, text });
         }
     }
 
-    // Exif情報の表示
+    // Exif情報の表示タスク準備
     if (currentState.textSettings.exif.enabled && currentState.exifData) {
-        const selectedExifFont = googleFonts.find(f => f.displayName === currentState.textSettings.exif.font);
-        if (selectedExifFont) { // フォントが見つかれば描画
-            const exifFontPromise = loadSingleGoogleFont(selectedExifFont.apiName)
-                .then(() => {
-                    drawExifInfo(
-                        ctx,
-                        currentState.textSettings.exif,
-                        selectedExifFont, // フォントオブジェクトを渡す
-                        currentState.exifData,
-                        basePhotoShortSideForTextPx,
-                        canvasWidth,
-                        canvasHeight
-                    );
-                })
-                .catch(error => {
-                    console.error(`[TextRenderer] Exif font ${selectedExifFont.apiName} could not be loaded for drawing:`, error);
-                });
-            textDrawPromises.push(exifFontPromise);
-        } else {
-            console.warn(`[TextRenderer] Exif font definition not found for: ${currentState.textSettings.exif.font}`);
-        }
+        const settings = currentState.textSettings.exif;
+        const text = settings.customText || '';
+        if (text.trim() !== '') textTasks.push({ settings, text });
     }
 
-    // ★追加: 自由テキストの表示
-    if (currentState.textSettings.freeText.enabled && currentState.textSettings.freeText.text.trim() !== '') {
-        const selectedFreeTextFont = googleFonts.find(f => f.displayName === currentState.textSettings.freeText.font);
-        if (selectedFreeTextFont) {
-            const freeTextFontPromise = loadSingleGoogleFont(selectedFreeTextFont.apiName)
-                .then(() => {
-                    drawFreeText( // 新しい描画関数を呼び出す
-                        ctx,
-                        currentState.textSettings.freeText,
-                        selectedFreeTextFont,
-                        basePhotoShortSideForTextPx,
-                        canvasWidth,
-                        canvasHeight
-                    );
-                })
-                .catch(error => {
-                    console.error(`[TextRenderer] Free text font ${selectedFreeTextFont.apiName} could not be loaded for drawing:`, error);
-                });
-            textDrawPromises.push(freeTextFontPromise);
-        } else {
-            console.warn(`[TextRenderer] Free text font definition not found for: ${currentState.textSettings.freeText.font}`);
-        }
+    // 自由テキストの表示タスク準備
+    if (currentState.textSettings.freeText.enabled) {
+        const settings = currentState.textSettings.freeText;
+        const text = settings.text || '';
+        if (text.trim() !== '') textTasks.push({ settings, text });
     }
 
-    try {
-        await Promise.all(textDrawPromises); // すべてのフォント読み込みと関連する描画試行を待つ
-    } catch (error) {
-        // textDrawPromises内の個々のcatchで処理されていれば、ここは呼ばれない可能性がある
-        console.error("[TextRenderer] Error during Promise.all in drawText:", error);
+    // すべてのテキスト描画タスクを実行
+    for (const task of textTasks) {
+        const { settings, text } = task;
+        const fontObject = googleFonts.find(f => f.displayName === settings.font);
+
+        if (!fontObject) {
+            console.warn(`[TextRenderer] Font definition not found for: ${settings.font}`);
+            continue;
+        }
+
+        try {
+            await loadSingleGoogleFont(fontObject.apiName);
+            const fontCheckString = `${fontObject.fontWeightForCanvas} 1em "${fontObject.fontFamilyForCanvas}"`;
+            await document.fonts.load(fontCheckString, text);
+            drawSingleText(ctx, settings, text, fontObject, basePhotoShortSideForTextPx, canvasWidth, canvasHeight);
+        } catch (error) {
+            console.error(`[TextRenderer] Failed to load or draw with font ${fontObject.apiName}:`, error);
+        }
     }
 }
 
 /**
- * 撮影日テキストを描画する
- * @param {CanvasRenderingContext2D} ctx - キャンバスのコンテキスト
- * @param {Object} dateSettings - 日付表示の設定 (currentState.textSettings.date)
- * @param {Object} fontObject - 選択されたフォントオブジェクト (from googleFonts list)
- * @param {string} exifDateTimeString - Exifから取得したDateTime文字列
- * @param {number} basePhotoShortSidePx - 基準となる写真の短辺の長さ (px)
- * @param {number} canvasWidth - キャンバスの幅 (px)
- * @param {number} canvasHeight - キャンバスの高さ (px)
+ * 単一のテキストブロックを描画する共通関数
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {Object} settings - textSettings.date, .exif, .freeText のいずれか
+ * @param {string} textToDraw - 描画する実際の文字列
+ * @param {Object} fontObject
+ * @param {number} basePhotoShortSidePx
+ * @param {number} canvasWidth
+ * @param {number} canvasHeight
  */
-function drawDateText(ctx, dateSettings, fontObject, exifDateTimeString, basePhotoShortSidePx, canvasWidth, canvasHeight) {
-    const dateString = getFormattedDate(exifDateTimeString, dateSettings.format);
-    if (!dateString) return;
-
-    const fontSizePx = (dateSettings.size / 100) * basePhotoShortSidePx;
+function drawSingleText(ctx, settings, textToDraw, fontObject, basePhotoShortSidePx, canvasWidth, canvasHeight) {
+    const fontSizePx = (settings.size / 100) * basePhotoShortSidePx;
     if (fontSizePx <= 0) return;
 
     ctx.save();
-    // フォントオブジェクトからフォントファミリーとウェイトを取得して設定
     ctx.font = `${fontObject.fontWeightForCanvas} ${fontSizePx}px "${fontObject.fontFamilyForCanvas}"`;
-    ctx.fillStyle = hexToRgba(dateSettings.color, dateSettings.opacity); // ★変更
+    ctx.fillStyle = hexToRgba(settings.color, settings.opacity);
 
     let textAlign = 'left';
-    let textBaseline = 'alphabetic';
-    if (dateSettings.position.endsWith('-center')) textAlign = 'center';
-    else if (dateSettings.position.endsWith('-right')) textAlign = 'right';
-    if (dateSettings.position.startsWith('top-')) textBaseline = 'top';
-    else if (dateSettings.position.startsWith('middle-')) textBaseline = 'middle';
-
-    ctx.textAlign = textAlign;
-    ctx.textBaseline = textBaseline;
-
-    const textMetrics = ctx.measureText(dateString);
-    const textWidth = textMetrics.width;
-    const textHeight = fontSizePx;
-
-    const { x, y } = calculateTextPosition(
-        dateSettings.position,
-        dateSettings.offsetX,
-        dateSettings.offsetY,
-        textWidth,
-        textHeight,
-        basePhotoShortSidePx,
-        canvasWidth,
-        canvasHeight,
-        textAlign,
-        textBaseline
-    );
-
-    console.log(`Drawing date: "${dateString}" at (${x}, ${y}) with font: ${ctx.font} color: ${ctx.fillStyle}`);
-    ctx.fillText(dateString, x, y);
-    ctx.restore();
-}
-
-/**
- * Exif情報を1行のテキストとして描画する
- * @param {CanvasRenderingContext2D} ctx - キャンバスのコンテキスト
- * @param {Object} exifSettings - Exif表示の設定 (currentState.textSettings.exif)
- * @param {Object} fontObject - 選択されたフォントオブジェクト (from googleFonts list)
- * @param {Object} exifDataFromState - Exifデータ (piexif.js形式)
- * @param {number} basePhotoShortSidePx - 基準となる写真の短辺の長さ (px)
- * @param {number} canvasWidth - キャンバスの幅 (px)
- * @param {number} canvasHeight - キャンバスの高さ (px)
- */
-// textRenderer.js のこの関数を置き換えてください
-function drawExifInfo(ctx, exifSettings, fontObject, exifDataFromState, basePhotoShortSidePx, canvasWidth, canvasHeight) {
-    // ★【重要】exifSettings.customText を直接使用するように変更
-    const exifString = exifSettings.customText || '';
-    if (exifString.trim() === '') return;
-
-    const fontSizePx = (exifSettings.size / 100) * basePhotoShortSidePx;
-    if (fontSizePx <= 0) return;
-
-    ctx.save();
-    ctx.font = `${fontObject.fontWeightForCanvas} ${fontSizePx}px "${fontObject.fontFamilyForCanvas}"`;
-    ctx.fillStyle = hexToRgba(exifSettings.color, exifSettings.opacity); // ★変更
-
-    const textAlign = exifSettings.textAlign || 'left';
     let textBaseline = 'top';
-    if (exifSettings.position.startsWith('bottom-')) textBaseline = 'bottom';
-    else if (exifSettings.position.startsWith('middle-')) textBaseline = 'middle';
 
-    ctx.textAlign = textAlign;
-    ctx.textBaseline = textBaseline;
-
-    const lines = exifString.split('\n');
-    const lineHeight = fontSizePx * 1.3;
-
-    let maxWidth = 0;
-    if (lines.length > 0) {
-        const textMetrics = lines.map(line => ctx.measureText(line).width);
-        maxWidth = Math.max(...textMetrics);
-    }
-    const textBlockHeight = (lines.length - 1) * lineHeight + fontSizePx;
-
-    let { x, y } = calculateTextPosition(
-        exifSettings.position,
-        exifSettings.offsetX,
-        exifSettings.offsetY,
-        maxWidth,
-        textBlockHeight,
-        basePhotoShortSidePx,
-        canvasWidth,
-        canvasHeight,
-        textAlign,
-        textBaseline
-    );
-
-    // ★【重要】以前の「浮き」を補正するコード
-    if (textBaseline === 'bottom') {
-        const visualCorrection = (lineHeight - fontSizePx) / 2;
-        y += visualCorrection;
-    }
-
-    if (textBaseline === 'bottom') {
-        const reversedLines = [...lines].reverse();
-        reversedLines.forEach((line, index) => {
-            const lineY = y - (index * lineHeight);
-            ctx.fillText(line, x, lineY);
-        });
+    if (settings.textAlign) {
+        textAlign = settings.textAlign;
     } else {
-        lines.forEach((line, index) => {
-            const lineY = y + (index * lineHeight);
-            ctx.fillText(line, x, lineY);
-        });
+        if (settings.position.endsWith('-center')) textAlign = 'center';
+        else if (settings.position.endsWith('-right')) textAlign = 'right';
     }
-    ctx.restore();
-}
-
-/**
- * 自由入力テキストを描画する
- * @param {CanvasRenderingContext2D} ctx - キャンバスのコンテキスト
- * @param {Object} freeTextSettings - 自由テキストの設定 (currentState.textSettings.freeText)
- * @param {Object} fontObject - 選択されたフォントオブジェクト
- * @param {number} basePhotoShortSidePx - 基準となる写真の短辺の長さ (px)
- * @param {number} canvasWidth - キャンバスの幅 (px)
- * @param {number} canvasHeight - キャンバスの高さ (px)
- */
-function drawFreeText(ctx, freeTextSettings, fontObject, basePhotoShortSidePx, canvasWidth, canvasHeight) {
-    const textToDraw = freeTextSettings.text || '';
-    if (textToDraw.trim() === '') return;
-
-    const fontSizePx = (freeTextSettings.size / 100) * basePhotoShortSidePx;
-    if (fontSizePx <= 0) return;
-
-    ctx.save();
-    ctx.font = `${fontObject.fontWeightForCanvas} ${fontSizePx}px "${fontObject.fontFamilyForCanvas}"`;
-    ctx.fillStyle = hexToRgba(freeTextSettings.color, freeTextSettings.opacity); // ★変更
-
-    const textAlign = freeTextSettings.textAlign || 'left';
-    let textBaseline = 'top';
-    if (freeTextSettings.position.startsWith('bottom-')) textBaseline = 'bottom';
-    else if (freeTextSettings.position.startsWith('middle-')) textBaseline = 'middle';
+    if (settings.position.startsWith('bottom-')) textBaseline = 'bottom';
+    else if (settings.position.startsWith('middle-')) textBaseline = 'middle';
 
     ctx.textAlign = textAlign;
     ctx.textBaseline = textBaseline;
 
     const lines = textToDraw.split('\n');
     const lineHeight = fontSizePx * 1.3;
-
     let maxWidth = 0;
     if (lines.length > 0) {
-        const textMetrics = lines.map(line => ctx.measureText(line).width);
-        maxWidth = Math.max(...textMetrics);
+        maxWidth = Math.max(...lines.map(line => ctx.measureText(line).width));
     }
     const textBlockHeight = (lines.length - 1) * lineHeight + fontSizePx;
 
     let { x, y } = calculateTextPosition(
-        freeTextSettings.position,
-        freeTextSettings.offsetX,
-        freeTextSettings.offsetY,
+        settings.position,
+        settings.offsetX,
+        settings.offsetY,
         maxWidth,
         textBlockHeight,
         basePhotoShortSidePx,
@@ -403,48 +210,56 @@ function drawFreeText(ctx, freeTextSettings, fontObject, basePhotoShortSidePx, c
     ctx.restore();
 }
 
-
-// calculateTextPosition (変更なし)
 function calculateTextPosition(position, offsetXPercent, offsetYPercent, textWidth, textHeight, photoShortSidePx, canvasWidth, canvasHeight, textAlign = 'left', textBaseline = 'top') {
     const margin = 0;
     const offsetXPx = (offsetXPercent / 100) * photoShortSidePx;
     const offsetYPx = (offsetYPercent / 100) * photoShortSidePx;
     let baseX, baseY;
 
-    // ★変更: X座標の計算ロジックを全面的に修正
-    if (position.endsWith('-left')) { // ブロック全体を左寄せ
+    if (position.endsWith('-left')) {
         if (textAlign === 'left') baseX = margin;
         else if (textAlign === 'center') baseX = margin + textWidth / 2;
         else baseX = margin + textWidth;
-    } else if (position.endsWith('-right')) { // ブロック全体を右寄せ
+    } else if (position.endsWith('-right')) {
         if (textAlign === 'left') baseX = canvasWidth - margin - textWidth;
         else if (textAlign === 'center') baseX = canvasWidth - margin - textWidth / 2;
         else baseX = canvasWidth - margin;
-    } else { // ブロック全体を中央寄せ (position.endsWith('-center'))
+    } else {
         if (textAlign === 'left') baseX = canvasWidth / 2 - textWidth / 2;
         else if (textAlign === 'center') baseX = canvasWidth / 2;
         else baseX = canvasWidth / 2 + textWidth / 2;
     }
 
-    // ★変更: Y座標の計算をtextBaselineに合わせて単純化
-    if (textBaseline === 'top') { baseY = margin; }
-    else if (textBaseline === 'middle') { baseY = canvasHeight / 2 - textHeight / 2; }
-    else { baseY = canvasHeight - margin; } // bottomの場合
-
-    if (baseX === undefined || baseY === undefined) {
-        baseX = margin;
+    if (textBaseline === 'top') {
+        baseY = margin;
+    } else if (textBaseline === 'middle') {
+        baseY = canvasHeight / 2 - textHeight / 2;
+    } else { // bottom
         baseY = canvasHeight - margin;
-        if (textBaseline === 'top') baseY -= textHeight;
-        else if (textBaseline === 'middle') baseY -= textHeight / 2;
-        console.warn("Text position calculation fallback used for:", position);
     }
+
+    // Y座標の垂直位置の基準点を決定
+    if (position.startsWith('top-')) {
+        baseY = margin;
+    } else if (position.startsWith('middle-')) {
+        // 'middle' の場合、textBaseline に応じて基準点を調整
+        if (textBaseline === 'top') {
+            baseY = canvasHeight / 2 - textHeight / 2;
+        } else if (textBaseline === 'bottom') {
+            baseY = canvasHeight / 2 + textHeight / 2;
+        } else { // 'middle'
+            baseY = canvasHeight / 2;
+        }
+    } else if (position.startsWith('bottom-')) {
+        baseY = canvasHeight - margin;
+    }
+
     return {
         x: baseX + offsetXPx,
         y: baseY + offsetYPx
     };
 }
 
-// getFormattedDate (変更なし)
 function getFormattedDate(exifDateTimeString, displayFormat = 'YYYY/MM/DD') {
     if (!exifDateTimeString || typeof exifDateTimeString !== 'string') return '';
     if (!displayFormat || typeof displayFormat !== 'string') return '';
@@ -463,6 +278,4 @@ function getFormattedDate(exifDateTimeString, displayFormat = 'YYYY/MM/DD') {
     return result;
 }
 
-// The original full code for textRenderer.js had `export { drawText, loadGoogleFonts };`
-// Now, drawText is async. loadGoogleFonts was already an alias for loadSingleGoogleFont.
 export { loadSingleGoogleFont as loadGoogleFonts };
