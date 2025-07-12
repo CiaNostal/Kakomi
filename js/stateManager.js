@@ -96,7 +96,19 @@ let editState = {
             size: 4, // デフォルトサイズを少し大きめに
             color: '#333333',
             opacity: 1, 
-            position: 'middle-center', // デフォルトは中央に
+            position: 'bottom-center', // デフォルトは中央に
+            offsetX: 0,
+            offsetY: 0
+        },
+        freeText2: { 
+            enabled: false,
+            text: '',
+            textAlign: 'left',
+            font: googleFonts[0].displayName,
+            size: 4,
+            color: '#333333',
+            opacity: 1,
+            position: 'bottom-center', // デフォルト位置を少し変えておくと分かりやすい
             offsetX: 0,
             offsetY: 0
         }

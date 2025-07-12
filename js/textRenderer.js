@@ -115,6 +115,13 @@ export async function drawText(ctx, currentState, canvasWidth, canvasHeight, bas
         if (text.trim() !== '') textTasks.push({ settings, text });
     }
 
+    // 自由テキスト2の表示タスク準備
+    if (currentState.textSettings.freeText2.enabled) {
+        const settings = currentState.textSettings.freeText2;
+        const text = settings.text || '';
+        if (text.trim() !== '') textTasks.push({ settings, text });
+    }
+
     // すべてのテキスト描画タスクを実行
     for (const task of textTasks) {
         const { settings, text } = task;

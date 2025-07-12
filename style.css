@@ -50,6 +50,7 @@ body {
     overflow-y: auto;
     display: flex;
     flex-direction: column;
+    max-height: calc(100vh - 60px - 2rem);
 }
 
 .tab-navigation {

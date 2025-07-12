@@ -137,6 +137,25 @@ export const uiElements = {
     textFreeOffsetYValueSpan: document.getElementById('textFreeOffsetYValue'),
     textFreeOpacitySlider: document.getElementById('textFreeOpacity'),
     textFreeOpacityValueSpan: document.getElementById('textFreeOpacityValue'),
+
+    // 自由入力テキスト2
+    textFree2EnabledCheckbox: document.getElementById('textFree2Enabled'),
+    textFree2SettingsContainer: document.getElementById('textFree2SettingsContainer'),
+    textFree2CustomTextArea: document.getElementById('textFree2CustomTextArea'),
+    textFree2AlignLeftRadio: document.getElementById('textFree2AlignLeft'),
+    textFree2AlignCenterRadio: document.getElementById('textFree2AlignCenter'),
+    textFree2AlignRightRadio: document.getElementById('textFree2AlignRight'),
+    textFree2FontSelect: document.getElementById('textFree2Font'),
+    textFree2SizeSlider: document.getElementById('textFree2Size'),
+    textFree2SizeValueSpan: document.getElementById('textFree2SizeValue'),
+    textFree2ColorInput: document.getElementById('textFree2Color'),
+    textFree2PositionSelect: document.getElementById('textFree2Position'),
+    textFree2OffsetXSlider: document.getElementById('textFree2OffsetX'),
+    textFree2OffsetXValueSpan: document.getElementById('textFree2OffsetXValue'),
+    textFree2OffsetYSlider: document.getElementById('textFree2OffsetY'),
+    textFree2OffsetYValueSpan: document.getElementById('textFree2OffsetYValue'),
+    textFree2OpacitySlider: document.getElementById('textFree2Opacity'),
+    textFree2OpacityValueSpan: document.getElementById('textFree2OpacityValue'),
 };
 
 let redrawDebounced = null; // ★追加: デバウンスされた再描画関数を保持する変数
@@ -163,6 +182,7 @@ export function initializeUIFromState() {
     populateFontSelect(uiElements.textExifFontSelect, state.textSettings.exif.font);
     // ★追加
     populateFontSelect(uiElements.textFreeFontSelect, state.textSettings.freeText.font);
+    populateFontSelect(uiElements.textFree2FontSelect, state.textSettings.freeText2.font);
 
 
     const setupInputAttributesAndValue = (element, configKey, stateValue) => {
@@ -284,11 +304,27 @@ export function initializeUIFromState() {
     setupInputAttributesAndValue(uiElements.textFreeOffsetYSlider, 'textFreeOffsetY', tfs.offsetY);
     setupInputAttributesAndValue(uiElements.textFreeOpacitySlider, 'textOpacity', tfs.opacity);
 
+    const tfs2 = state.textSettings.freeText2;
+    if (uiElements.textFree2EnabledCheckbox) uiElements.textFree2EnabledCheckbox.checked = tfs2.enabled;
+    if (uiElements.textFree2CustomTextArea) uiElements.textFree2CustomTextArea.value = tfs2.text;
+    if (uiElements.textFree2AlignLeftRadio) uiElements.textFree2AlignLeftRadio.checked = (tfs2.textAlign === 'left');
+    if (uiElements.textFree2AlignCenterRadio) uiElements.textFree2AlignCenterRadio.checked = (tfs2.textAlign === 'center');
+    if (uiElements.textFree2AlignRightRadio) uiElements.textFree2AlignRightRadio.checked = (tfs2.textAlign === 'right');
+    if (uiElements.textFree2FontSelect) uiElements.textFree2FontSelect.value = tfs2.font;
+    setupInputAttributesAndValue(uiElements.textFree2SizeSlider, 'textFreeSize', tfs2.size); // configはfreeTextと共通
+    if (uiElements.textFree2ColorInput) uiElements.textFree2ColorInput.value = tfs2.color;
+    if (uiElements.textFree2PositionSelect) uiElements.textFree2PositionSelect.value = tfs2.position;
+    setupInputAttributesAndValue(uiElements.textFree2OffsetXSlider, 'textFreeOffsetX', tfs2.offsetX); // configは共通
+    setupInputAttributesAndValue(uiElements.textFree2OffsetYSlider, 'textFreeOffsetY', tfs2.offsetY); // configは共通
+    setupInputAttributesAndValue(uiElements.textFree2OpacitySlider, 'textOpacity', tfs2.opacity); // configは共通
+
+
     toggleBackgroundSettingsVisibility();
     updateFrameSettingsVisibility();
     updateTextDateSettingsVisibility();
     updateTextExifSettingsVisibility();
     updateTextFreeSettingsVisibility();
+    updateTextFree2SettingsVisibility();
     updateSliderValueDisplays();
 }
 
@@ -387,6 +423,19 @@ export function updateSliderValueDisplays() {
     if (uiElements.textFreeOpacityValueSpan && uiElements.textFreeOpacitySlider) {
         uiElements.textFreeOpacityValueSpan.textContent = tfs.opacity.toFixed(2);
     }
+    const tfs2 = state.textSettings.freeText2;
+    if (uiElements.textFree2SizeValueSpan && uiElements.textFree2SizeSlider) {
+        uiElements.textFree2SizeValueSpan.textContent = `${tfs2.size}%`;
+    }
+    if (uiElements.textFree2OffsetXValueSpan && uiElements.textFree2OffsetXSlider) {
+        uiElements.textFree2OffsetXValueSpan.textContent = `${tfs2.offsetX}%`;
+    }
+    if (uiElements.textFree2OffsetYValueSpan && uiElements.textFree2OffsetYSlider) {
+        uiElements.textFree2OffsetYValueSpan.textContent = `${tfs2.offsetY}%`;
+    }
+    if (uiElements.textFree2OpacityValueSpan && uiElements.textFree2OpacitySlider) {
+        uiElements.textFree2OpacityValueSpan.textContent = tfs2.opacity.toFixed(2);
+    }
 }
 
 export function toggleBackgroundSettingsVisibility() {
@@ -433,6 +482,13 @@ function updateTextFreeSettingsVisibility() {
     const freeTextSettingsEnabled = getState().textSettings.freeText.enabled;
     if (uiElements.textFreeSettingsContainer) {
         uiElements.textFreeSettingsContainer.style.display = freeTextSettingsEnabled ? '' : 'none';
+    }
+}
+
+function updateTextFree2SettingsVisibility() {
+    const freeText2SettingsEnabled = getState().textSettings.freeText2.enabled;
+    if (uiElements.textFree2SettingsContainer) {
+        uiElements.textFree2SettingsContainer.style.display = freeText2SettingsEnabled ? '' : 'none';
     }
 }
 
@@ -569,7 +625,7 @@ export function setupEventListeners(redrawCallback) {
             if (element.type === 'checkbox') { valueToSet = e.target.checked; actualNestedKey = p1; actualSubNestedKey = p2; }
             else if (element.type === 'radio') { if (!e.target.checked) return; valueToSet = p1; actualNestedKey = p2; actualSubNestedKey = p3; }
             else { valueToSet = e.target.value; actualNestedKey = p1; actualSubNestedKey = p2; }
-            if ((element.id === 'textDateFontSelect' || element.id === 'textExifFontSelect') && valueToSet) {
+            if ((element.id === 'textDateFontSelect' || element.id === 'textExifFontSelect' || element.id === 'textFreeFontSelect' || element.id === 'textFree2FontSelect') && valueToSet) {
                 const selectedFontObject = googleFonts.find(f => f.displayName === valueToSet);
                 if (selectedFontObject) {
                     try {
@@ -591,7 +647,8 @@ export function setupEventListeners(redrawCallback) {
             } else if (stateKey === 'textSettings') {
                 if (actualNestedKey === 'date' && actualSubNestedKey === 'enabled') updateTextDateSettingsVisibility();
                 else if (actualNestedKey === 'exif' && actualSubNestedKey === 'enabled') updateTextExifSettingsVisibility();
-                else if (actualNestedKey === 'freeText' && actualSubNestedKey === 'enabled') updateTextFreeSettingsVisibility(); // ★追加
+                else if (actualNestedKey === 'freeText' && actualSubNestedKey === 'enabled') updateTextFreeSettingsVisibility();
+                else if (actualNestedKey === 'freeText2' && actualSubNestedKey === 'enabled') updateTextFree2SettingsVisibility(); // ★追加
             }
             updateSliderValueDisplays();
             redrawCallback();
@@ -733,4 +790,27 @@ export function setupEventListeners(redrawCallback) {
     addNumericInputListener(uiElements.textFreeOffsetXSlider, 'textFreeOffsetX', 'textSettings', 'freeText', 'offsetX'); // ★キーを修正
     addNumericInputListener(uiElements.textFreeOffsetYSlider, 'textFreeOffsetY', 'textSettings', 'freeText', 'offsetY'); // ★キーを修正
     addNumericInputListener(uiElements.textFreeOpacitySlider, 'textOpacity', 'textSettings', 'freeText', 'opacity');
+
+    // --- 文字入力タブ - 自由テキスト2 ---
+    addOptionChangeListener(uiElements.textFree2EnabledCheckbox, 'textSettings', 'freeText2', 'enabled');
+
+    if (uiElements.textFree2CustomTextArea) {
+        uiElements.textFree2CustomTextArea.addEventListener('input', debounce((e) => {
+            updateState({ textSettings: { freeText2: { text: e.target.value } } });
+            redrawCallback();
+        }, 300));
+    }
+
+    [uiElements.textFree2AlignLeftRadio, uiElements.textFree2AlignCenterRadio, uiElements.textFree2AlignRightRadio].forEach(radio => {
+        addOptionChangeListener(radio, 'textSettings', radio.value, 'freeText2', 'textAlign');
+    });
+
+    addOptionChangeListener(uiElements.textFree2FontSelect, 'textSettings', 'freeText2', 'font');
+    addNumericInputListener(uiElements.textFree2SizeSlider, 'textFreeSize', 'textSettings', 'freeText2', 'size');
+    addColorInputListener(uiElements.textFree2ColorInput, 'textSettings', 'freeText2', 'color');
+    addOptionChangeListener(uiElements.textFree2PositionSelect, 'textSettings', 'freeText2', 'position');
+    addNumericInputListener(uiElements.textFree2OffsetXSlider, 'textFreeOffsetX', 'textSettings', 'freeText2', 'offsetX');
+    addNumericInputListener(uiElements.textFree2OffsetYSlider, 'textFreeOffsetY', 'textSettings', 'freeText2', 'offsetY');
+    addNumericInputListener(uiElements.textFree2OpacitySlider, 'textOpacity', 'textSettings', 'freeText2', 'opacity');
+
 }

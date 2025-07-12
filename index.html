@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
-<!-- v1.8 -->
+<!-- v1.9 -->
 
 <head>
     <meta charset="UTF-8">
@@ -460,9 +460,9 @@
                                         <option value="top-left">左上</option>
                                         <option value="top-center">中央上</option>
                                         <option value="top-right">右上</option>
-                                        <option value="middle-left">左中央</option>
+                                        <!-- <option value="middle-left">左中央</option>
                                         <option value="middle-center">中央</option>
-                                        <option value="middle-right">右中央</option>
+                                        <option value="middle-right">右中央</option> -->
                                         <option value="bottom-left">左下</option>
                                         <option value="bottom-center">中央下</option>
                                         <option value="bottom-right">右下</option>
@@ -477,6 +477,82 @@
                                     <label for="textFreeOffsetY">縦オフセット (%):</label>
                                     <input type="range" id="textFreeOffsetY">
                                     <span id="textFreeOffsetYValue">0%</span>
+                                </div>
+                            </div>
+                        </fieldset>
+                        <fieldset>
+                            <legend>自由テキスト2</legend>
+                            <div class="form-row-simple">
+                                <label for="textFree2Enabled">表示する:</label>
+                                <input type="checkbox" id="textFree2Enabled">
+                            </div>
+
+                            <div id="textFree2SettingsContainer">
+                                <fieldset>
+                                    <legend>表示テキスト</legend>
+                                    <div class="form-row-simple">
+                                        <textarea id="textFree2CustomTextArea" rows="3"
+                                            style="width: 100%; font-family: monospace; padding: 0.3rem; border-radius: 4px; border: 1px solid #ccd0d5;"></textarea>
+                                    </div>
+                                </fieldset>
+
+                                <fieldset>
+                                    <legend>水平方向の配置</legend>
+                                    <div class="form-row-simple" style="justify-content: space-around;">
+                                        <div class="radio-group"><input type="radio" id="textFree2AlignLeft"
+                                                name="textFree2Align" value="left"><label
+                                                for="textFree2AlignLeft">左寄せ</label></div>
+                                        <div class="radio-group"><input type="radio" id="textFree2AlignCenter"
+                                                name="textFree2Align" value="center"><label
+                                                for="textFree2AlignCenter">中央</label></div>
+                                        <div class="radio-group"><input type="radio" id="textFree2AlignRight"
+                                                name="textFree2Align" value="right"><label
+                                                for="textFree2AlignRight">右寄せ</label></div>
+                                    </div>
+                                </fieldset>
+
+                                <div class="form-row-simple">
+                                    <label for="textFree2Font">フォント:</label>
+                                    <select id="textFree2Font">
+                                    </select>
+                                </div>
+                                <div class="form-row-slider">
+                                    <label for="textFree2Size">サイズ (%):</label>
+                                    <input type="range" id="textFree2Size">
+                                    <span id="textFree2SizeValue">4%</span>
+                                </div>
+                                <div class="form-row-simple">
+                                    <label for="textFree2Color">文字色:</label>
+                                    <input type="color" id="textFree2Color">
+                                </div>
+                                <div class="form-row-slider">
+                                    <label for="textFree2Opacity">透過度:</label>
+                                    <input type="range" id="textFree2Opacity">
+                                    <span id="textFree2OpacityValue">1.00</span>
+                                </div>
+                                <div class="form-row-simple">
+                                    <label for="textFree2Position">表示位置:</label>
+                                    <select id="textFree2Position">
+                                        <option value="top-left">左上</option>
+                                        <option value="top-center">中央上</option>
+                                        <option value="top-right">右上</option>
+                                        <!-- <option value="middle-left">左中央</option>
+                                        <option value="middle-center">中央</option>
+                                        <option value="middle-right">右中央</option> -->
+                                        <option value="bottom-left">左下</option>
+                                        <option value="bottom-center">中央下</option>
+                                        <option value="bottom-right">右下</option>
+                                    </select>
+                                </div>
+                                <div class="form-row-slider">
+                                    <label for="textFree2OffsetX">横オフセット (%):</label>
+                                    <input type="range" id="textFree2OffsetX">
+                                    <span id="textFree2OffsetXValue">0%</span>
+                                </div>
+                                <div class="form-row-slider">
+                                    <label for="textFree2OffsetY">縦オフセット (%):</label>
+                                    <input type="range" id="textFree2OffsetY">
+                                    <span id="textFree2OffsetYValue">0%</span>
                                 </div>
                             </div>
                         </fieldset>
