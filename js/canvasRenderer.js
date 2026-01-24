@@ -4,6 +4,13 @@ import { createAndApplyClippingPath, applyShadow, applyBorder } from './frameRen
 import { drawText } from './textRenderer.js'; // テキスト描画もインポートしておく
 import { drawImageWithPrecision } from './utils/canvasUtils.js';
 
+// コンテナサイズをキャッシュして、canvasサイズ変更によるレイアウト再計算の影響を防ぐ
+let cachedContainerSize = null;
+
+// ウィンドウリサイズ時にキャッシュをクリア
+window.addEventListener('resize', () => {
+    cachedContainerSize = null;
+});
 
 export async function drawPreview(currentState, previewCanvas, previewCtx) { // async追加
     if (!currentState.image) {
@@ -24,8 +31,17 @@ export async function drawPreview(currentState, previewCanvas, previewCtx) { // 
     const outputAspectRatio = (outputTotalHeight === 0 || outputTotalWidth === 0) ? 1 : outputTotalWidth / outputTotalHeight;
 
     const container = previewCanvas.parentElement;
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
+    // コンテナサイズをキャッシュから取得、または初回のみ取得してキャッシュに保存
+    // canvasサイズ変更によるレイアウト再計算の影響を防ぐため、キャッシュされたサイズを使用
+    if (!cachedContainerSize || cachedContainerSize.container !== container) {
+        cachedContainerSize = {
+            container: container,
+            width: container.clientWidth,
+            height: container.clientHeight
+        };
+    }
+    const containerWidth = cachedContainerSize.width;
+    const containerHeight = cachedContainerSize.height;
 
     let canvasRenderWidth, canvasRenderHeight;
     if (containerWidth <= 0 || containerHeight <= 0) { canvasRenderWidth = 300; canvasRenderHeight = 200; }

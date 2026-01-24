@@ -334,8 +334,8 @@ fieldset div span {
 .canvas-container {
     width: 100%;
     flex: 1;
-    height: 100%;
-    /* ★試してみる */
+    min-height: 0;
+    /* flexアイテムの最小サイズを0にして、コンテナサイズの固定を可能にする */
 
     display: flex;
     justify-content: center;
