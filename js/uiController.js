@@ -168,6 +168,9 @@ function populateFontSelect(selectElement, selectedFontDisplayName) {
         const option = document.createElement('option');
         option.value = font.displayName; // stateにはdisplayNameを保存
         option.textContent = font.displayName;
+        // フォント名をそのフォントで表示
+        option.style.fontFamily = `"${font.fontFamilyForCanvas}", sans-serif`;
+        option.style.fontWeight = font.fontWeightForCanvas;
         selectElement.appendChild(option);
     });
     selectElement.value = selectedFontDisplayName;
