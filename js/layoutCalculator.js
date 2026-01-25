@@ -84,8 +84,25 @@ function calculateLayout(currentState) {
     if (currentState.outputTargetAspectRatioString === 'original_photo') {
         outputTargetAspectRatioValue = currentPhotoAspectRatio;
     } else {
-        const parts = currentState.outputTargetAspectRatioString.split(':');
-        outputTargetAspectRatioValue = parseFloat(parts[0]) / parseFloat(parts[1]);
+        // width:height形式の解析
+        const aspectRatioStr = currentState.outputTargetAspectRatioString;
+        // custom:プレフィックスを削除（後方互換性のため）
+        const cleanAspectRatioStr = aspectRatioStr && aspectRatioStr.startsWith('custom:') 
+            ? aspectRatioStr.substring(7) 
+            : aspectRatioStr;
+        
+        const parts = cleanAspectRatioStr.split(':');
+        if (parts.length === 2) {
+            const width = parseFloat(parts[0]);
+            const height = parseFloat(parts[1]);
+            if (!isNaN(width) && !isNaN(height) && width > 0 && height > 0) {
+                outputTargetAspectRatioValue = width / height;
+            } else {
+                outputTargetAspectRatioValue = 1;
+            }
+        } else {
+            outputTargetAspectRatioValue = 1;
+        }
     }
     if (isNaN(outputTargetAspectRatioValue) || outputTargetAspectRatioValue <= 0) outputTargetAspectRatioValue = 1;
 
@@ -151,7 +168,13 @@ function getAspectRatioValue(aspectRatioStr) {
         return null; // 特殊ケース: 元画像の比率を使用
     }
     
-    const parts = aspectRatioStr.split(':');
+    // custom:プレフィックスを削除（後方互換性のため）
+    const cleanAspectRatioStr = aspectRatioStr.startsWith('custom:') 
+        ? aspectRatioStr.substring(7) 
+        : aspectRatioStr;
+    
+    // width:height形式の解析
+    const parts = cleanAspectRatioStr.split(':');
     if (parts.length !== 2) {
         return 1; // デフォルト値
     }

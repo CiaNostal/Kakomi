@@ -12,6 +12,10 @@ export const uiElements = {
 
     // レイアウト設定タブ
     outputAspectRatioSelect: document.getElementById('outputAspectRatio'),
+    customAspectRatioContainer: document.getElementById('customAspectRatioContainer'),
+    customAspectRatioWidthInput: document.getElementById('customAspectRatioWidth'),
+    customAspectRatioHeightInput: document.getElementById('customAspectRatioHeight'),
+    swapAspectRatioButton: document.getElementById('swapAspectRatio'),
     baseMarginPercentInput: document.getElementById('baseMarginPercent'),
     baseMarginPercentValueSpan: document.getElementById('baseMarginPercentValue'),
     photoPosXSlider: document.getElementById('photoPosX'),
@@ -211,7 +215,44 @@ export function initializeUIFromState() {
     };
 
     // レイアウト設定
-    if (uiElements.outputAspectRatioSelect) uiElements.outputAspectRatioSelect.value = state.outputTargetAspectRatioString;
+    if (uiElements.outputAspectRatioSelect) {
+        const aspectRatioValue = state.outputTargetAspectRatioString;
+        // custom:プレフィックスを削除（後方互換性のため）
+        const cleanAspectRatio = aspectRatioValue && aspectRatioValue.startsWith('custom:') 
+            ? aspectRatioValue.substring(7) 
+            : aspectRatioValue;
+        
+        // アスペクト比を解析して入力フィールドに設定
+        if (cleanAspectRatio && cleanAspectRatio !== 'original_photo') {
+            const parts = cleanAspectRatio.split(':');
+            if (parts.length === 2) {
+                const width = parseFloat(parts[0]);
+                const height = parseFloat(parts[1]);
+                if (!isNaN(width) && width > 0 && uiElements.customAspectRatioWidthInput) {
+                    uiElements.customAspectRatioWidthInput.value = String(width);
+                }
+                if (!isNaN(height) && height > 0 && uiElements.customAspectRatioHeightInput) {
+                    uiElements.customAspectRatioHeightInput.value = String(height);
+                }
+            }
+        }
+        
+        // セレクトボックスの値を設定（マッチする選択肢があれば選択、なければ未選択）
+        if (cleanAspectRatio && cleanAspectRatio !== 'original_photo') {
+            // セレクトボックスに該当する選択肢があるか確認
+            const optionExists = Array.from(uiElements.outputAspectRatioSelect.options).some(
+                opt => opt.value === cleanAspectRatio
+            );
+            if (optionExists) {
+                uiElements.outputAspectRatioSelect.value = cleanAspectRatio;
+            } else {
+                // 該当する選択肢がない場合は「カスタム」を選択
+                uiElements.outputAspectRatioSelect.value = 'custom';
+            }
+        } else {
+            uiElements.outputAspectRatioSelect.selectedIndex = -1;
+        }
+    }
     setupInputAttributesAndValue(uiElements.baseMarginPercentInput, 'baseMarginPercent', state.baseMarginPercent);
     setupInputAttributesAndValue(uiElements.photoPosXSlider, 'photoPosX', state.photoViewParams.offsetX);
     setupInputAttributesAndValue(uiElements.photoPosYSlider, 'photoPosY', state.photoViewParams.offsetY);
@@ -672,7 +713,86 @@ export function setupEventListeners(redrawCallback) {
     };
 
     // --- 各種イベントリスナーの設定 (大部分は変更なし) ---
-    addOptionChangeListener(uiElements.outputAspectRatioSelect, 'outputTargetAspectRatioString');
+    // アスペクト比セレクトのイベントリスナー
+    if (uiElements.outputAspectRatioSelect) {
+        uiElements.outputAspectRatioSelect.addEventListener('change', (e) => {
+            const selectedValue = e.target.value;
+            if (selectedValue) {
+                if (selectedValue === 'custom') {
+                    // カスタムが選択された場合は、現在の入力値をそのまま使用
+                    updateAspectRatioFromInputs();
+                } else {
+                    // セレクトボックスから選択した値を解析して入力フィールドに設定
+                    const parts = selectedValue.split(':');
+                    if (parts.length === 2) {
+                        const width = parseFloat(parts[0]);
+                        const height = parseFloat(parts[1]);
+                        if (!isNaN(width) && width > 0 && uiElements.customAspectRatioWidthInput) {
+                            uiElements.customAspectRatioWidthInput.value = String(width);
+                        }
+                        if (!isNaN(height) && height > 0 && uiElements.customAspectRatioHeightInput) {
+                            uiElements.customAspectRatioHeightInput.value = String(height);
+                        }
+                        // 状態を更新
+                        updateState({ outputTargetAspectRatioString: selectedValue });
+                        redrawCallback();
+                    }
+                }
+            }
+        });
+    }
+
+    // アスペクト比入力フィールドのイベントリスナー
+    const updateAspectRatioFromInputs = () => {
+        if (!uiElements.customAspectRatioWidthInput || !uiElements.customAspectRatioHeightInput) return;
+        const width = parseFloat(uiElements.customAspectRatioWidthInput.value);
+        const height = parseFloat(uiElements.customAspectRatioHeightInput.value);
+        if (!isNaN(width) && !isNaN(height) && width > 0 && height > 0) {
+            const aspectRatioString = `${width}:${height}`;
+            updateState({ outputTargetAspectRatioString: aspectRatioString });
+            // セレクトボックスの選択状態を更新（マッチする選択肢があれば選択、なければカスタムを選択）
+            if (uiElements.outputAspectRatioSelect) {
+                const optionExists = Array.from(uiElements.outputAspectRatioSelect.options).some(
+                    opt => opt.value === aspectRatioString
+                );
+                if (optionExists) {
+                    uiElements.outputAspectRatioSelect.value = aspectRatioString;
+                } else {
+                    // マッチしない場合は「カスタム」を選択
+                    uiElements.outputAspectRatioSelect.value = 'custom';
+                }
+            }
+            redrawCallback();
+        }
+    };
+
+    if (uiElements.customAspectRatioWidthInput) {
+        uiElements.customAspectRatioWidthInput.addEventListener('input', updateAspectRatioFromInputs);
+        uiElements.customAspectRatioWidthInput.addEventListener('change', updateAspectRatioFromInputs);
+    }
+    if (uiElements.customAspectRatioHeightInput) {
+        uiElements.customAspectRatioHeightInput.addEventListener('input', updateAspectRatioFromInputs);
+        uiElements.customAspectRatioHeightInput.addEventListener('change', updateAspectRatioFromInputs);
+    }
+
+    // 反転ボタンのイベントリスナー
+    if (uiElements.swapAspectRatioButton) {
+        uiElements.swapAspectRatioButton.addEventListener('click', () => {
+            if (!uiElements.customAspectRatioWidthInput || !uiElements.customAspectRatioHeightInput) return;
+            const width = parseFloat(uiElements.customAspectRatioWidthInput.value);
+            const height = parseFloat(uiElements.customAspectRatioHeightInput.value);
+            if (!isNaN(width) && !isNaN(height) && width > 0 && height > 0) {
+                // 幅と高さを入れ替え
+                uiElements.customAspectRatioWidthInput.value = String(height);
+                uiElements.customAspectRatioHeightInput.value = String(width);
+                // 状態を更新
+                updateAspectRatioFromInputs();
+            }
+        });
+    }
+
+    addNumericInputListener(uiElements.baseMarginPercentInput, 'baseMarginPercent', 'baseMarginPercent');
+
     addNumericInputListener(uiElements.baseMarginPercentInput, 'baseMarginPercent', 'baseMarginPercent');
     // ... (その他すべての addNumericInputListener と addColorInputListener の呼び出し) ...
     addNumericInputListener(uiElements.photoPosXSlider, 'photoPosX', 'photoViewParams', 'offsetX');

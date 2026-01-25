@@ -198,6 +198,44 @@ fieldset div.form-row-simple input[type="number"] {
     /* 最小幅を確保（selectなどが潰れないように） */
 }
 
+/* カスタムアスペクト比入力フィールドのスタイル */
+#customAspectRatioContainer {
+    margin-top: 0.5rem;
+}
+
+#customAspectRatioContainer label {
+    flex-shrink: 0;
+    margin-right: 0.3rem;
+}
+
+#customAspectRatioContainer input[type="number"] {
+    flex-grow: 1;
+    min-width: 60px;
+    max-width: 100px;
+}
+
+/* 反転ボタンのスタイル */
+#swapAspectRatio {
+    flex-shrink: 0;
+    padding: 0.4rem 0.8rem;
+    font-size: 1rem;
+    background-color: #1877f2;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    margin-left: 0.5rem;
+}
+
+#swapAspectRatio:hover {
+    background-color: #166fe5;
+}
+
+#swapAspectRatio:active {
+    background-color: #1460cc;
+}
+
 fieldset div.form-row-simple span {
     /* 「%」などの単位表示用 */
     flex-shrink: 0;

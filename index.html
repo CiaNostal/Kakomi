@@ -33,15 +33,21 @@
                             <div class="form-row-simple">
                                 <label for="outputAspectRatio">アスペクト比:</label>
                                 <select id="outputAspectRatio">
-                                    <option value="original_photo">入力写真の比率</option>
                                     <option value="1:1">1:1 (正方形)</option>
                                     <option value="4:5">4:5 (Instagram縦)</option>
                                     <option value="1.91:1">1.91:1 (Instagram横)</option>
                                     <option value="16:9">16:9 (ワイド)</option>
-                                    <option value="9:16">9:16 (縦長ワイド)</option>
-                                    <option value="4:3">4:3</option>
                                     <option value="3:4">3:4</option>
+                                    <option value="89:127">L判縦 (89×127)</option>
+                                    <option value="custom">カスタム</option>
                                 </select>
+                            </div>
+                            <div id="customAspectRatioContainer" class="form-row-simple">
+                                <label for="customAspectRatioWidth">幅:</label>
+                                <input type="number" id="customAspectRatioWidth" min="0.01" step="any" value="1">
+                                <button type="button" id="swapAspectRatio" title="縦横比を反転">⇄</button>
+                                <label for="customAspectRatioHeight">高さ:</label>
+                                <input type="number" id="customAspectRatioHeight" min="0.01" step="any" value="1">
                             </div>
                             <div class="form-row-slider">
                                 <label for="baseMarginPercent">余白 (%):</label>
