@@ -2,6 +2,7 @@
 import { getState, updateState } from './stateManager.js';
 import { controlsConfig, googleFonts } from './uiDefinitions.js';
 import { loadGoogleFonts } from './textRenderer.js';
+import { stripCustomPrefix } from './layoutCalculator.js';
 
 export const uiElements = {
     imageLoader: document.getElementById('imageLoader'),
@@ -217,11 +218,8 @@ export function initializeUIFromState() {
     // レイアウト設定
     if (uiElements.outputAspectRatioSelect) {
         const aspectRatioValue = state.outputTargetAspectRatioString;
-        // custom:プレフィックスを削除（後方互換性のため）
-        const cleanAspectRatio = aspectRatioValue && aspectRatioValue.startsWith('custom:') 
-            ? aspectRatioValue.substring(7) 
-            : aspectRatioValue;
-        
+        const cleanAspectRatio = stripCustomPrefix(aspectRatioValue);
+
         // アスペクト比を解析して入力フィールドに設定
         if (cleanAspectRatio && cleanAspectRatio !== 'original_photo') {
             const parts = cleanAspectRatio.split(':');
@@ -768,11 +766,9 @@ export function setupEventListeners(redrawCallback) {
 
     if (uiElements.customAspectRatioWidthInput) {
         uiElements.customAspectRatioWidthInput.addEventListener('input', updateAspectRatioFromInputs);
-        uiElements.customAspectRatioWidthInput.addEventListener('change', updateAspectRatioFromInputs);
     }
     if (uiElements.customAspectRatioHeightInput) {
         uiElements.customAspectRatioHeightInput.addEventListener('input', updateAspectRatioFromInputs);
-        uiElements.customAspectRatioHeightInput.addEventListener('change', updateAspectRatioFromInputs);
     }
 
     // 反転ボタンのイベントリスナー
@@ -790,8 +786,6 @@ export function setupEventListeners(redrawCallback) {
             }
         });
     }
-
-    addNumericInputListener(uiElements.baseMarginPercentInput, 'baseMarginPercent', 'baseMarginPercent');
 
     addNumericInputListener(uiElements.baseMarginPercentInput, 'baseMarginPercent', 'baseMarginPercent');
     // ... (その他すべての addNumericInputListener と addColorInputListener の呼び出し) ...

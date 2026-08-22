@@ -4,6 +4,17 @@
  */
 
 /**
+ * アスペクト比文字列から後方互換用の "custom:" プレフィックスを取り除く
+ * @param {string} aspectRatioStr - アスペクト比の文字列（例: '16:9' または 'custom:16:9'）
+ * @returns {string} プレフィックスを除去した文字列
+ */
+function stripCustomPrefix(aspectRatioStr) {
+    return aspectRatioStr && aspectRatioStr.startsWith('custom:')
+        ? aspectRatioStr.substring(7)
+        : aspectRatioStr;
+}
+
+/**
  * 編集状態からレイアウト情報を計算する
  * @param {Object} currentState - 現在の編集状態
  * @returns {Object} レイアウト情報を含むオブジェクト
@@ -86,11 +97,8 @@ function calculateLayout(currentState) {
     } else {
         // width:height形式の解析
         const aspectRatioStr = currentState.outputTargetAspectRatioString;
-        // custom:プレフィックスを削除（後方互換性のため）
-        const cleanAspectRatioStr = aspectRatioStr && aspectRatioStr.startsWith('custom:') 
-            ? aspectRatioStr.substring(7) 
-            : aspectRatioStr;
-        
+        const cleanAspectRatioStr = stripCustomPrefix(aspectRatioStr);
+
         const parts = cleanAspectRatioStr.split(':');
         if (parts.length === 2) {
             const width = parseFloat(parts[0]);
@@ -168,11 +176,8 @@ function getAspectRatioValue(aspectRatioStr) {
         return null; // 特殊ケース: 元画像の比率を使用
     }
     
-    // custom:プレフィックスを削除（後方互換性のため）
-    const cleanAspectRatioStr = aspectRatioStr.startsWith('custom:') 
-        ? aspectRatioStr.substring(7) 
-        : aspectRatioStr;
-    
+    const cleanAspectRatioStr = stripCustomPrefix(aspectRatioStr);
+
     // width:height形式の解析
     const parts = cleanAspectRatioStr.split(':');
     if (parts.length !== 2) {
@@ -190,4 +195,4 @@ function getAspectRatioValue(aspectRatioStr) {
 }
 
 // モジュールとしてエクスポート
-export { calculateLayout, getAspectRatioValue }; 
+export { calculateLayout, getAspectRatioValue, stripCustomPrefix };
