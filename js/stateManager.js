@@ -6,6 +6,23 @@ import { googleFonts } from './uiDefinitions.js'; // Google Fontsリストをイ
  * アプリケーションの状態管理を担当するモジュール
  */
 
+// ユーザーが調整する「編集設定」のキー一覧。
+// 画像そのもの（image, exifData, originalFileName等）やレイアウト計算の派生データ
+// （photoDrawConfig, outputCanvasConfig）は含めない。Undo/Redo（historyManager.js）と
+// プリセット保存（presets/presetStore.js）の両方が、保存・復元の対象範囲としてこれを共有する。
+const EDITABLE_SETTINGS_KEYS = [
+    'photoViewParams',
+    'outputTargetAspectRatioString',
+    'baseMarginPercent',
+    'backgroundColor',
+    'backgroundType',
+    'imageBlurBackgroundParams',
+    'frameSettings',
+    'textSettings',
+    'outputSettings',
+    'cropSettings'
+];
+
 // アプリケーションの状態を保持するオブジェクト
 let editState = {
     image: null,
@@ -278,5 +295,6 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
 
 export {
     getState, updateState, addStateChangeListener, removeStateChangeListener, setImage,
-    addCustomTextLayer, removeCustomTextLayer, updateCustomTextLayer
+    addCustomTextLayer, removeCustomTextLayer, updateCustomTextLayer,
+    EDITABLE_SETTINGS_KEYS
 };

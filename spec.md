@@ -101,7 +101,11 @@ Kakomi/
     │       ├── photoAdapter.js       # 写真の枠内配置の値変換
     │       └── backgroundAdapter.js  # 拡大ぼかし背景の位置の値変換
     ├── ui/
-    │   └── scrubInput.js   # ドラッグでスクラブ／クリックでタイプ入力できる数値入力コンポーネント
+    │   ├── scrubInput.js   # ドラッグでスクラブ／クリックでタイプ入力できる数値入力コンポーネント
+    │   └── colorSwatches.js # カラーピッカーの直下にカラー履歴スウォッチ行を追加する機能拡張
+    ├── presets/
+    │   ├── presetStore.js       # 編集設定のプリセット保存・一覧・削除・適用（localStorage）
+    │   └── colorHistoryStore.js # カラーピッカーで選んだ色の履歴（localStorage、全ピッカー共通）
     └── utils/
         └── canvasUtils.js  # Canvas操作ユーティリティ
 ```
@@ -202,6 +206,9 @@ Kakomi/
 - `addCustomTextLayer()`: 自由テキストレイヤーを1つ追加し、そのidを返す
 - `removeCustomTextLayer(id)`: 指定idの自由テキストレイヤーを削除
 - `updateCustomTextLayer(id, changes)`: 指定idの自由テキストレイヤーのプロパティを部分更新
+
+**`EDITABLE_SETTINGS_KEYS`（エクスポートされる定数配列）:**
+`editState`のうち「ユーザーが調整する編集設定」に該当するキーの一覧（`photoViewParams`, `outputTargetAspectRatioString`, `baseMarginPercent`, `backgroundColor`, `backgroundType`, `imageBlurBackgroundParams`, `frameSettings`, `textSettings`, `outputSettings`, `cropSettings`）。画像そのもの（`image`, `exifData`, `originalFileName`）やレイアウト計算の派生データ（`photoDrawConfig`, `outputCanvasConfig`）は含まない。`history/historyManager.js`のUndo/Redo対象範囲と`presets/presetStore.js`のプリセット保存範囲が、この一つの定義を共有している。
 
 **状態変更通知のバッチ化と`silent`オプション（設計上の注記）:**
 - `notifyStateChange()`は同期即時実行ではなく、`queueMicrotask()`で同一Tick内の複数回呼び出しを1回にまとめてから発火する。これにより、Canvasドラッグ中に高頻度で発生する`updateState`呼び出しでも、実際の再描画・UI同期はTickごとに1回に自然に間引かれる。
@@ -434,6 +441,32 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
   - フォーカスされていない状態で押してドラッグ → 値が連続的に変化（スクラブ）
   - 押してすぐ離す（ドラッグしなかった）→ 通常のテキスト入力にフォーカスして選択状態にする
   - フォーカス中の直接クリックはスクラブを起動しない（タイプ入力を優先）
+
+### 5.19 presets/presetStore.js
+編集設定（`stateManager.js`の`EDITABLE_SETTINGS_KEYS`で定義される範囲）を、名前付きプリセットとして`localStorage`（キー: `kakomi_presets`）に保存・一覧取得・削除・適用するモジュール。読み込んだ画像そのものは対象外。`textSettings`（`customTexts`配列を含む）もそのまま保存するため、自由テキストの内容・個数もプリセットの一部として保存・復元される。
+
+**主要関数:**
+- `getPresets()`: 保存済みプリセットの一覧を取得（`{ id, name, createdAt, settings }`の配列）
+- `savePreset(name)`: 現在の編集設定を新しいプリセットとして保存し、保存されたプリセットを返す（`localStorage`書き込み失敗時は`null`）
+- `deletePreset(id)`: 指定idのプリセットを削除
+- `applyPreset(id)`: 指定idのプリセットを`updateState()`経由で現在の編集状態に適用する
+
+**UI連携（`uiController.js`）:** 「プリセット」タブに保存フォームと一覧を表示する。プリセット適用後は、`customTexts`配列の個数など非連続な変化が起こりうるため、Undo/Redoのスナップショット適用時と同様に`initializeUIFromState()`でUI全体を再構築する。
+
+### 5.20 presets/colorHistoryStore.js
+カラーピッカーで選んだ色の履歴（MRU順、最大12件）を`localStorage`（キー: `kakomi_colorHistory`）に保持するモジュール。背景色・影・縁取り・撮影日/Exif/自由テキストの文字色など、アプリ内の全カラーピッカーが共通の履歴を共有する。
+
+**主要関数:**
+- `getColorHistory()`: 履歴（先頭が最新）を取得
+- `recordColor(hex)`: 色を履歴の先頭に記録する（既存の同じ色があれば先頭に移動し、重複させない）
+
+### 5.21 ui/colorSwatches.js
+`<input type="color">`の直後にカラー履歴のスウォッチ行を追加する機能拡張。スウォッチをクリックするとその色がピッカーに設定され、`input`/`change`イベントが発火するため、既存のイベントリスナー（状態更新・プレビュー再描画）がそのまま動作する。
+
+**主要関数:**
+- `attachColorHistory(inputEl)`: 指定した色入力要素にスウォッチ行を追加する。`.form-row-simple`（flexコンテナ）の直下ではなく、その行コンテナ自体の直後に独立した行として挿入する（`inputEl.closest('.form-row-simple')`で行コンテナを特定）
+  - `change`イベントで確定した色を`colorHistoryStore.recordColor()`に記録し、画面上の全スウォッチ行（`customTextSettingsPanel`のように毎回作り直されるものも含む）を再描画する
+  - 再描画対象はモジュール内の`registry`で管理し、パネル再構築等でDOMから外れた行は次回更新時に自動的に間引かれる
 
 ## 6. データフロー
 
@@ -768,9 +801,9 @@ Blobをダウンロード
 - タッチデバイスでの実機確認（Pointer Events自体は実装済みだが未検証）
 
 ### 11.2 編集効率まわり
-- 編集履歴（Undo/Redo）機能 — `getState()`が既に`structuredClone`でディープコピーを返す設計のため、スナップショット方式の履歴は実装しやすい
-- 編集設定のテンプレートプリセット保存／呼び出し機能（`localStorage`を想定）
-- カラーパレットで選んだ色の履歴を残して次回素早く呼び出せる機能（`localStorage`を想定）
+- ✅ 編集履歴（Undo/Redo）機能（`history/historyManager.js`）
+- ✅ 編集設定のテンプレートプリセット保存／呼び出し機能（`presets/presetStore.js`、`localStorage`）
+- ✅ カラーパレットで選んだ色の履歴を残して次回素早く呼び出せる機能（`presets/colorHistoryStore.js`、`localStorage`）
 
 ### 11.3 出力・確認体験
 - 出力前確認画面の強化（等倍/ズームでの確認）
@@ -801,6 +834,9 @@ Blobをダウンロード
 - ✅ レイアウト計算の詳細フロー
 - ✅ ファイル名の命名規則（`_kakomi_framed.jpg`）
 - ✅ アスペクト比のカスタム指定（出力目標アスペクト比の自由入力、幅/高さ数値入力＋⇄反転ボタン）
+- ✅ 編集履歴（Undo/Redo）機能
+- ✅ 編集設定のテンプレートプリセット保存／呼び出し機能
+- ✅ カラーパレットで選んだ色の履歴機能
 
 ### 12.2 実装が異なる仕様
 
@@ -829,6 +865,5 @@ Blobをダウンロード
 - 構図調整のパラメータ（アスペクト比、拡大率、位置）はデフォルト値で動作
 
 **その他の未実装機能（11章の拡張案を参照）:**
-- カラーパレットで選んだ色の履歴機能
-- 編集設定のテンプレートプリセット保存／呼び出し機能
-- 編集履歴（Undo/Redo）機能
+- 構図調整（クロップのズーム・パン）の数値UI化（11.1節参照）
+- テキストの拡大・回転ハンドル、複数選択・一括移動（11.1節参照）

@@ -13,25 +13,15 @@
  * 戻れなくなるため、状態変化が一定時間（COMMIT_DEBOUNCE_MS）落ち着いたタイミングで
  * まとめて1つのチェックポイントとして記録する（デバウンス方式）。
  */
-import { getState, updateState } from '../stateManager.js';
+import { getState, updateState, EDITABLE_SETTINGS_KEYS } from '../stateManager.js';
 import { isEditableElement } from '../utils/domUtils.js';
 
 const MAX_HISTORY = 50;
 const COMMIT_DEBOUNCE_MS = 500;
 
 // editState全体ではなく、undo/redo対象とする編集設定のキーのみを追跡する
-const TRACKED_KEYS = [
-    'photoViewParams',
-    'outputTargetAspectRatioString',
-    'baseMarginPercent',
-    'backgroundColor',
-    'backgroundType',
-    'imageBlurBackgroundParams',
-    'frameSettings',
-    'textSettings',
-    'outputSettings',
-    'cropSettings'
-];
+// （stateManager.jsのEDITABLE_SETTINGS_KEYSを、プリセット保存機能と共有している）
+const TRACKED_KEYS = EDITABLE_SETTINGS_KEYS;
 
 let history = [];
 let historyIndex = -1;

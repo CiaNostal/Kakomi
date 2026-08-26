@@ -28,6 +28,7 @@
                     <button class="tab-button" data-tab="tab-frame">フレーム加工</button>
                     <button class="tab-button" data-tab="tab-text">文字入力</button>
                     <button class="tab-button" data-tab="tab-output">出力</button>
+                    <button class="tab-button" data-tab="tab-preset">プリセット</button>
                 </nav>
 
                 <div class="tab-content-area">
@@ -432,6 +433,22 @@
                             </div>
                         </fieldset>
                         <button id="downloadButton" disabled>JPEGとしてダウンロード</button>
+                    </div>
+                    <div id="tab-preset" class="tab-pane">
+                        <fieldset>
+                            <legend>現在の設定をプリセットとして保存</legend>
+                            <div class="form-row-simple">
+                                <input type="text" id="presetNameInput" placeholder="プリセット名" style="flex: 1;">
+                                <button type="button" id="savePresetButton">保存</button>
+                            </div>
+                            <p class="custom-text-drag-hint">
+                                レイアウト・背景・フレーム・テキストの設定（自由テキストの内容も含む）をまとめて保存します。読み込んだ写真自体は含まれません。
+                            </p>
+                        </fieldset>
+                        <fieldset>
+                            <legend>保存済みプリセット</legend>
+                            <div id="presetsList" class="presets-list"></div>
+                        </fieldset>
                     </div>
                 </div>
             </aside>

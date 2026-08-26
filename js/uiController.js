@@ -5,6 +5,8 @@ import { loadGoogleFonts } from './textRenderer.js';
 import { stripCustomPrefix } from './layoutCalculator.js';
 import * as selectionStore from './interaction/selectionStore.js';
 import { enhanceAsScrubInput } from './ui/scrubInput.js';
+import { attachColorHistory } from './ui/colorSwatches.js';
+import { getPresets, savePreset, deletePreset, applyPreset } from './presets/presetStore.js';
 
 export const uiElements = {
     imageLoader: document.getElementById('imageLoader'),
@@ -132,6 +134,11 @@ export const uiElements = {
     customTextsListContainer: document.getElementById('customTextsList'),
     addCustomTextButton: document.getElementById('addCustomTextButton'),
     customTextSettingsPanel: document.getElementById('customTextSettingsPanel'),
+
+    // プリセットタブ
+    presetNameInput: document.getElementById('presetNameInput'),
+    savePresetButton: document.getElementById('savePresetButton'),
+    presetsListContainer: document.getElementById('presetsList'),
 };
 
 let redrawDebounced = null; // ★追加: デバウンスされた再描画関数を保持する変数
@@ -303,6 +310,9 @@ export function initializeUIFromState() {
     // 自由テキストレイヤー（可変長）
     renderCustomTextsList();
     renderCustomTextSettingsPanel();
+
+    // プリセット一覧
+    renderPresetsList();
 
     toggleBackgroundSettingsVisibility();
     updateFrameSettingsVisibility();
@@ -558,6 +568,7 @@ function renderCustomTextSettingsPanel() {
     el('customTextSizeValue').textContent = `${layer.size}%`;
 
     el('customTextColor').value = layer.color;
+    attachColorHistory(el('customTextColor'));
 
     const opacitySlider = el('customTextOpacity');
     opacitySlider.min = 0; opacitySlider.max = 1; opacitySlider.step = 0.01;
@@ -631,6 +642,59 @@ function syncCustomTextOffsetInputs(state) {
     if (yInput && document.activeElement !== yInput) {
         yInput.value = Math.round(layer.offsetY * 10) / 10;
     }
+}
+
+// --- プリセット（編集設定のテンプレート保存）のUI ---
+
+/** 保存済みプリセットの一覧を再描画する。保存・削除・（Undo/Redoなどによる）UI全体再構築時に呼ぶ。 */
+function renderPresetsList() {
+    const container = uiElements.presetsListContainer;
+    if (!container) return;
+    const presets = getPresets();
+    container.innerHTML = '';
+
+    if (presets.length === 0) {
+        container.innerHTML = '<p class="custom-text-empty-hint">保存されたプリセットはまだありません。</p>';
+        return;
+    }
+
+    // 新しく保存したものを上に表示する
+    presets.slice().reverse().forEach(preset => {
+        const row = document.createElement('div');
+        row.className = 'preset-row';
+
+        const label = document.createElement('span');
+        label.className = 'preset-row-name';
+        label.textContent = preset.name;
+        row.appendChild(label);
+
+        const applyBtn = document.createElement('button');
+        applyBtn.type = 'button';
+        applyBtn.className = 'preset-row-apply';
+        applyBtn.textContent = '適用';
+        applyBtn.addEventListener('click', () => {
+            applyPreset(preset.id);
+            // customTexts配列の個数など非連続な変化を伴いうるため、UI全体を再構築する
+            // （historyManagerのonSnapshotAppliedと同じ理由）
+            initializeUIFromState();
+        });
+        row.appendChild(applyBtn);
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'preset-row-delete';
+        delBtn.textContent = '×';
+        delBtn.title = '削除';
+        delBtn.addEventListener('click', () => {
+            if (confirm(`プリセット「${preset.name}」を削除しますか?`)) {
+                deletePreset(preset.id);
+                renderPresetsList();
+            }
+        });
+        row.appendChild(delBtn);
+
+        container.appendChild(row);
+    });
 }
 
 /**
@@ -1009,4 +1073,26 @@ export function setupEventListeners(redrawCallback) {
         renderCustomTextSettingsPanel();
     });
 
+    // --- プリセットタブ ---
+    if (uiElements.savePresetButton) {
+        uiElements.savePresetButton.addEventListener('click', () => {
+            const name = uiElements.presetNameInput ? uiElements.presetNameInput.value : '';
+            const preset = savePreset(name);
+            if (preset) {
+                if (uiElements.presetNameInput) uiElements.presetNameInput.value = '';
+                renderPresetsList();
+            } else {
+                alert('プリセットの保存に失敗しました。ブラウザのストレージ容量を確認してください。');
+            }
+        });
+    }
+
+    // --- カラー履歴（全カラーピッカー共通） ---
+    [
+        uiElements.backgroundColorInput,
+        uiElements.frameShadowColorInput,
+        uiElements.frameBorderColorInput,
+        uiElements.textDateColorInput,
+        uiElements.textExifColorInput
+    ].forEach(attachColorHistory);
 }
