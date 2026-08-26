@@ -105,6 +105,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (uiElements.undoButton) uiElements.undoButton.addEventListener('click', undo);
     if (uiElements.redoButton) uiElements.redoButton.addEventListener('click', redo);
 
+    // 「情報」ボタン: Exif情報のフローティングカードの開閉。
+    // タブ切り替え（tabManager.js）とは独立した仕組みのため、ここで個別に配線する。
+    if (uiElements.exifToggleButton && uiElements.exifFloatCard) {
+        uiElements.exifToggleButton.addEventListener('click', () => {
+            uiElements.exifToggleButton.classList.toggle('active');
+            uiElements.exifFloatCard.classList.toggle('open');
+        });
+    }
+
     if (uiElements.imageLoader) {
         uiElements.imageLoader.addEventListener('change', (event) => {
             const file = event.target.files[0];

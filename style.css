@@ -1,3 +1,34 @@
+/* ==========================================================================
+   Kakomi - デザイントークン
+   写真の余白・マット処理を扱うツールという題材に合わせ、
+   Facebook風の配色から、静かで精度の高い配色・タイポグラフィに変更。
+   ========================================================================== */
+:root {
+    --paper: #F3F4F1;
+    --surface: #FFFFFF;
+    --surface-muted: #E8EAE5;
+    --surface-sunken: #EEF0EB;
+    --ink: #1B211E;
+    --ink-dim: #6B7570;
+    --ink-faint: #9CA39D;
+    --border: #DBDFD6;
+    --border-strong: #C4CAC0;
+    --accent: #2C5AA0;
+    --accent-strong: #234880;
+    --accent-on: #FFFFFF;
+    --accent-soft: #E8EFF8;
+    --accent-soft-border: #C0D3EA;
+    --danger: #C0392B;
+    --shadow-sm: 0 1px 2px rgba(27, 33, 30, 0.06);
+    --shadow-md: 0 4px 14px rgba(27, 33, 30, 0.08);
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --font-ui: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+    --font-cond: "IBM Plex Sans Condensed", "Hiragino Sans", "Yu Gothic", sans-serif;
+    --font-mono: "IBM Plex Mono", "SF Mono", monospace;
+}
+
 /* 基本リセットと全体設定 */
 * {
     box-sizing: border-box;
@@ -6,14 +37,11 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-    background-color: #f0f2f5;
-    color: #1c1e21;
-    /* Facebook風の濃いグレー */
+    font-family: var(--font-ui);
+    background-color: var(--paper);
+    color: var(--ink);
     line-height: 1.5;
-    /* 少し広めに */
     font-size: 14px;
-    /* ベースフォントサイズ */
 }
 
 .app-container {
@@ -23,103 +51,190 @@ body {
 }
 
 .app-header {
-    background-color: #4267B2;
-    /* Facebook風の青 */
-    color: #fff;
-    padding: 0.8rem 1rem;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    font-size: 1.2rem;
+    height: 56px;
+    flex-shrink: 0;
+    background: linear-gradient(100deg, var(--surface) 0%, var(--accent-soft) 48%, var(--surface) 100%);
+    color: var(--ink);
+    padding: 0 1rem;
+    border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
-    justify-content: center;
-    position: relative;
+    justify-content: space-between;
 }
 
-.history-controls {
-    position: absolute;
-    right: 1rem;
-    top: 50%;
-    transform: translateY(-50%);
+.app-brand {
     display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-cond);
+    font-weight: 700;
+    font-size: 1.05rem;
+    letter-spacing: 0.01em;
+    color: var(--ink);
+}
+
+.app-brand .brand-mark {
+    width: 20px;
+    height: 20px;
+    border: 2px solid currentColor;
+    border-radius: 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.app-brand .brand-mark::after {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border: 1.4px solid currentColor;
+    border-radius: 2px;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
     gap: 0.5rem;
 }
 
-.history-controls button {
-    padding: 0.35rem 0.7rem;
-    font-size: 0.85rem;
-    background-color: rgba(255, 255, 255, 0.15);
-    color: #fff;
-    border: 1px solid rgba(255, 255, 255, 0.4);
-    border-radius: 4px;
+.icon-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(27, 33, 30, 0.14);
+    background-color: rgba(27, 33, 30, 0.05);
+    color: var(--ink);
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
 }
 
-.history-controls button:hover:not(:disabled) {
-    background-color: rgba(255, 255, 255, 0.3);
+.icon-btn:hover:not(:disabled) {
+    background-color: rgba(27, 33, 30, 0.1);
 }
 
-.history-controls button:disabled {
-    opacity: 0.4;
+.icon-btn:disabled {
+    opacity: 0.35;
     cursor: default;
 }
 
-.main-content {
-    display: flex;
-    flex: 1;
-    padding: 1rem;
-    gap: 1rem;
+#downloadButton {
+    padding: 0.5rem 1rem;
+    background-color: var(--accent);
+    color: var(--accent-on);
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-family: var(--font-ui);
+    transition: background-color 0.2s;
+    margin-left: 0.3rem;
 }
 
-/* 左側のコントロールエリア */
-.controls-area {
-    background-color: #fff;
-    padding: 1rem;
-    border-radius: 8px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-    width: 450px;
-    /* 少し幅を広げる */
-    overflow-y: auto;
+#downloadButton:disabled {
+    background-color: var(--border-strong);
+    cursor: not-allowed;
+}
+
+#downloadButton:hover:not(:disabled) {
+    background-color: var(--accent-strong);
+}
+
+/* ==========================================================================
+   アプリシェル本体（アイコンレール + フライアウトパネル + キャンバスエリア）
+   ========================================================================== */
+.app-shell {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
+/* ==========================================================================
+   タブナビゲーション（左の細いアイコンレール）
+   ========================================================================== */
+.tab-navigation {
+    width: 84px;
+    flex-shrink: 0;
+    background-color: var(--surface-sunken);
+    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    max-height: calc(100vh - 60px - 2rem);
-}
-
-.tab-navigation {
-    display: flex;
-    margin-bottom: 1rem;
-    border-bottom: 1px solid #dddfe2;
-    /* Facebook風の区切り線 */
-}
-
-.tab-button {
-    flex: 1;
-    /* タブボタンを均等幅に */
+    align-items: center;
     padding: 0.8rem 0.5rem;
-    /* パディング調整 */
+    gap: 0.3rem;
+    overflow-y: auto;
+}
+
+.rail-spacer {
+    flex: 1;
+}
+
+/* .rail-item は見た目専用のクラス（レール上の6タブ + 独立した「情報」トグルボタンの両方に付与）。
+   .tab-button はtabManager.jsが動作対象を識別するための専用クラスで、「情報」ボタンには
+   意図的に付与しない（付与するとtabManager.jsの全タブ非アクティブ化に巻き込まれてしまうため）。 */
+.rail-item {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.55rem 0.2rem;
     border: none;
+    border-radius: 10px;
     background-color: transparent;
+    color: var(--ink-dim);
     cursor: pointer;
-    font-size: 0.9rem;
-    color: #606770;
-    /* Facebook風の非アクティブタブテキスト色 */
-    border-bottom: 3px solid transparent;
-    text-align: center;
-    /* テキスト中央揃え */
-    transition: color 0.2s, border-color 0.2s;
+    font-family: var(--font-cond);
     font-weight: 600;
-    /* 少し太めに */
+    font-size: 0.68rem;
+    letter-spacing: 0.01em;
+    word-break: keep-all;
+    line-height: 1.25;
+    transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.tab-button:hover {
-    background-color: #f5f6f7;
-    /* ホバー時の背景色 */
-    color: #333;
+.rail-item .tab-icon {
+    width: 19px;
+    height: 19px;
+    color: var(--ink-faint);
+    transition: color 0.15s ease;
 }
 
-.tab-button.active {
-    color: #1877f2;
-    /* Facebook風のアクティブタブ色 */
-    border-bottom-color: #1877f2;
+.rail-item .tab-icon svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.rail-item:hover {
+    background-color: var(--surface-muted);
+    color: var(--ink);
+}
+
+.rail-item.active {
+    background-color: var(--surface);
+    color: var(--accent-strong);
+    box-shadow: var(--shadow-sm);
+}
+
+.rail-item.active .tab-icon {
+    color: var(--accent);
+}
+
+/* ==========================================================================
+   フライアウトパネル（選択中カテゴリの設定内容）
+   ========================================================================== */
+.tab-content-area {
+    width: 360px;
+    flex-shrink: 0;
+    background-color: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 1rem;
 }
 
 .tab-content-area .tab-pane {
@@ -137,7 +252,6 @@ body {
         transform: translateY(5px);
     }
 
-    /* 少しY移動 */
     to {
         opacity: 1;
         transform: translateY(0);
@@ -145,54 +259,43 @@ body {
 }
 
 fieldset {
-    border: 1px solid #dddfe2;
+    border: 1px solid var(--border);
     padding: 1rem;
-    /* パディングを大きく */
-    border-radius: 6px;
-    /* 角丸を少し */
+    border-radius: var(--radius-md);
     margin-bottom: 1.2rem;
-    /* fieldset間のマージン */
 }
 
 fieldset legend {
-    font-weight: 600;
-    /* 太字 */
-    color: #1c1e21;
+    font-family: var(--font-cond);
+    font-weight: 700;
+    color: var(--ink);
     padding: 0 0.5rem;
     font-size: 1rem;
-    /* 少し大きく */
     margin-left: 0.2rem;
-    /* 若干左に */
 }
 
-/* fieldset div {
-    margin-bottom: 0.8rem;
-    display: grid;
-    grid-template-columns: 120px 1fr 60px;
-    gap: 0.5rem;
-    align-items: center;
+.subsection-heading {
+    font-family: var(--font-cond);
+    font-weight: 600;
+    font-size: 0.82rem;
+    color: var(--ink-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 1rem 0 0.6rem;
 }
 
-fieldset div:last-child {
-    margin-bottom: 0;
-} */
-
+.subsection-heading:first-child {
+    margin-top: 0;
+}
 
 /* スライダーや3列構成の行のためのスタイル */
 fieldset div.form-row-slider {
-    /* HTML側でスライダーのある行のdivにこのクラスを付与 */
     margin-bottom: 0.8rem;
     display: grid;
     grid-template-columns: 100px 1fr 60px;
-    /* ラベル列 | スライダー列 | 値表示列 */
     gap: 0.8rem;
     align-items: center;
 }
-
-/* form-row-slider 内の label, input[type="range"], span のスタイルは前回同様 */
-/* fieldset div.form-row-slider label { */
-/* white-space, overflow, text-overflowなど */
-/* } */
 
 fieldset div.form-row-slider input[type="range"] {
     width: 100%;
@@ -200,114 +303,156 @@ fieldset div.form-row-slider input[type="range"] {
 
 fieldset div.form-row-slider span {
     text-align: right;
+    font-family: var(--font-mono);
 }
 
-
-/* 「出力フォーマット」のようなシンプルな2列（またはラベル、入力、単位の3列）の行のためのスタイル */
+/* 「出力フォーマット」のようなシンプルな2列（またはラベル、入力、単位の3列）の行のためのスタイル。
+   flex-wrapで、狭い幅でも収まりきらない場合は折り返す（はみ出し防止のフォールバック）。 */
 fieldset div.form-row-simple {
     margin-bottom: 0.8rem;
     display: flex;
-    /* シンプルなFlexboxに戻す */
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
-    gap: 0.8rem;
-    /* 要素間のスペース */
+    gap: 0.5rem 0.8rem;
 }
 
 fieldset div.form-row-simple label {
-    /* white-space: nowrap; */
-    /* 必要に応じて */
     flex-shrink: 0;
-    /* ラベルが縮まないように */
 }
 
 fieldset div.form-row-simple select,
 fieldset div.form-row-simple input[type="number"] {
     flex-grow: 1;
-    /* 入力要素が残りのスペースを埋める */
     min-width: 80px;
-    /* 最小幅を確保（selectなどが潰れないように） */
 }
 
 /* カスタムアスペクト比入力フィールドのスタイル */
-#customAspectRatioContainer {
+#customAspectRatioContainer,
+#cropCustomAspectRatioContainer {
     margin-top: 0.5rem;
 }
 
-#customAspectRatioContainer label {
+#customAspectRatioContainer label,
+#cropCustomAspectRatioContainer label {
     flex-shrink: 0;
     margin-right: 0.3rem;
 }
 
-#customAspectRatioContainer input[type="number"] {
+#customAspectRatioContainer input[type="number"],
+#cropCustomAspectRatioContainer input[type="number"] {
     flex-grow: 1;
     min-width: 60px;
     max-width: 100px;
 }
 
 /* 反転ボタンのスタイル */
-#swapAspectRatio {
+#swapAspectRatio,
+#cropSwapAspectRatio {
     flex-shrink: 0;
     padding: 0.4rem 0.8rem;
     font-size: 1rem;
-    background-color: #1877f2;
-    color: white;
+    background-color: var(--accent);
+    color: var(--accent-on);
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     transition: background-color 0.2s;
     margin-left: 0.5rem;
 }
 
-#swapAspectRatio:hover {
-    background-color: #166fe5;
-}
-
-#swapAspectRatio:active {
-    background-color: #1460cc;
+#swapAspectRatio:hover,
+#cropSwapAspectRatio:hover {
+    background-color: var(--accent-strong);
 }
 
 fieldset div.form-row-simple span {
-    /* 「%」などの単位表示用 */
     flex-shrink: 0;
     margin-left: 0.3rem;
+    font-family: var(--font-mono);
 }
 
 fieldset label {
-    /* margin-right: 0.8rem; */
-    /* ラベルと入力欄の間隔 */
     font-size: 0.875rem;
-    /* 少し小さめ */
-    color: #606770;
+    color: var(--ink-dim);
     white-space: nowrap;
     overflow: hidden;
-    /* 幅を超える場合は隠す */
     text-overflow: ellipsis;
-    /* 幅を超える場合は ... で表示 */
+}
 
+fieldset .custom-text-drag-hint,
+fieldset p.custom-text-drag-hint {
+    white-space: normal;
 }
 
 input[type="number"],
 input[type="color"],
 input[type="file"],
+input[type="text"],
 select {
     padding: 0.5rem;
-    /* パディングを統一 */
-    border-radius: 4px;
-    border: 1px solid #ccd0d5;
-    /* Facebook風のボーダー色 */
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background-color: var(--surface);
+    color: var(--ink);
     font-size: 0.875rem;
+    font-family: var(--font-ui);
     flex-grow: 1;
-    /* 入力欄がスペースを埋めるように */
+}
+
+input[type="number"],
+input[type="text"] {
+    font-family: var(--font-mono);
+}
+
+input:focus-visible,
+select:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
 }
 
 input[type="range"] {
-    /* flex-grow: 1; */
-    /* margin: 0 0.5rem; */
-    /* スライダーの左右に少しマージン */
     width: 100%;
-    /* ★Gridアイテムとして幅100%を指定 */
+    -webkit-appearance: none;
+    height: 3px;
+    background: var(--surface-muted);
+    border-radius: 999px;
+}
 
+input[type="range"]::-webkit-slider-runnable-track {
+    height: 3px;
+    border-radius: 999px;
+    background: var(--surface-muted);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--surface);
+    box-shadow: 0 0 0 1px var(--accent);
+    cursor: pointer;
+    margin-top: -5.5px;
+}
+
+input[type="range"]::-moz-range-track {
+    height: 3px;
+    border-radius: 999px;
+    background: var(--surface-muted);
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--surface);
+    box-shadow: 0 0 0 1px var(--accent);
+    cursor: pointer;
 }
 
 input[type="number"] {
@@ -315,82 +460,55 @@ input[type="number"] {
     flex-grow: 0;
 }
 
-/* numberは幅固定 */
 input[type="color"] {
     height: 2.2rem;
     width: 80px;
     padding: 0.2rem;
     flex-grow: 0;
+    cursor: pointer;
 }
 
 select {
     width: auto;
 }
 
-/* selectは内容に合わせるか、flex-grow:1 */
-
 /* 値表示用span */
 fieldset div span {
     font-size: 0.8rem;
-    color: #606770;
+    color: var(--ink-dim);
     min-width: 40px;
-    /* 幅を確保してガタつきを防ぐ */
     text-align: right;
 }
 
-
-/* 右側のプレビュー＋Exifエリア */
-.preview-exif-area {
+/* ==========================================================================
+   キャンバスエリア（プレビュー＋Exif情報フローティングカード）
+   ========================================================================== */
+.canvas-area {
     flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
+    align-items: center;
+    justify-content: center;
     gap: 1rem;
-}
-
-.preview-section,
-.exif-section {
-    background-color: #fff;
-    padding: 1rem;
-    border-radius: 8px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-.preview-section {
-    flex: 3;
-    display: flex;
-    flex-direction: column;
+    padding: 1.5rem;
     overflow: hidden;
-    /* ★追加 */
-}
-
-.exif-section {
-    flex: 1;
-    overflow-y: auto;
-}
-
-.preview-section h2,
-.exif-section h2 {
-    margin-bottom: 0.8rem;
-    font-size: 1.1rem;
-    color: #1c1e21;
-    border-bottom: 1px solid #dddfe2;
-    padding-bottom: 0.6rem;
 }
 
 .image-loader-container {
-    margin-bottom: 1rem;
-    padding: 0.8rem;
-    border: 2px dashed #ccd0d5;
-    background-color: #f5f6f7;
+    width: min(100%, 480px);
+    padding: 0.7rem;
+    border: 2px dashed var(--border-strong);
+    background-color: var(--surface-sunken);
     text-align: center;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
 }
 
 .image-loader-container label {
     display: block;
     margin-bottom: 0.5rem;
     font-size: 0.9rem;
-    color: #606770;
+    color: var(--ink-dim);
     font-weight: 600;
 }
 
@@ -399,28 +517,22 @@ fieldset div span {
     margin: 0 auto;
 }
 
-
 .canvas-container {
     width: 100%;
     flex: 1;
     min-height: 0;
-    /* flexアイテムの最小サイズを0にして、コンテナサイズの固定を可能にする */
-
     display: flex;
     justify-content: center;
     align-items: center;
-    border: 1px solid #dddfe2;
-    background-color: #e9ebee;
-    /* 少し濃い背景色 */
+    border: 1px solid var(--border);
+    background-color: var(--surface-sunken);
     overflow: hidden;
-    border-radius: 6px;
-    /* Canvasコンテナにも角丸 */
+    border-radius: var(--radius-md);
 }
 
-/* ドラッグオーバー時のスタイル */
 .canvas-container.dragover {
-    background-color: #d0d4d9;
-    border-color: #1877f2;
+    background-color: var(--surface-muted);
+    border-color: var(--accent);
 }
 
 #previewCanvas {
@@ -428,12 +540,9 @@ fieldset div span {
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
-    border: 1px solid #000;
-    /* ユーザー指定の黒線 */
-    box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
-    /* Canvasに少し影 */
+    border: 1px solid var(--ink);
+    box-shadow: var(--shadow-sm);
     cursor: default;
-    /* ドラッグ中にブラウザ側のスクロール/ズームジェスチャーと競合しないようにする */
     touch-action: none;
 }
 
@@ -441,7 +550,37 @@ fieldset div span {
     cursor: grabbing;
 }
 
-/* 自由テキストレイヤーのチップ一覧 */
+/* Exif情報：レール下部の「情報」ボタンで開閉するフローティングカード */
+.exif-float-card {
+    display: none;
+    flex-direction: column;
+    gap: 0.4rem;
+    width: min(100%, 320px);
+    max-height: 40%;
+    overflow-y: auto;
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    padding: 0.8rem 1rem;
+    flex-shrink: 0;
+}
+
+.exif-float-card.open {
+    display: flex;
+}
+
+.exif-float-card h2 {
+    font-family: var(--font-cond);
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--ink);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.2rem;
+}
+
+/* 自由テキストレイヤー・テキストレイヤー共通のチップ一覧 */
 .custom-texts-list {
     display: flex;
     flex-wrap: wrap;
@@ -454,18 +593,18 @@ fieldset div span {
     align-items: center;
     gap: 0.35rem;
     padding: 0.3rem 0.6rem;
-    border: 1px solid #ccd0d5;
+    border: 1px solid var(--border);
     border-radius: 999px;
-    background-color: #f0f2f5;
+    background-color: var(--surface-muted);
     font-size: 0.85rem;
     cursor: pointer;
-    color: #333;
+    color: var(--ink);
 }
 
 .custom-text-chip.selected {
-    border-color: #1877f2;
-    background-color: #e7f0ff;
-    color: #1877f2;
+    border-color: var(--accent);
+    background-color: var(--accent-soft);
+    color: var(--accent-strong);
 }
 
 .custom-text-chip.disabled {
@@ -473,13 +612,13 @@ fieldset div span {
 }
 
 .custom-text-chip-delete {
-    color: #90949c;
+    color: var(--ink-faint);
     font-weight: bold;
     line-height: 1;
 }
 
 .custom-text-chip-delete:hover {
-    color: #e41e3f;
+    color: var(--danger);
 }
 
 .add-custom-text-button {
@@ -487,26 +626,27 @@ fieldset div span {
     width: 100%;
     padding: 0.5rem;
     margin-bottom: 0.8rem;
-    border: 1px dashed #1877f2;
-    border-radius: 6px;
+    border: 1px dashed var(--accent);
+    border-radius: var(--radius-sm);
     background-color: transparent;
-    color: #1877f2;
+    color: var(--accent);
     cursor: pointer;
     font-size: 0.9rem;
+    font-family: var(--font-ui);
 }
 
 .add-custom-text-button:hover {
-    background-color: #e7f0ff;
+    background-color: var(--accent-soft);
 }
 
 .custom-text-settings-panel {
-    border-top: 1px solid #e4e6eb;
+    border-top: 1px solid var(--border);
     padding-top: 0.6rem;
 }
 
 .custom-text-empty-hint,
 .custom-text-drag-hint {
-    color: #65676b;
+    color: var(--ink-dim);
     font-size: 0.85rem;
 }
 
@@ -514,84 +654,66 @@ fieldset div span {
     margin-top: 0.4rem;
 }
 
-#downloadButton {
-    padding: 0.75rem 1.5rem;
-    background-color: #42b72a;
-    /* Facebook風の緑ボタン */
-    color: white;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 1rem;
-    font-weight: 600;
-    transition: background-color 0.2s;
-    width: 100%;
-    /* ボタン幅を100%に */
-    margin-top: 0.5rem;
-}
-
-#downloadButton:disabled {
-    background-color: #ccd0d5;
-    cursor: not-allowed;
-}
-
-#downloadButton:hover:not(:disabled) {
-    background-color: #36a420;
-}
+/* #downloadButton は上部バー用のスタイルに統一（本ファイル前半、.app-header セクション参照） */
 
 #exifDataContainer p {
     font-size: 0.875rem;
-    color: #606770;
+    color: var(--ink-dim);
 }
-
 
 /* レスポンシブ対応 */
 @media (max-width: 1024px) {
-    .main-content {
+    .app-shell {
         flex-direction: column;
     }
 
-    .controls-area {
+    .tab-navigation {
         width: 100%;
-        margin-bottom: 1rem;
-        max-height: none;
-        /* 縦積みの場合は高さ制限をなくす */
-        order: 1;
-        /* コントロールを下に */
+        flex-direction: row;
+        justify-content: flex-start;
+        overflow-x: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
     }
 
-    .preview-exif-area {
-        width: 100%;
-        order: 2;
-        /* プレビューを上に */
+    .rail-spacer {
+        display: none;
     }
 
-    .preview-section {
+    .rail-item {
+        flex-shrink: 0;
+        width: auto;
+        min-width: 68px;
+    }
+
+    .tab-content-area {
+        width: 100%;
+        max-height: 40vh;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .canvas-area {
         min-height: 300px;
-        /* スマホでもある程度のプレビュー高さを確保 */
     }
 }
 
 @media (max-width: 768px) {
     .app-header {
-        font-size: 1rem;
-        padding: 0.6rem 1rem;
+        padding: 0 0.6rem;
     }
 
-    .main-content {
-        padding: 0.5rem;
-        gap: 0.5rem;
+    .app-brand {
+        font-size: 0.95rem;
     }
 
-    .controls-area,
-    .preview-section,
-    .exif-section {
+    .tab-content-area {
         padding: 0.8rem;
     }
 
-    .tab-button {
-        padding: 0.6rem 0.3rem;
-        font-size: 0.8rem;
+    .rail-item {
+        padding: 0.5rem 0.2rem;
+        font-size: 0.66rem;
     }
 
     fieldset {
@@ -601,8 +723,6 @@ fieldset div span {
     fieldset legend {
         font-size: 0.9rem;
     }
-
-    /* 他の要素も必要に応じてフォントサイズやパディングを調整 */
 }
 
 /* 背景編集タブ内のラジオボタン用 */
@@ -615,14 +735,11 @@ fieldset div span {
 .radio-group input[type="radio"] {
     margin-right: 0.5rem;
     flex-grow: 0;
-    /* ラジオボタンが伸びないように */
 }
 
 .radio-group label {
     margin-right: auto;
-    /* ラベルが残りのスペースを埋めるように */
 }
-
 
 /* Exif表示項目の「利用可能な項目」チップ一覧 */
 .exif-available-list {
@@ -634,16 +751,17 @@ fieldset div span {
 
 .exif-available-chip {
     padding: 0.3rem 0.6rem;
-    border: 1px dashed #1877f2;
+    border: 1px dashed var(--accent);
     border-radius: 999px;
     background-color: transparent;
-    color: #1877f2;
+    color: var(--accent-strong);
     font-size: 0.85rem;
     cursor: pointer;
+    font-family: var(--font-ui);
 }
 
 .exif-available-chip:hover {
-    background-color: #e7f0ff;
+    background-color: var(--accent-soft);
 }
 
 /* Exif表示項目の「使用する項目」並び替えリスト */
@@ -659,19 +777,19 @@ fieldset div span {
     align-items: center;
     gap: 0.5rem;
     padding: 0.35rem 0.6rem;
-    border: 1px solid #ccd0d5;
-    border-radius: 6px;
-    background-color: #f0f2f5;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface-muted);
 }
 
 .exif-used-row.dragging {
     opacity: 0.5;
-    background-color: #e7f0ff;
+    background-color: var(--accent-soft);
 }
 
 .exif-drag-handle {
     cursor: grab;
-    color: #90949c;
+    color: var(--ink-faint);
     line-height: 1;
     touch-action: none;
 }
@@ -679,11 +797,11 @@ fieldset div span {
 .exif-used-label {
     flex: 1;
     font-size: 0.9rem;
-    color: #333;
+    color: var(--ink);
 }
 
 .exif-used-remove {
-    color: #90949c;
+    color: var(--ink-faint);
     font-weight: bold;
     background: none;
     border: none;
@@ -694,17 +812,17 @@ fieldset div span {
 }
 
 .exif-used-remove:hover {
-    color: #e41e3f;
+    color: var(--danger);
 }
 
 .exif-preview-textarea {
     width: 100%;
-    font-family: monospace;
-    padding: 0.3rem;
-    border-radius: 4px;
-    border: 1px solid #ccd0d5;
-    background-color: #f7f8fa;
-    color: #606770;
+    font-family: var(--font-mono);
+    padding: 0.4rem 0.5rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background-color: var(--surface-sunken);
+    color: var(--ink-dim);
     resize: vertical;
 }
 
@@ -720,13 +838,13 @@ fieldset div span {
     width: 20px;
     height: 20px;
     padding: 0;
-    border: 1px solid #ccd0d5;
+    border: 1px solid var(--border);
     border-radius: 4px;
     cursor: pointer;
 }
 
 .color-history-swatch:hover {
-    border-color: #1877f2;
+    border-color: var(--accent);
 }
 
 /* プリセット一覧 */
@@ -741,9 +859,9 @@ fieldset div span {
     align-items: center;
     gap: 0.5rem;
     padding: 0.4rem 0.6rem;
-    border: 1px solid #ccd0d5;
-    border-radius: 6px;
-    background-color: #f0f2f5;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface-muted);
 }
 
 .preset-row-name {
@@ -752,25 +870,26 @@ fieldset div span {
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 0.9rem;
-    color: #333;
+    color: var(--ink);
 }
 
 .preset-row-apply {
     padding: 0.25rem 0.6rem;
-    border: 1px solid #1877f2;
-    border-radius: 4px;
-    background-color: white;
-    color: #1877f2;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+    color: var(--accent-strong);
     cursor: pointer;
     font-size: 0.85rem;
+    font-family: var(--font-ui);
 }
 
 .preset-row-apply:hover {
-    background-color: #e7f0ff;
+    background-color: var(--accent-soft);
 }
 
 .preset-row-delete {
-    color: #90949c;
+    color: var(--ink-faint);
     font-weight: bold;
     background: none;
     border: none;
@@ -781,11 +900,184 @@ fieldset div span {
 }
 
 .preset-row-delete:hover {
-    color: #e41e3f;
+    color: var(--danger);
+}
+
+/* ==========================================================================
+   フレーム加工パネル（コンパクト・罫線区切り）
+   角＝セグメントコントロール／影・縁取り＝トグルスイッチ＋滑らかなアコーディオン
+   ========================================================================== */
+.frame-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.frame-card-head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.6rem 0.8rem;
+}
+
+.frame-card-head .frame-icon {
+    width: 17px;
+    height: 17px;
+    color: var(--ink-dim);
+    flex-shrink: 0;
+}
+
+.frame-card-head .frame-icon svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.frame-card-title {
+    font-weight: 600;
+    font-size: 0.85rem;
+    flex: 1;
+    color: var(--ink);
+}
+
+/* トグルスイッチ */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 34px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
+.switch input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    margin: 0;
+    cursor: pointer;
+    z-index: 2;
+}
+
+.switch .switch-track {
+    position: absolute;
+    inset: 0;
+    background: var(--border-strong);
+    border-radius: 999px;
+    transition: background 0.2s ease;
+    pointer-events: none;
+}
+
+.switch .switch-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: var(--surface);
+    border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    transition: transform 0.2s ease;
+    pointer-events: none;
+}
+
+.switch input:checked+.switch-track {
+    background: var(--accent);
+}
+
+.switch input:checked~.switch-thumb {
+    transform: translateX(14px);
+}
+
+/* 角のスタイル：アイコン付きセグメントコントロール */
+.corner-segmented {
+    display: flex;
+    gap: 0.4rem;
+    padding: 0 0.8rem 0.7rem;
+}
+
+.corner-segmented .segment {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.5rem 0.3rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.72rem;
+    color: var(--ink-dim);
+    font-weight: 500;
+    transition: all 0.15s ease;
+}
+
+.corner-segmented input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.corner-segmented .segment-icon {
+    width: 19px;
+    height: 19px;
+    color: var(--ink-faint);
+}
+
+.corner-segmented .segment-icon svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.corner-segmented .segment:hover {
+    border-color: var(--border-strong);
+}
+
+.corner-segmented .segment:has(input:checked) {
+    background: var(--accent-soft);
+    border-color: var(--accent-soft-border);
+    color: var(--accent-strong);
+}
+
+.corner-segmented .segment:has(input:checked) .segment-icon {
+    color: var(--accent);
+}
+
+/* 滑らかに開閉するアコーディオン（display:none の即時切り替えの代わり） */
+.accordion {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.28s cubic-bezier(.4, 0, .2, 1);
+}
+
+.accordion.open {
+    grid-template-rows: 1fr;
+}
+
+.accordion>.accordion-inner {
+    overflow: hidden;
+    min-height: 0;
+}
+
+.accordion-body {
+    padding: 0.7rem 0.8rem 0.8rem;
+    border-top: 1px solid var(--border);
+}
+
+.accordion-body div.form-row-slider,
+.accordion-body div.form-row-simple {
+    margin-bottom: 0.7rem;
+}
+
+.accordion-body div.form-row-slider:last-child,
+.accordion-body div.form-row-simple:last-child {
+    margin-bottom: 0;
 }
 
 /* 非表示用クラス */
 .hidden {
     display: none !important;
-    /* Importantで確実に非表示にする */
 }

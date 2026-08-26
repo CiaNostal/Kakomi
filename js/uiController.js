@@ -81,7 +81,6 @@ export const uiElements = {
     frameShadowSettingsContainer: document.getElementById('frameShadowSettingsContainer'),
     frameShadowTypeDropRadio: document.getElementById('frameShadowTypeDrop'),
     frameShadowTypeInnerRadio: document.getElementById('frameShadowTypeInner'),
-    commonShadowParamsContainer: document.getElementById('commonShadowParamsContainer'),
     frameShadowOffsetXSlider: document.getElementById('frameShadowOffsetX'),
     frameShadowOffsetXValueSpan: document.getElementById('frameShadowOffsetXValue'),
     frameShadowOffsetYSlider: document.getElementById('frameShadowOffsetY'),
@@ -101,51 +100,13 @@ export const uiElements = {
     frameBorderStyleSelect: document.getElementById('frameBorderStyle'),
 
     exifDataContainer: document.getElementById('exifDataContainer'),
+    exifToggleButton: document.getElementById('exifToggleButton'),
+    exifFloatCard: document.getElementById('exifFloatCard'),
 
-    // 文字入力タブ - 撮影日表示
-    textDateEnabledCheckbox: document.getElementById('textDateEnabled'),
-    textDateSettingsContainer: document.getElementById('textDateSettingsContainer'),
-    textDateFormatSelect: document.getElementById('textDateFormat'),
-    textDateFormatCustomInput: document.getElementById('textDateFormatCustom'),
-    textDateFontSelect: document.getElementById('textDateFont'),
-    textDateSizeSlider: document.getElementById('textDateSize'),
-    textDateSizeValueSpan: document.getElementById('textDateSizeValue'),
-    textDateColorInput: document.getElementById('textDateColor'),
-    textDatePositionSelect: document.getElementById('textDatePosition'),
-    textDateOffsetXSlider: document.getElementById('textDateOffsetX'),
-    textDateOffsetXValueSpan: document.getElementById('textDateOffsetXValue'),
-    textDateOffsetYSlider: document.getElementById('textDateOffsetY'),
-    textDateOffsetYValueSpan: document.getElementById('textDateOffsetYValue'),
-    textDateRotationInput: document.getElementById('textDateRotation'),
-    textDateOpacitySlider: document.getElementById('textDateOpacity'),
-    textDateOpacityValueSpan: document.getElementById('textDateOpacityValue'),
-
-    // 文字入力タブ - Exif表示
-    textExifEnabledCheckbox: document.getElementById('textExifEnabled'),
-    textExifSettingsContainer: document.getElementById('textExifSettingsContainer'),
-    exifAvailableListContainer: document.getElementById('exifAvailableList'),
-    exifUsedListContainer: document.getElementById('exifUsedList'),
-    exifPreviewTextarea: document.getElementById('textExifPreview'),
-    textExifAlignLeftRadio: document.getElementById('textExifAlignLeft'),
-    textExifAlignCenterRadio: document.getElementById('textExifAlignCenter'),
-    textExifAlignRightRadio: document.getElementById('textExifAlignRight'),
-    textExifFontSelect: document.getElementById('textExifFont'),
-    textExifSizeSlider: document.getElementById('textExifSize'),
-    textExifSizeValueSpan: document.getElementById('textExifSizeValue'),
-    textExifColorInput: document.getElementById('textExifColor'),
-    textExifPositionSelect: document.getElementById('textExifPosition'),
-    textExifOffsetXSlider: document.getElementById('textExifOffsetX'),
-    textExifOffsetXValueSpan: document.getElementById('textExifOffsetXValue'),
-    textExifOffsetYSlider: document.getElementById('textExifOffsetY'),
-    textExifOffsetYValueSpan: document.getElementById('textExifOffsetYValue'),
-    textExifRotationInput: document.getElementById('textExifRotation'),
-    textExifOpacitySlider: document.getElementById('textExifOpacity'),
-    textExifOpacityValueSpan: document.getElementById('textExifOpacityValue'),
-
-    // 自由テキスト（可変長レイヤー）
-    customTextsListContainer: document.getElementById('customTextsList'),
+    // 文字レイヤー（撮影日・Exif情報・自由テキストを統一UIで扱う。5.x節「テキストUI統合」参照）
+    textLayersListContainer: document.getElementById('textLayersList'),
     addCustomTextButton: document.getElementById('addCustomTextButton'),
-    customTextSettingsPanel: document.getElementById('customTextSettingsPanel'),
+    textLayerSettingsPanel: document.getElementById('textLayerSettingsPanel'),
 
     // プリセットタブ
     presetNameInput: document.getElementById('presetNameInput'),
@@ -175,11 +136,8 @@ function populateFontSelect(selectElement, selectedFontDisplayName) {
 export function initializeUIFromState() {
     const state = getState();
 
-    // フォント選択を最初に設定
-    populateFontSelect(uiElements.textDateFontSelect, state.textSettings.date.font);
-    populateFontSelect(uiElements.textExifFontSelect, state.textSettings.exif.font);
-    // 自由テキストレイヤーのフォントセレクトは、レイヤーごとにrenderCustomTextSettingsPanel()内で生成する
-
+    // 文字レイヤー（撮影日・Exif情報・自由テキスト）のフォント選択は、
+    // 選択中レイヤーごとにrenderTextLayerSettingsPanel()内で生成する
 
     const setupInputAttributesAndValue = (element, configKey, stateValue) => {
         if (!element) return;
@@ -307,51 +265,15 @@ export function initializeUIFromState() {
     if (uiElements.frameBorderColorInput) uiElements.frameBorderColorInput.value = fs.border.color;
     if (uiElements.frameBorderStyleSelect) uiElements.frameBorderStyleSelect.value = fs.border.style;
 
-    // 文字入力 - 撮影日設定
-    const tds = state.textSettings.date;
-    if (uiElements.textDateEnabledCheckbox) uiElements.textDateEnabledCheckbox.checked = tds.enabled;
-    if (uiElements.textDateFormatSelect) {
-        const formatOptionExists = Array.from(uiElements.textDateFormatSelect.options).some(o => o.value === tds.format);
-        uiElements.textDateFormatSelect.value = formatOptionExists ? tds.format : '';
-    }
-    if (uiElements.textDateFormatCustomInput) uiElements.textDateFormatCustomInput.value = tds.format;
-    if (uiElements.textDateFontSelect) uiElements.textDateFontSelect.value = tds.font;
-    setupInputAttributesAndValue(uiElements.textDateSizeSlider, 'textDateSize', tds.size);
-    if (uiElements.textDateColorInput) uiElements.textDateColorInput.value = tds.color;
-    if (uiElements.textDatePositionSelect) uiElements.textDatePositionSelect.value = tds.position;
-    setupInputAttributesAndValue(uiElements.textDateOffsetXSlider, 'textDateOffsetX', tds.offsetX);
-    setupInputAttributesAndValue(uiElements.textDateOffsetYSlider, 'textDateOffsetY', tds.offsetY);
-    if (uiElements.textDateRotationInput) uiElements.textDateRotationInput.value = tds.rotation || 0;
-    setupInputAttributesAndValue(uiElements.textDateOpacitySlider, 'textOpacity', tds.opacity);
-
-    // 文字入力 - Exif設定
-    const tes = state.textSettings.exif;
-    if (uiElements.textExifEnabledCheckbox) uiElements.textExifEnabledCheckbox.checked = tes.enabled;
-    renderExifItemsUI();
-    if (uiElements.exifPreviewTextarea) uiElements.exifPreviewTextarea.value = tes.customText;
-    if (uiElements.textExifAlignLeftRadio) uiElements.textExifAlignLeftRadio.checked = (tes.textAlign === 'left');
-    if (uiElements.textExifAlignCenterRadio) uiElements.textExifAlignCenterRadio.checked = (tes.textAlign === 'center');
-    if (uiElements.textExifAlignRightRadio) uiElements.textExifAlignRightRadio.checked = (tes.textAlign === 'right');
-    if (uiElements.textExifFontSelect) uiElements.textExifFontSelect.value = tes.font;
-    setupInputAttributesAndValue(uiElements.textExifSizeSlider, 'textExifSize', tes.size);
-    if (uiElements.textExifColorInput) uiElements.textExifColorInput.value = tes.color;
-    if (uiElements.textExifPositionSelect) uiElements.textExifPositionSelect.value = tes.position;
-    setupInputAttributesAndValue(uiElements.textExifOffsetXSlider, 'textExifOffsetX', tes.offsetX);
-    setupInputAttributesAndValue(uiElements.textExifOffsetYSlider, 'textExifOffsetY', tes.offsetY);
-    if (uiElements.textExifRotationInput) uiElements.textExifRotationInput.value = tes.rotation || 0;
-    setupInputAttributesAndValue(uiElements.textExifOpacitySlider, 'textOpacity', tes.opacity);
-
-    // 自由テキストレイヤー（可変長）
-    renderCustomTextsList();
-    renderCustomTextSettingsPanel();
+    // 文字レイヤー（撮影日・Exif情報・自由テキストを統一UIで扱う）
+    renderTextLayersList();
+    renderTextLayerSettingsPanel();
 
     // プリセット一覧
     renderPresetsList();
 
     toggleBackgroundSettingsVisibility();
     updateFrameSettingsVisibility();
-    updateTextDateSettingsVisibility();
-    updateTextExifSettingsVisibility();
     updateSliderValueDisplays();
 }
 
@@ -444,56 +366,8 @@ export function updateSliderValueDisplays() {
     if (uiElements.frameBorderWidthValueSpan && uiElements.frameBorderWidthSlider) {
         uiElements.frameBorderWidthValueSpan.textContent = `${fs.border.width}%`;
     }
-    const tds = state.textSettings.date;
-    if (uiElements.textDateSizeValueSpan && uiElements.textDateSizeSlider) {
-        uiElements.textDateSizeValueSpan.textContent = `${parseFloat(tds.size).toFixed(2)}%`;
-        if (document.activeElement !== uiElements.textDateSizeSlider) {
-            uiElements.textDateSizeSlider.value = tds.size;
-        }
-    }
-    if (uiElements.textDateOffsetXValueSpan && uiElements.textDateOffsetXSlider) {
-        uiElements.textDateOffsetXValueSpan.textContent = `${parseFloat(tds.offsetX).toFixed(1)}%`;
-        if (document.activeElement !== uiElements.textDateOffsetXSlider) {
-            uiElements.textDateOffsetXSlider.value = tds.offsetX;
-        }
-    }
-    if (uiElements.textDateOffsetYValueSpan && uiElements.textDateOffsetYSlider) {
-        uiElements.textDateOffsetYValueSpan.textContent = `${parseFloat(tds.offsetY).toFixed(1)}%`;
-        if (document.activeElement !== uiElements.textDateOffsetYSlider) {
-            uiElements.textDateOffsetYSlider.value = tds.offsetY;
-        }
-    }
-    if (uiElements.textDateOpacityValueSpan && uiElements.textDateOpacitySlider) {
-        uiElements.textDateOpacityValueSpan.textContent = tds.opacity.toFixed(2);
-    }
-    if (uiElements.textDateRotationInput && document.activeElement !== uiElements.textDateRotationInput) {
-        uiElements.textDateRotationInput.value = Math.round((tds.rotation || 0) * 10) / 10;
-    }
-    const tes = state.textSettings.exif;
-    if (uiElements.textExifSizeValueSpan && uiElements.textExifSizeSlider) {
-        uiElements.textExifSizeValueSpan.textContent = `${parseFloat(tes.size).toFixed(2)}%`;
-        if (document.activeElement !== uiElements.textExifSizeSlider) {
-            uiElements.textExifSizeSlider.value = tes.size;
-        }
-    }
-    if (uiElements.textExifOffsetXValueSpan && uiElements.textExifOffsetXSlider) {
-        uiElements.textExifOffsetXValueSpan.textContent = `${parseFloat(tes.offsetX).toFixed(1)}%`;
-        if (document.activeElement !== uiElements.textExifOffsetXSlider) {
-            uiElements.textExifOffsetXSlider.value = tes.offsetX;
-        }
-    }
-    if (uiElements.textExifOffsetYValueSpan && uiElements.textExifOffsetYSlider) {
-        uiElements.textExifOffsetYValueSpan.textContent = `${parseFloat(tes.offsetY).toFixed(1)}%`;
-        if (document.activeElement !== uiElements.textExifOffsetYSlider) {
-            uiElements.textExifOffsetYSlider.value = tes.offsetY;
-        }
-    }
-    if (uiElements.textExifOpacityValueSpan && uiElements.textExifOpacitySlider) {
-        uiElements.textExifOpacityValueSpan.textContent = tes.opacity.toFixed(2);
-    }
-    if (uiElements.textExifRotationInput && document.activeElement !== uiElements.textExifRotationInput) {
-        uiElements.textExifRotationInput.value = Math.round((tes.rotation || 0) * 10) / 10;
-    }
+    // 撮影日・Exif情報・自由テキストの値表示同期は syncTextLayerLiveInputs() が担う
+    // （選択中レイヤーだけを対象にすればよく、かつ id が動的に生成されるDOMのため）
 }
 
 export function toggleBackgroundSettingsVisibility() {
@@ -503,48 +377,87 @@ export function toggleBackgroundSettingsVisibility() {
     uiElements.imageBlurSettingsContainer.classList.toggle('hidden', currentBackgroundType !== 'imageBlur');
 }
 
+/**
+ * フレーム加工パネルの開閉状態を更新する。
+ * display:none の即時切り替えではなく、CSSのgrid-template-rowsトランジション
+ * （.accordion / .accordion.open、style.css参照）でスムーズに開閉させるため、
+ * ここでは対象要素に 'open' クラスを付け外しするだけでよい。
+ */
 function updateFrameSettingsVisibility() {
     const frameState = getState().frameSettings;
     if (uiElements.frameCornerRoundedSettingsContainer) {
-        uiElements.frameCornerRoundedSettingsContainer.style.display = frameState.cornerStyle === 'rounded' ? '' : 'none';
+        uiElements.frameCornerRoundedSettingsContainer.classList.toggle('open', frameState.cornerStyle === 'rounded');
     }
     if (uiElements.frameCornerSuperellipseSettingsContainer) {
-        uiElements.frameCornerSuperellipseSettingsContainer.style.display = frameState.cornerStyle === 'superellipse' ? '' : 'none';
+        uiElements.frameCornerSuperellipseSettingsContainer.classList.toggle('open', frameState.cornerStyle === 'superellipse');
     }
     if (uiElements.frameShadowSettingsContainer) {
-        uiElements.frameShadowSettingsContainer.style.display = frameState.shadowEnabled ? '' : 'none';
-    }
-    if (uiElements.commonShadowParamsContainer) {
-        uiElements.commonShadowParamsContainer.style.display = frameState.shadowEnabled ? '' : 'none';
+        uiElements.frameShadowSettingsContainer.classList.toggle('open', frameState.shadowEnabled);
     }
     if (uiElements.frameBorderDetailSettingsContainer) {
-        uiElements.frameBorderDetailSettingsContainer.style.display = frameState.border.enabled ? '' : 'none';
+        uiElements.frameBorderDetailSettingsContainer.classList.toggle('open', frameState.border.enabled);
     }
 }
 
-function updateTextDateSettingsVisibility() {
-    const dateSettingsEnabled = getState().textSettings.date.enabled;
-    if (uiElements.textDateSettingsContainer) {
-        uiElements.textDateSettingsContainer.style.display = dateSettingsEnabled ? '' : 'none';
-    }
+// --- 文字レイヤー（撮影日・Exif情報・自由テキスト）の統一UI ---
+// textRenderer.js/textAdapter.jsでは既にこの3種類は同じ仕組み（固定id 'text-date'/'text-exif'、
+// またはcustomTexts[]の各id）で統一的に扱われている。UI側もこれに合わせ、1つのチップリストと
+// 1つの設定パネルで、種類ごとに異なる部分（書式/Exif項目/自由記述）だけを切り替える構成にする。
+
+const FIXED_TEXT_LAYERS = [
+    { id: 'text-date', kind: 'date', label: '撮影日' },
+    { id: 'text-exif', kind: 'exif', label: 'Exif情報' }
+];
+
+/** idから設定オブジェクトと種類(kind)を取得する（textAdapter.jsのresolveLayer()と同じ考え方） */
+function resolveTextLayer(state, id) {
+    const fixed = FIXED_TEXT_LAYERS.find(f => f.id === id);
+    if (fixed) return { settings: state.textSettings[fixed.kind], kind: fixed.kind };
+    const layer = state.textSettings.customTexts.find(t => t.id === id);
+    return layer ? { settings: layer, kind: 'custom' } : null;
 }
 
-function updateTextExifSettingsVisibility() {
-    const exifSettingsEnabled = getState().textSettings.exif.enabled;
-    if (uiElements.textExifSettingsContainer) {
-        uiElements.textExifSettingsContainer.style.display = exifSettingsEnabled ? '' : 'none';
-    }
+/** 変更を種類に応じた書き戻し先へ振り分ける（textAdapter.jsのapplyChanges()と同じパターン） */
+function applyTextLayerChanges(id, kind, changes) {
+    if (kind === 'date') updateState({ textSettings: { date: changes } });
+    else if (kind === 'exif') updateState({ textSettings: { exif: changes } });
+    else updateCustomTextLayer(id, changes);
 }
 
-// --- 自由テキストレイヤー（可変長）のUI ---
+/** サイズのクランプ範囲は種類ごとに異なる（textAdapter.jsのgetSizeConfigKey()と同じ対応） */
+function sizeConfigKeyForKind(kind) {
+    if (kind === 'date') return 'textDateSize';
+    if (kind === 'exif') return 'textExifSize';
+    return 'textFreeSize';
+}
 
-/** レイヤー一覧（チップ）を再描画する。テキスト内容の変更・追加・削除・選択変更時に呼ぶ。 */
-function renderCustomTextsList() {
-    const container = uiElements.customTextsListContainer;
+const TEXT_POSITION_OPTIONS = [
+    ['top-left', '左上'], ['top-center', '中央上'], ['top-right', '右上'],
+    ['middle-left', '左中央'], ['middle-center', '中央'], ['middle-right', '右中央'],
+    ['bottom-left', '左下'], ['bottom-center', '中央下'], ['bottom-right', '右下']
+];
+
+/** レイヤー一覧（チップ）を再描画する。撮影日・Exifは常設チップとして先頭に表示する。 */
+function renderTextLayersList() {
+    const container = uiElements.textLayersListContainer;
     if (!container) return;
     const state = getState();
     const selectedId = selectionStore.getSelectedId();
     container.innerHTML = '';
+
+    FIXED_TEXT_LAYERS.forEach(fixed => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'custom-text-chip' + (fixed.id === selectedId ? ' selected' : '');
+        if (!state.textSettings[fixed.kind].enabled) chip.classList.add('disabled');
+
+        const label = document.createElement('span');
+        label.textContent = fixed.label;
+        chip.appendChild(label);
+
+        chip.addEventListener('click', () => selectionStore.setSelectedId(fixed.id));
+        container.appendChild(chip);
+    });
 
     state.textSettings.customTexts.forEach((layer, index) => {
         const chip = document.createElement('button');
@@ -565,8 +478,8 @@ function renderCustomTextsList() {
             e.stopPropagation();
             selectionStore.clearSelectionIfMatches(layer.id);
             removeCustomTextLayer(layer.id);
-            renderCustomTextsList();
-            renderCustomTextSettingsPanel();
+            renderTextLayersList();
+            renderTextLayerSettingsPanel();
         });
         chip.appendChild(del);
 
@@ -576,105 +489,148 @@ function renderCustomTextsList() {
 }
 
 /** 選択中レイヤーの設定パネルを丸ごと再構築する。選択変更・追加・削除時に呼ぶ（毎ドラッグでは呼ばない）。 */
-function renderCustomTextSettingsPanel() {
-    const panel = uiElements.customTextSettingsPanel;
+function renderTextLayerSettingsPanel() {
+    const panel = uiElements.textLayerSettingsPanel;
     if (!panel) return;
     const state = getState();
-    const layer = state.textSettings.customTexts.find(t => t.id === selectionStore.getSelectedId());
+    const selectedId = selectionStore.getSelectedId();
+    const resolved = selectedId ? resolveTextLayer(state, selectedId) : null;
 
-    if (!layer) {
+    if (!resolved) {
         panel.innerHTML = '<p class="custom-text-empty-hint">上のリストからテキストを選択、または「+ テキストを追加」で新規作成してください。</p>';
         return;
+    }
+    const { settings, kind } = resolved;
+    const id = selectedId;
+
+    const positionOptionsHtml = TEXT_POSITION_OPTIONS
+        .map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
+
+    const alignRadiosHtml = `
+        <div class="form-row-simple" style="justify-content: space-around;">
+            <div class="radio-group"><input type="radio" id="textLayerAlignLeft" name="textLayerAlign" value="left"><label for="textLayerAlignLeft">左寄せ</label></div>
+            <div class="radio-group"><input type="radio" id="textLayerAlignCenter" name="textLayerAlign" value="center"><label for="textLayerAlignCenter">中央</label></div>
+            <div class="radio-group"><input type="radio" id="textLayerAlignRight" name="textLayerAlign" value="right"><label for="textLayerAlignRight">右寄せ</label></div>
+        </div>`;
+
+    let kindSpecificHtml;
+    if (kind === 'date') {
+        // 撮影日はExifから自動生成される表示のため、水平配置ラジオは持たない（7.5節参照）
+        kindSpecificHtml = `
+        <div class="form-row-simple">
+            <label for="textLayerDateFormat">書式:</label>
+            <select id="textLayerDateFormat">
+                <option value="">プリセットから選択...</option>
+                <option value="YYYY.MM.DD">YYYY.MM.DD</option>
+                <option value="YYYY/MM/DD">YYYY/MM/DD</option>
+                <option value="YY/MM/DD">YY/MM/DD</option>
+                <option value="YY.MM.DD">YY.MM.DD</option>
+                <option value="YYYY年MM月DD日">YYYY年MM月DD日</option>
+                <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+            </select>
+        </div>
+        <div class="form-row-simple">
+            <label for="textLayerDateFormatCustom">自由入力:</label>
+            <input type="text" id="textLayerDateFormatCustom" placeholder="例: YYYY.MM.DD">
+        </div>
+        <p class="custom-text-drag-hint">YYYY・YY・MM・DDを組み合わせて自由に書式を指定できます（プリセットを選ぶと自由入力欄にも反映されます）。</p>`;
+    } else if (kind === 'exif') {
+        kindSpecificHtml = `
+        <fieldset>
+            <legend>表示項目</legend>
+            <p class="custom-text-drag-hint">クリックで項目を追加し、追加した項目はドラッグで並び順を変更できます。</p>
+            <div class="exif-available-list" id="textLayerExifAvailableList"></div>
+            <div class="exif-used-list" id="textLayerExifUsedList"></div>
+            <div class="form-row-simple"><label>プレビュー:</label></div>
+            <textarea id="textLayerExifPreview" rows="2" class="exif-preview-textarea" readonly></textarea>
+        </fieldset>
+        ${alignRadiosHtml}`;
+    } else {
+        kindSpecificHtml = `
+        <div class="form-row-simple">
+            <textarea id="textLayerCustomArea" rows="3"
+                style="width: 100%; font-family: var(--font-mono); padding: 0.4rem; border-radius: 4px; border: 1px solid var(--border);"></textarea>
+        </div>
+        ${alignRadiosHtml}`;
     }
 
     panel.innerHTML = `
         <div class="form-row-simple">
-            <label for="customTextEnabled">表示する:</label>
-            <input type="checkbox" id="customTextEnabled">
+            <label for="textLayerEnabled">表示する:</label>
+            <input type="checkbox" id="textLayerEnabled">
         </div>
+        ${kindSpecificHtml}
         <div class="form-row-simple">
-            <textarea id="customTextArea" rows="3"
-                style="width: 100%; font-family: monospace; padding: 0.3rem; border-radius: 4px; border: 1px solid #ccd0d5;"></textarea>
-        </div>
-        <div class="form-row-simple" style="justify-content: space-around;">
-            <div class="radio-group"><input type="radio" id="customTextAlignLeft" name="customTextAlign" value="left"><label for="customTextAlignLeft">左寄せ</label></div>
-            <div class="radio-group"><input type="radio" id="customTextAlignCenter" name="customTextAlign" value="center"><label for="customTextAlignCenter">中央</label></div>
-            <div class="radio-group"><input type="radio" id="customTextAlignRight" name="customTextAlign" value="right"><label for="customTextAlignRight">右寄せ</label></div>
-        </div>
-        <div class="form-row-simple">
-            <label for="customTextFont">フォント:</label>
-            <select id="customTextFont"></select>
+            <label for="textLayerFont">フォント:</label>
+            <select id="textLayerFont"></select>
         </div>
         <div class="form-row-slider">
-            <label for="customTextSize">サイズ (%):</label>
-            <input type="range" id="customTextSize">
-            <span id="customTextSizeValue"></span>
+            <label for="textLayerSize">サイズ (%):</label>
+            <input type="range" id="textLayerSize">
+            <span id="textLayerSizeValue"></span>
         </div>
         <div class="form-row-simple">
-            <label for="customTextColor">文字色:</label>
-            <input type="color" id="customTextColor">
+            <label for="textLayerColor">文字色:</label>
+            <input type="color" id="textLayerColor">
         </div>
         <div class="form-row-slider">
-            <label for="customTextOpacity">透過度:</label>
-            <input type="range" id="customTextOpacity">
-            <span id="customTextOpacityValue"></span>
+            <label for="textLayerOpacity">透過度:</label>
+            <input type="range" id="textLayerOpacity">
+            <span id="textLayerOpacityValue"></span>
         </div>
         <div class="form-row-simple">
-            <label for="customTextOffsetX">横位置 (%):</label>
-            <input type="number" id="customTextOffsetX" step="0.5">
+            <label for="textLayerPosition">表示位置:</label>
+            <select id="textLayerPosition">${positionOptionsHtml}</select>
         </div>
         <div class="form-row-simple">
-            <label for="customTextOffsetY">縦位置 (%):</label>
-            <input type="number" id="customTextOffsetY" step="0.5">
+            <label for="textLayerOffsetX">横位置 (%):</label>
+            <input type="number" id="textLayerOffsetX" step="0.5">
         </div>
         <div class="form-row-simple">
-            <label for="customTextRotation">回転 (°):</label>
-            <input type="number" id="customTextRotation" step="1">
+            <label for="textLayerOffsetY">縦位置 (%):</label>
+            <input type="number" id="textLayerOffsetY" step="0.5">
+        </div>
+        <div class="form-row-simple">
+            <label for="textLayerRotation">回転 (°):</label>
+            <input type="number" id="textLayerRotation" step="1">
         </div>
         <p class="custom-text-drag-hint">プレビュー上でドラッグして位置を調整できます（横位置/縦位置欄はドラッグでもスクラブ操作できます。矢印キーでも微調整可）。選択中はプレビュー上に表示される角の四角ハンドルで拡大縮小、上の丸ハンドルで回転できます（回転は Shift 押しながらで15°刻み）。</p>
     `;
 
-    const id = layer.id;
     const el = (elId) => document.getElementById(elId);
 
-    populateFontSelect(el('customTextFont'), layer.font);
-    el('customTextEnabled').checked = layer.enabled;
-    el('customTextArea').value = layer.text;
-    el(`customTextAlign${layer.textAlign.charAt(0).toUpperCase()}${layer.textAlign.slice(1)}`).checked = true;
+    // --- 共通フィールドの初期値設定 ---
+    el('textLayerEnabled').checked = settings.enabled;
+    populateFontSelect(el('textLayerFont'), settings.font);
 
-    const sizeConfig = controlsConfig.textFreeSize;
-    const sizeSlider = el('customTextSize');
+    const sizeConfig = controlsConfig[sizeConfigKeyForKind(kind)];
+    const sizeSlider = el('textLayerSize');
     sizeSlider.min = sizeConfig.min; sizeSlider.max = sizeConfig.max; sizeSlider.step = sizeConfig.step;
-    sizeSlider.value = layer.size;
-    el('customTextSizeValue').textContent = `${layer.size}%`;
+    sizeSlider.value = settings.size;
+    el('textLayerSizeValue').textContent = `${settings.size}%`;
 
-    el('customTextColor').value = layer.color;
-    attachColorHistory(el('customTextColor'));
+    el('textLayerColor').value = settings.color;
+    attachColorHistory(el('textLayerColor'));
 
-    const opacitySlider = el('customTextOpacity');
+    const opacitySlider = el('textLayerOpacity');
     opacitySlider.min = 0; opacitySlider.max = 1; opacitySlider.step = 0.01;
-    opacitySlider.value = layer.opacity;
-    el('customTextOpacityValue').textContent = layer.opacity.toFixed(2);
+    opacitySlider.value = settings.opacity;
+    el('textLayerOpacityValue').textContent = settings.opacity.toFixed(2);
 
-    el('customTextOffsetX').value = layer.offsetX;
-    el('customTextOffsetY').value = layer.offsetY;
-    el('customTextRotation').value = layer.rotation || 0;
+    el('textLayerPosition').value = settings.position;
+    el('textLayerOffsetX').value = settings.offsetX;
+    el('textLayerOffsetY').value = settings.offsetY;
+    el('textLayerRotation').value = settings.rotation || 0;
 
-    // --- イベント配線 ---
-    el('customTextEnabled').addEventListener('change', (e) => {
-        updateCustomTextLayer(id, { enabled: e.target.checked });
-        renderCustomTextsList();
+    // --- 共通フィールドのイベント配線 ---
+    el('textLayerEnabled').addEventListener('change', (e) => {
+        applyTextLayerChanges(id, kind, { enabled: e.target.checked });
+        renderTextLayersList();
+        if (kind === 'exif' && e.target.checked) updateExifCustomText();
     });
-    el('customTextArea').addEventListener('input', debounce((e) => {
-        updateCustomTextLayer(id, { text: e.target.value });
-        renderCustomTextsList();
-    }, 300));
-    ['Left', 'Center', 'Right'].forEach(dir => {
-        el(`customTextAlign${dir}`).addEventListener('change', (e) => {
-            if (e.target.checked) updateCustomTextLayer(id, { textAlign: dir.toLowerCase() });
-        });
-    });
-    el('customTextFont').addEventListener('change', async (e) => {
+    el('textLayerFont').addEventListener('change', async (e) => {
         const selectedFontObject = googleFonts.find(f => f.displayName === e.target.value);
         if (selectedFontObject) {
             try {
@@ -686,57 +642,101 @@ function renderCustomTextSettingsPanel() {
                 e.target.disabled = false;
             }
         }
-        updateCustomTextLayer(id, { font: e.target.value });
+        applyTextLayerChanges(id, kind, { font: e.target.value });
     });
-    el('customTextSize').addEventListener('input', (e) => {
+    el('textLayerSize').addEventListener('input', (e) => {
         const value = parseFloat(e.target.value);
-        el('customTextSizeValue').textContent = `${value}%`;
-        updateCustomTextLayer(id, { size: value });
+        el('textLayerSizeValue').textContent = `${value}%`;
+        applyTextLayerChanges(id, kind, { size: value });
     });
-    el('customTextColor').addEventListener('input', (e) => {
-        updateCustomTextLayer(id, { color: e.target.value });
+    el('textLayerColor').addEventListener('input', (e) => {
+        applyTextLayerChanges(id, kind, { color: e.target.value });
     });
-    el('customTextOpacity').addEventListener('input', (e) => {
+    el('textLayerOpacity').addEventListener('input', (e) => {
         const value = parseFloat(e.target.value);
-        el('customTextOpacityValue').textContent = value.toFixed(2);
-        updateCustomTextLayer(id, { opacity: value });
+        el('textLayerOpacityValue').textContent = value.toFixed(2);
+        applyTextLayerChanges(id, kind, { opacity: value });
     });
-    enhanceAsScrubInput(el('customTextOffsetX'), { sensitivity: 0.2, onChange: (v) => updateCustomTextLayer(id, { offsetX: v }) });
-    enhanceAsScrubInput(el('customTextOffsetY'), { sensitivity: 0.2, onChange: (v) => updateCustomTextLayer(id, { offsetY: v }) });
-    enhanceAsScrubInput(el('customTextRotation'), { sensitivity: 0.5, onChange: (v) => updateCustomTextLayer(id, { rotation: v }) });
+    el('textLayerPosition').addEventListener('change', (e) => {
+        applyTextLayerChanges(id, kind, { position: e.target.value });
+    });
+    enhanceAsScrubInput(el('textLayerOffsetX'), { sensitivity: 0.2, onChange: (v) => applyTextLayerChanges(id, kind, { offsetX: v }) });
+    enhanceAsScrubInput(el('textLayerOffsetY'), { sensitivity: 0.2, onChange: (v) => applyTextLayerChanges(id, kind, { offsetY: v }) });
+    enhanceAsScrubInput(el('textLayerRotation'), { sensitivity: 0.5, onChange: (v) => applyTextLayerChanges(id, kind, { rotation: v }) });
+
+    // --- 種類固有フィールドの初期値・イベント配線 ---
+    if (kind === 'date') {
+        const formatOptionExists = Array.from(el('textLayerDateFormat').options).some(o => o.value === settings.format);
+        el('textLayerDateFormat').value = formatOptionExists ? settings.format : '';
+        el('textLayerDateFormatCustom').value = settings.format;
+
+        el('textLayerDateFormat').addEventListener('change', (e) => {
+            const value = e.target.value;
+            if (!value) return; // 「プリセットから選択...」を選んだ場合は何もしない
+            applyTextLayerChanges(id, kind, { format: value });
+            el('textLayerDateFormatCustom').value = value;
+        });
+        el('textLayerDateFormatCustom').addEventListener('input', (e) => {
+            const value = e.target.value;
+            applyTextLayerChanges(id, kind, { format: value });
+            const optionExists = Array.from(el('textLayerDateFormat').options).some(o => o.value === value);
+            el('textLayerDateFormat').value = optionExists ? value : '';
+        });
+    } else if (kind === 'exif') {
+        el(`textLayerAlign${settings.textAlign.charAt(0).toUpperCase()}${settings.textAlign.slice(1)}`).checked = true;
+        ['Left', 'Center', 'Right'].forEach(dir => {
+            el(`textLayerAlign${dir}`).addEventListener('change', (e) => {
+                if (e.target.checked) applyTextLayerChanges(id, kind, { textAlign: dir.toLowerCase() });
+            });
+        });
+        el('textLayerExifPreview').value = settings.customText;
+        // 「利用可能な項目」「使用する項目」リストの生成・配線はrenderExifItemsUI()に委譲
+        renderExifItemsUI();
+    } else {
+        el('textLayerCustomArea').value = settings.text;
+        el(`textLayerAlign${settings.textAlign.charAt(0).toUpperCase()}${settings.textAlign.slice(1)}`).checked = true;
+        el('textLayerCustomArea').addEventListener('input', debounce((e) => {
+            applyTextLayerChanges(id, kind, { text: e.target.value });
+            renderTextLayersList();
+        }, 300));
+        ['Left', 'Center', 'Right'].forEach(dir => {
+            el(`textLayerAlign${dir}`).addEventListener('change', (e) => {
+                if (e.target.checked) applyTextLayerChanges(id, kind, { textAlign: dir.toLowerCase() });
+            });
+        });
+    }
 }
 
 /**
- * ドラッグ等でcustomTextsのオフセット・サイズ・回転が変化した際、
- * 開いている設定パネルの数値欄だけを軽量に同期する。
- * パネル全体を再構築しないので、入力中のフォーカスを奪わない。
- * フォーカス中の欄は上書きしない（タイプ入力を妨げないため）。
- * 拡大・回転ハンドルのドラッグ中は、offsetX/Yではなくsize/rotationが変化する。
+ * ドラッグ・拡大回転ハンドル操作等で選択中レイヤーのオフセット・サイズ・回転が変化した際、
+ * 開いている設定パネルの数値欄だけを軽量に同期する。パネル全体は再構築しないので、
+ * 入力中のフォーカスを奪わない。フォーカス中の欄は上書きしない（タイプ入力を妨げないため）。
  */
-function syncCustomTextLiveInputs(state) {
+function syncTextLayerLiveInputs(state) {
     const selectedId = selectionStore.getSelectedId();
     if (!selectedId) return;
-    const layer = state.textSettings.customTexts.find(t => t.id === selectedId);
-    if (!layer) return;
+    const resolved = resolveTextLayer(state, selectedId);
+    if (!resolved) return;
+    const { settings } = resolved;
 
-    const xInput = document.getElementById('customTextOffsetX');
-    const yInput = document.getElementById('customTextOffsetY');
-    const rotationInput = document.getElementById('customTextRotation');
-    const sizeSlider = document.getElementById('customTextSize');
-    const sizeValueSpan = document.getElementById('customTextSizeValue');
+    const xInput = document.getElementById('textLayerOffsetX');
+    const yInput = document.getElementById('textLayerOffsetY');
+    const rotationInput = document.getElementById('textLayerRotation');
+    const sizeSlider = document.getElementById('textLayerSize');
+    const sizeValueSpan = document.getElementById('textLayerSizeValue');
 
     if (xInput && document.activeElement !== xInput) {
-        xInput.value = Math.round(layer.offsetX * 10) / 10;
+        xInput.value = Math.round(settings.offsetX * 10) / 10;
     }
     if (yInput && document.activeElement !== yInput) {
-        yInput.value = Math.round(layer.offsetY * 10) / 10;
+        yInput.value = Math.round(settings.offsetY * 10) / 10;
     }
     if (rotationInput && document.activeElement !== rotationInput) {
-        rotationInput.value = Math.round((layer.rotation || 0) * 10) / 10;
+        rotationInput.value = Math.round((settings.rotation || 0) * 10) / 10;
     }
     if (sizeSlider && document.activeElement !== sizeSlider) {
-        sizeSlider.value = layer.size;
-        if (sizeValueSpan) sizeValueSpan.textContent = `${layer.size}%`;
+        sizeSlider.value = settings.size;
+        if (sizeValueSpan) sizeValueSpan.textContent = `${settings.size}%`;
     }
 }
 
@@ -800,7 +800,7 @@ function renderPresetsList() {
  */
 export function syncUIFromState(state) {
     updateSliderValueDisplays();
-    syncCustomTextLiveInputs(state);
+    syncTextLayerLiveInputs(state);
 }
 
 /**
@@ -831,8 +831,9 @@ export function updateExifCustomText(redrawCallback) {
 
     // StateとUIの両方を更新
     updateState({ textSettings: { exif: { customText: newCustomText } } });
-    if (uiElements.exifPreviewTextarea) {
-        uiElements.exifPreviewTextarea.value = newCustomText;
+    const previewTextarea = document.getElementById('textLayerExifPreview');
+    if (previewTextarea) {
+        previewTextarea.value = newCustomText;
     }
     if (redrawCallback) redrawCallback();
 }
@@ -861,8 +862,10 @@ function getExifValue(exifDataFromState, itemKey) {
  * 項目の追加・削除・並び替えのたびに呼ばれる。
  */
 function renderExifItemsUI() {
-    const availableContainer = uiElements.exifAvailableListContainer;
-    const usedContainer = uiElements.exifUsedListContainer;
+    // 撮影日/自由テキスト選択中はExif専用の入れ物自体がDOMに存在しないため、その都度動的に取得する
+    // （renderTextLayerSettingsPanel()内でExif選択時にのみ生成される。5.x節「テキストUI統合」参照）
+    const availableContainer = document.getElementById('textLayerExifAvailableList');
+    const usedContainer = document.getElementById('textLayerExifUsedList');
     if (!availableContainer || !usedContainer) return;
 
     const items = getState().textSettings.exif.items || [];
@@ -1041,18 +1044,8 @@ export function setupEventListeners(redrawCallback) {
             if (element.type === 'checkbox') { valueToSet = e.target.checked; actualNestedKey = p1; actualSubNestedKey = p2; }
             else if (element.type === 'radio') { if (!e.target.checked) return; valueToSet = p1; actualNestedKey = p2; actualSubNestedKey = p3; }
             else { valueToSet = e.target.value; actualNestedKey = p1; actualSubNestedKey = p2; }
-            if ((element.id === 'textDateFontSelect' || element.id === 'textExifFontSelect') && valueToSet) {
-                const selectedFontObject = googleFonts.find(f => f.displayName === valueToSet);
-                if (selectedFontObject) {
-                    try {
-                        element.disabled = true;
-                        await loadGoogleFonts(selectedFontObject.apiName);
-                    } catch (error) {
-                        alert(`フォントの読み込みに失敗しました: ${selectedFontObject.displayName}`);
-                        element.disabled = false; return;
-                    } finally { element.disabled = false; }
-                }
-            }
+            // 文字レイヤー（撮影日・Exif・自由テキスト）のフォント選択は、renderTextLayerSettingsPanel()内の
+            // 専用リスナーがフォント読み込みを扱うため、この汎用ヘルパーでは対象外。
             if (actualSubNestedKey && actualNestedKey) updatePayload = { [stateKey]: { [actualNestedKey]: { [actualSubNestedKey]: valueToSet } } };
             else if (actualNestedKey) updatePayload = { [stateKey]: { [actualNestedKey]: valueToSet } };
             else updatePayload = { [stateKey]: valueToSet };
@@ -1060,9 +1053,6 @@ export function setupEventListeners(redrawCallback) {
             if (stateKey === 'backgroundType') toggleBackgroundSettingsVisibility();
             else if (stateKey === 'frameSettings') {
                 if (actualNestedKey === 'cornerStyle' || actualNestedKey === 'shadowEnabled' || actualNestedKey === 'shadowType' || (actualNestedKey === 'border' && actualSubNestedKey === 'enabled')) updateFrameSettingsVisibility();
-            } else if (stateKey === 'textSettings') {
-                if (actualNestedKey === 'date' && actualSubNestedKey === 'enabled') updateTextDateSettingsVisibility();
-                else if (actualNestedKey === 'exif' && actualSubNestedKey === 'enabled') updateTextExifSettingsVisibility();
             }
             updateSliderValueDisplays();
             redrawCallback();
@@ -1258,85 +1248,21 @@ export function setupEventListeners(redrawCallback) {
     addNumericInputListener(uiElements.frameBorderWidthSlider, 'frameBorderWidth', 'frameSettings', 'border', 'width');
     addColorInputListener(uiElements.frameBorderColorInput, 'frameSettings', 'border', 'color');
     addOptionChangeListener(uiElements.frameBorderStyleSelect, 'frameSettings', 'border', 'style');
-    addOptionChangeListener(uiElements.textDateEnabledCheckbox, 'textSettings', 'date', 'enabled');
-    // 撮影日フォーマット: プリセットselectと自由入力欄を相互に同期させる（出力アスペクト比と同じパターン）
-    if (uiElements.textDateFormatSelect) {
-        uiElements.textDateFormatSelect.addEventListener('change', (e) => {
-            const value = e.target.value;
-            if (!value) return; // 「プリセットから選択...」を選んだ場合は何もしない
-            updateState({ textSettings: { date: { format: value } } });
-            if (uiElements.textDateFormatCustomInput) uiElements.textDateFormatCustomInput.value = value;
-            redrawCallback();
-        });
-    }
-    if (uiElements.textDateFormatCustomInput) {
-        uiElements.textDateFormatCustomInput.addEventListener('input', (e) => {
-            const value = e.target.value;
-            updateState({ textSettings: { date: { format: value } } });
-            if (uiElements.textDateFormatSelect) {
-                const optionExists = Array.from(uiElements.textDateFormatSelect.options).some(o => o.value === value);
-                uiElements.textDateFormatSelect.value = optionExists ? value : '';
-            }
-            redrawCallback();
-        });
-    }
-    addOptionChangeListener(uiElements.textDateFontSelect, 'textSettings', 'date', 'font');
-    addNumericInputListener(uiElements.textDateSizeSlider, 'textDateSize', 'textSettings', 'date', 'size');
-    addColorInputListener(uiElements.textDateColorInput, 'textSettings', 'date', 'color');
-    addOptionChangeListener(uiElements.textDatePositionSelect, 'textSettings', 'date', 'position');
-    addNumericInputListener(uiElements.textDateOffsetXSlider, 'textDateOffsetX', 'textSettings', 'date', 'offsetX');
-    addNumericInputListener(uiElements.textDateOffsetYSlider, 'textDateOffsetY', 'textSettings', 'date', 'offsetY');
-    addNumericInputListener(uiElements.textDateOpacitySlider, 'textOpacity', 'textSettings', 'date', 'opacity');
-    enhanceAsScrubInput(uiElements.textDateRotationInput, { sensitivity: 0.5, onChange: (v) => updateState({ textSettings: { date: { rotation: v } } }) });
 
-
-    // --- 文字入力タブ - Exif情報 ---
-    // ★【重要】Exif関連のリスナーをここに再構成します
-    addOptionChangeListener(uiElements.textExifEnabledCheckbox, 'textSettings', 'exif', 'enabled');
-    uiElements.textExifEnabledCheckbox.addEventListener('change', e => {
-        if (e.target.checked) {
-            updateExifCustomText(redrawCallback);
-        }
-    });
-
-    // 表示項目の追加・削除・並び替えは renderExifItemsUI() 内で個別に配線される
-    // （「+ 項目」クリック、×ボタン、ドラッグ並び替えのそれぞれが updateExifCustomText() を呼ぶ）
-
-    [uiElements.textExifAlignLeftRadio, uiElements.textExifAlignCenterRadio, uiElements.textExifAlignRightRadio].forEach(radio => {
-        if (radio) {
-            radio.addEventListener('change', (e) => {
-                if (e.target.checked) {
-                    updateState({ textSettings: { exif: { textAlign: e.target.value } } });
-                    redrawCallback();
-                }
-            });
-        }
-    });
-
-    addOptionChangeListener(uiElements.textExifFontSelect, 'textSettings', 'exif', 'font');
-    addNumericInputListener(uiElements.textExifSizeSlider, 'textExifSize', 'textSettings', 'exif', 'size');
-    addColorInputListener(uiElements.textExifColorInput, 'textSettings', 'exif', 'color');
-    addOptionChangeListener(uiElements.textExifPositionSelect, 'textSettings', 'exif', 'position');
-    addNumericInputListener(uiElements.textExifOffsetXSlider, 'textExifOffsetX', 'textSettings', 'exif', 'offsetX');
-    addNumericInputListener(uiElements.textExifOffsetYSlider, 'textExifOffsetY', 'textSettings', 'exif', 'offsetY');
-    addNumericInputListener(uiElements.textExifOpacitySlider, 'textOpacity', 'textSettings', 'exif', 'opacity');
-    enhanceAsScrubInput(uiElements.textExifRotationInput, { sensitivity: 0.5, onChange: (v) => updateState({ textSettings: { exif: { rotation: v } } }) });
-
-
-    // --- 文字入力タブ - 自由テキスト（可変長レイヤー） ---
-    // レイヤー個別の設定UIはrenderCustomTextSettingsPanel()内でレイヤーごとに配線されるため、
+    // --- 文字入力タブ（撮影日・Exif情報・自由テキストの統一UI） ---
+    // レイヤー個別の設定UIはrenderTextLayerSettingsPanel()内で選択中レイヤーごとに配線されるため、
     // ここでは「追加ボタン」と「選択変更に応じたUI再描画」のみを配線する。
     if (uiElements.addCustomTextButton) {
         uiElements.addCustomTextButton.addEventListener('click', () => {
             const id = addCustomTextLayer();
             selectionStore.setSelectedId(id);
-            renderCustomTextsList();
-            renderCustomTextSettingsPanel();
+            renderTextLayersList();
+            renderTextLayerSettingsPanel();
         });
     }
     selectionStore.onSelectionChange(() => {
-        renderCustomTextsList();
-        renderCustomTextSettingsPanel();
+        renderTextLayersList();
+        renderTextLayerSettingsPanel();
     });
 
     // --- プリセットタブ ---
@@ -1354,11 +1280,11 @@ export function setupEventListeners(redrawCallback) {
     }
 
     // --- カラー履歴（全カラーピッカー共通） ---
+    // 文字レイヤーの文字色（#textLayerColor）はrenderTextLayerSettingsPanel()内で
+    // 選択変更のたびに再生成されるため、そちらで都度attachColorHistory()している。
     [
         uiElements.backgroundColorInput,
         uiElements.frameShadowColorInput,
-        uiElements.frameBorderColorInput,
-        uiElements.textDateColorInput,
-        uiElements.textExifColorInput
+        uiElements.frameBorderColorInput
     ].forEach(attachColorHistory);
 }
