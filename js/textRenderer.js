@@ -91,21 +91,21 @@ export async function drawText(ctx, currentState, canvasWidth, canvasHeight, bas
 
     const textTasks = [];
 
-    // 撮影日の表示タスク準備
+    // 撮影日の表示タスク準備（idは固定値。ドラッグ移動の当たり判定に使う）
     if (currentState.textSettings.date.enabled) {
         const exifDateTime = currentState.exifData ? currentState.exifData["0th"]?.[piexif.ImageIFD.DateTime] : null;
         if (exifDateTime) {
             const settings = currentState.textSettings.date;
             const text = getFormattedDate(exifDateTime, settings.format);
-            if (text) textTasks.push({ settings, text });
+            if (text) textTasks.push({ settings, text, id: 'text-date' });
         }
     }
 
-    // Exif情報の表示タスク準備
+    // Exif情報の表示タスク準備（idは固定値。ドラッグ移動の当たり判定に使う）
     if (currentState.textSettings.exif.enabled && currentState.exifData) {
         const settings = currentState.textSettings.exif;
         const text = settings.customText || '';
-        if (text.trim() !== '') textTasks.push({ settings, text });
+        if (text.trim() !== '') textTasks.push({ settings, text, id: 'text-exif' });
     }
 
     // 自由テキストレイヤー（可変長）の表示タスク準備

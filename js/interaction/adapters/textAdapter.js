@@ -8,15 +8,44 @@
  * calculateTextPositionと同じ）で保持されているため、プレビューpx単位のドラッグ量を
  * ここで変換してから状態に書き戻す。
  */
-import { getState, updateCustomTextLayer } from '../../stateManager.js';
+import { getState, updateState, updateCustomTextLayer } from '../../stateManager.js';
 import { controlsConfig } from '../../uiDefinitions.js';
+
+// 撮影日・Exifブロックは配列ではなくtextSettings直下の固定オブジェクトのため、
+// customTexts[]とは異なる経路（updateState）で読み書きする。idはtextRenderer.jsが
+// 描画時に付与する固定値と対応させる。
+const FIXED_TEXT_IDS = { 'text-date': 'date', 'text-exif': 'exif' };
+
+/** idから位置(offsetX/offsetY)を持つ設定オブジェクトを取得する（read-only参照） */
+function resolveLayer(id) {
+    const fixedKey = FIXED_TEXT_IDS[id];
+    if (fixedKey) return getState().textSettings[fixedKey];
+    return getState().textSettings.customTexts.find(t => t.id === id);
+}
+
+/** idに応じた変更の書き戻し先を振り分ける（撮影日・Exifはtextsettings直下、それ以外はcustomTexts[]） */
+function applyChanges(id, changes) {
+    const fixedKey = FIXED_TEXT_IDS[id];
+    if (fixedKey) {
+        updateState({ textSettings: { [fixedKey]: changes } });
+    } else {
+        updateCustomTextLayer(id, changes);
+    }
+}
+
+/** サイズのクランプに使うcontrolsConfigのキーは、id（撮影日/Exif/自由テキスト）ごとに範囲が異なる */
+function getSizeConfigKey(id) {
+    if (id === 'text-date') return 'textDateSize';
+    if (id === 'text-exif') return 'textExifSize';
+    return 'textFreeSize';
+}
 
 const textAdapter = {
     type: 'text',
 
     /** 現在のオフセット値を取得する */
     getValue(id) {
-        const layer = getState().textSettings.customTexts.find(t => t.id === id);
+        const layer = resolveLayer(id);
         if (!layer) return null;
         return { offsetX: layer.offsetX, offsetY: layer.offsetY };
     },
@@ -38,15 +67,18 @@ const textAdapter = {
         if (!ctx || !ctx.photoShortSidePx) return startValue;
         const dxPercent = (dxPx / ctx.photoShortSidePx) * 100;
         const dyPercent = (dyPx / ctx.photoShortSidePx) * 100;
+        // 0.1%単位に丸める。丸めないとpx/photoShortSidePxの割り算由来の循環小数がそのまま
+        // 状態に蓄積し、表示欄が有効数字ギリギリまで表示されて桁あふれを起こすため
+        // （ドラッグだけでなく矢印キーnudgeもこのcomputeChangesを通るので、両方に効く）。
         return {
-            offsetX: startValue.offsetX + dxPercent,
-            offsetY: startValue.offsetY + dyPercent
+            offsetX: Math.round((startValue.offsetX + dxPercent) * 10) / 10,
+            offsetY: Math.round((startValue.offsetY + dyPercent) * 10) / 10
         };
     },
 
     /** 変更を実際の状態に書き戻す */
     commit(id, changes) {
-        updateCustomTextLayer(id, changes);
+        applyChanges(id, changes);
     },
 
     /**
@@ -54,7 +86,7 @@ const textAdapter = {
      * canvasInteraction.jsがドラッグ開始時の基準値として保持する。
      */
     getTransform(id) {
-        const layer = getState().textSettings.customTexts.find(t => t.id === id);
+        const layer = resolveLayer(id);
         if (!layer) return null;
         return { size: layer.size, rotation: layer.rotation || 0 };
     },
@@ -63,14 +95,15 @@ const textAdapter = {
      * 拡大ハンドルのドラッグによるサイズ変更を反映する。
      * 中心からハンドルまでの距離の比（scaleFactor）を開始時点のサイズに掛けることで、
      * 回転角に関わらず「ハンドルを中心から遠ざける/近づける」という直感的な拡大縮小になる。
+     * クランプ範囲は対象（自由テキスト/撮影日/Exif）ごとに異なるスライダー範囲に合わせる。
      * @param {string} id
      * @param {number} startSize - ドラッグ開始時点のsize（%）
      * @param {number} scaleFactor - 開始時距離に対する現在距離の比
      */
     commitResize(id, startSize, scaleFactor) {
-        const { min, max } = controlsConfig.textFreeSize;
+        const { min, max } = controlsConfig[getSizeConfigKey(id)];
         const newSize = Math.round(Math.min(max, Math.max(min, startSize * scaleFactor)) * 100) / 100;
-        updateCustomTextLayer(id, { size: newSize });
+        applyChanges(id, { size: newSize });
     },
 
     /**
@@ -79,7 +112,7 @@ const textAdapter = {
      * @param {number} newRotationDeg
      */
     commitRotate(id, newRotationDeg) {
-        updateCustomTextLayer(id, { rotation: Math.round(newRotationDeg * 10) / 10 });
+        applyChanges(id, { rotation: Math.round(newRotationDeg * 10) / 10 });
     }
 };
 

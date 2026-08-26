@@ -87,23 +87,27 @@ let editState = {
             font: googleFonts[0].displayName, // ★初期値をGoogle Fontsリストの最初のフォントに
             size: 2,
             color: '#000000', // 仕様書では白背景が多いので、日付は濃い色が良いかもしれないが、現状維持
-            opacity: 1, 
+            opacity: 1,
             position: 'bottom-left',
             offsetX: 0,
-            offsetY: 0
+            offsetY: 0,
+            rotation: 0
         },
         exif: {
             enabled: false,
-            items: ['Make', 'Model', 'FNumber', 'ExposureTime', 'ISOSpeedRatings', 'FocalLength', 'LensModel'],
-            customText: '', // ユーザーが編集するテキストエリアの内容
+            // 並び順がそのまま表示順になる（uiController.jsのupdateExifCustomText参照）。
+            // 旧実装で固定表示順だった頃と同じ並びをデフォルトにしている。
+            items: ['Make', 'Model', 'LensModel', 'FNumber', 'ExposureTime', 'ISOSpeedRatings', 'FocalLength'],
+            customText: '', // itemsから自動生成される表示テキスト（uiController.jsのupdateExifCustomText参照。手動編集はできない）
             textAlign: 'left', // 水平方向の配置 'left', 'center', 'right'
             font: googleFonts[0].displayName, // 初期値をGoogle Fontsリストの最初のフォントに
             size: 2,
             color: '#000000',
-            opacity: 1, 
+            opacity: 1,
             position: 'bottom-right',
             offsetX: 0,
-            offsetY: 0
+            offsetY: 0,
+            rotation: 0
         },
         // 自由テキストは可変長のレイヤー配列として保持する（1個目もaddCustomTextLayer()で追加される）
         customTexts: []

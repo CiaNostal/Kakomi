@@ -366,6 +366,11 @@ Exif情報の抽出と埋め込みを担当します。
 - `formatExifForDisplay(exifData)`: Exif情報を表示用にフォーマット
 - `embedExifToJpeg(jpegDataUrl, exifDataFromState)`: Exif情報をJPEGに埋め込み
 - `displayExifInfo(exifData, container)`: Exif情報を画面に表示
+- `decodeExifString(value)`: Make/Model/LensModelなどASCII型Exif文字列の文字化け対策ヘルパー。2段階の処理を行う。
+  1. **NULパディングの除去**（実際に確認された原因）: Exif規格上、ASCII型フィールドは固定バイト長で、実際の文字列の後にNUL終端＋NULパディングが続く（例: カメラによっては`"CampSnap"`を32バイト枠に格納する際、後ろに`\x00`が22個続く）。piexif.jsはこの固定長バイト列をそのままJS文字列化して返すため、末尾のNUL文字群を含んだまま表示すると制御文字が可視化され、「メーカー名の後に特殊文字が混ざったような文字化け」に見える。最初のNUL文字（コードポイント U+0000）以降を切り捨てて対処する
+  2. **UTF-8をLatin-1として誤読した文字化けの復元**（保険的な対策）: 上記のフィールドは規格上ASCIIのはずだが、非ASCII文字（日本語のメーカー名・レンズ名など）をUTF-8で書き込むカメラ・ソフトウェアも存在しうる。piexif.jsはバイト列を1バイトずつそのままJS文字コードにマッピングするだけで、マルチバイトのUTF-8シーケンスを再デコードしないため、そのようなデータでは文字化けする。`escape()`で「1バイト=1文字」の文字列に戻してから`decodeURIComponent()`でUTF-8として再解釈することで復元する（純粋なASCII文字列には実質的に影響しない安全な変換で、UTF-8として解釈できない場合はNUL除去のみ済ませた文字列を返す）
+
+  `formatExifForDisplay()`（Exif情報パネル）と`uiController.js`の`getExifValue()`（テキストオーバーレイのExif表示、7.5節参照）の両方でMake/Model/LensModelに適用している
 
 **対応Exifタグ:**
 - Make（メーカー名）
@@ -376,6 +381,7 @@ Exif情報の抽出と埋め込みを担当します。
 - ISOSpeedRatings（ISO感度）
 - FocalLength（焦点距離）
 - LensModel（レンズ情報）
+- ExposureBiasValue（露出補正。テキストオーバーレイのExif表示、7.5節参照）
 
 ### 5.11 utils/canvasUtils.js
 Canvas操作のユーティリティ関数を提供します。
@@ -428,7 +434,8 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 - ドラッグ移動: `pointerdown`で`interactionRegistry.hitTest()`により対象を特定し選択、`pointermove`で移動量を計算して対応するアダプタの`commit()`を呼ぶ
 - スナップ: ドラッグ中は既定でスナップが有効。**Altキーを押しながらドラッグするとスナップを一時的に無効化**できる
 - 矢印キーnudge: 何かが選択されている状態で矢印キーを押すと1px相当、Shift+矢印キーで10px相当（いずれもプレビューcanvas上のpx単位）移動する。フォーカスが入力欄（input/textarea/select）にある間は無効化される
-- **拡大・回転ハンドル（自由テキストのみ）**: `pointerdown`時、通常のオブジェクト当たり判定（`interactionRegistry.hitTest()`）より先に`textHandleStore.getTextHandles()`のハンドル座標との距離判定を行う（当たり判定半径`HANDLE_HIT_RADIUS = 10px`）。ヒットした場合は`dragState.mode`を`'resize'`または`'rotate'`にしてドラッグを開始し、通常の移動ドラッグ（`mode: 'move'`）とは別処理で`textAdapter.commitResize()`/`commitRotate()`を直接呼ぶ（アダプタの`getValue`/`computeChanges`/`commit`という汎用インターフェースではなく、テキスト専用の`getTransform`/`commitResize`/`commitRotate`を使う。写真・背景にはこの概念がないため）
+- **拡大・回転ハンドル（テキスト系オブジェクトのみ。自由テキスト・撮影日・Exifブロックいずれも対応）**: `pointerdown`時、通常のオブジェクト当たり判定（`interactionRegistry.hitTest()`）より先に`textHandleStore.getTextHandles()`のハンドル座標との距離判定を行う（当たり判定半径`HANDLE_HIT_RADIUS = 10px`）。ヒットした場合は`dragState.mode`を`'resize'`または`'rotate'`にしてドラッグを開始し、通常の移動ドラッグ（`mode: 'move'`）とは別処理で`textAdapter.commitResize()`/`commitRotate()`を直接呼ぶ（アダプタの`getValue`/`computeChanges`/`commit`という汎用インターフェースではなく、テキスト専用の`getTransform`/`commitResize`/`commitRotate`を使う。写真・背景にはこの概念がないため）
+- **選択変更と再描画（設計上の注記）:** `selectionStore`の選択状態変更（`setSelectedId()`）自体は`editState`の変更ではないため、`stateManager.js`の通常の状態変更リスナー（`requestRedraw`等）を経由しない。ドラッグを伴わない純粋なクリック選択（`pointerdown`直後に一度も`pointermove`が発火しないケース）でも選択ハイライトやハンドルが即座に表示されるよう、`main.js`が`selectionStore.onSelectionChange(() => requestRedraw())`を明示的に登録している。
   - 拡大: ボックス中心からハンドルまでの距離の比（現在距離÷ドラッグ開始時距離）をドラッグ開始時点の`size`に掛ける。回転角に関わらず「ハンドルを中心から遠ざける/近づける」動作になる
   - 回転: ボックス中心から見たポインタの角度（`Math.atan2`）の変化量をドラッグ開始時点の`rotation`に加算する。**Shiftキーを押しながらドラッグすると15度刻みにスナップ**する
 
@@ -437,16 +444,19 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 
 | アダプタ | 対象 | 値の単位系 | 備考 |
 |---|---|---|---|
-| `textAdapter.js` | `customTexts[]`の各レイヤー | 写真短辺基準の% | `updateCustomTextLayer()`経由で配列内の該当レイヤーのみ更新 |
+| `textAdapter.js` | `customTexts[]`の各レイヤー、および撮影日・Exifブロック（固定id `'text-date'`/`'text-exif'`） | 写真短辺基準の% | `customTexts[]`は`updateCustomTextLayer()`、撮影日・Exifは`updateState({ textSettings: { date/exif: changes } })`と、idに応じて内部で経路を振り分ける（`resolveLayer()`ヘルパー） |
 | `photoAdapter.js` | 写真の枠内配置（`photoViewParams`） | 可動範囲(movable width/height)に対する0.0〜1.0の割合 | `layoutCalculator.js`の可動範囲計算と対応させる必要があり、`getLastPreviewContext().scale`を使った変換が必要 |
 | `backgroundAdapter.js` | 拡大ぼかし背景の位置（`imageBlurBackgroundParams`） | 写真短辺基準の%（textAdapterと同じ単位系） | 単色背景（`backgroundType === 'color'`）の場合はそもそも`interactionRegistry`に登録されないため、ドラッグ対象にならない |
 
 **単位変換上の注意（重要）:** `getLastPreviewContext()`が返す`photoShortSidePx`は、写真の実解像度ではなく**プレビュー描画時に縮小された後の短辺px**を指す。ドラッグのポインタ移動量（`dxPx`/`dyPx`）も同じプレビューcanvasのpx空間の値であるため、`textAdapter`や`backgroundAdapter`ではscaleによる再変換は不要で、単純な比率計算（`dxPx / photoShortSidePx * 100`）だけで正しく変換できる。過去にここへ誤って`/ scale`を追加してしまい、プレビューの縮小率次第でドラッグ量が数倍に増幅される不具合が発生したことがあるため、新しいアダプタを追加する際は注意すること。
 
+**桁あふれ対策の丸め処理（重要）:** `textAdapter.js`・`backgroundAdapter.js`の`computeChanges()`は、割り算由来の循環小数（例: `-11.640211640211641`）をそのまま状態に書き戻さないよう、結果を必ず0.1%単位に丸める（`Math.round(value * 10) / 10`）。ドラッグ中継続的に加算されていく値のため丸めを怠ると、UIの数値表示欄が有効数字ギリギリまで表示されて桁あふれを起こす（実際に発生した不具合）。この`computeChanges()`はドラッグだけでなく矢印キーnudgeからも呼ばれるため、丸めは両方の経路に効く。`uiController.js`側の対応する表示スパン（`bgOffsetX/YValueSpan`、`textDateOffsetX/YValueSpan`、`textExifOffsetX/YValueSpan`）も`.toFixed(1)`で表示桁を明示的に制限し、二重に防御している。
+
 **`textAdapter.js`の拡張（拡大・回転ハンドル用）:** 通常の`getValue`/`computeChanges`/`commit`（位置移動用）に加えて、以下を持つ。
-- `getTransform(id)`: ドラッグ開始時点の`{ size, rotation }`を取得
-- `commitResize(id, startSize, scaleFactor)`: `startSize * scaleFactor`を`controlsConfig.textFreeSize`の`min`/`max`でクランプして`size`に反映
+- `getTransform(id)`: ドラッグ開始時点の`{ size, rotation }`を取得（`resolveLayer()`経由で撮影日・Exifにも対応）
+- `commitResize(id, startSize, scaleFactor)`: `startSize * scaleFactor`をクランプして`size`に反映。クランプ範囲は対象によって異なるスライダー範囲に合わせる（`getSizeConfigKey(id)`が`'text-date'`→`textDateSize`、`'text-exif'`→`textExifSize`、それ以外（自由テキスト）→`textFreeSize`という`controlsConfig`のキーを選択する）
 - `commitRotate(id, newRotationDeg)`: `rotation`に反映（0.1度単位に丸め）
+- 上記2つの書き戻しは、`commit()`と同様に`applyChanges(id, changes)`ヘルパーが`FIXED_TEXT_IDS`を見て`updateState()`（撮影日・Exif）と`updateCustomTextLayer()`（自由テキスト）に振り分ける
 
 ### 5.18 ui/scrubInput.js
 `<input type="number">`を「ドラッグしてスクラブ」「クリックしてタイプ入力」の両方に対応させる軽量な機能拡張。Figma/After Effects等にある数値入力の挙動を、素のPointer Eventsだけで再現している（外部ライブラリ不要）。
@@ -677,15 +687,18 @@ Blobをダウンロード
 - **水平方向の配置（textAlign）**: 左寄せ、中央、右寄せ
   - Exif情報、自由テキストにはこの配置ラジオボタンが存在する。
   - **撮影日表示にはこの配置コントロールが存在しない**（`textDateAlign〜`に相当するUI要素はなく、`textRenderer.js`側でも撮影日設定オブジェクトに`textAlign`が定義されていないため、位置指定文字列から自動的に左/中央/右寄せが決まる）。
+- **プレビュー上でのドラッグ移動、拡大・回転**: 撮影日・Exif情報も自由テキストと全く同様に、プレビュー上で直接ドラッグして位置（オフセットX/Y）を移動でき、選択中は拡大ハンドル・回転ハンドルも表示される。`textRenderer.js`の`drawText()`が固定id（`'text-date'`, `'text-exif'`）を振って`interactionRegistry`に登録し、`textAdapter.js`がcustomTexts[]と同じ移動・拡大・回転ロジックで扱う（5.16・5.17節参照）。`rotation`フィールドを持ち、サイズの拡大範囲は自由テキスト（`textFreeSize`、最大50%）とは異なりそれぞれの表示位置設定と同じ範囲（`textDateSize`/`textExifSize`、最大10%）にクランプされる。オフセットX/Y・サイズのスライダー、回転の数値入力欄はいずれもドラッグ操作にも追従する（`document.activeElement`が別要素のときのみ値を上書き）
 
 **撮影日表示**:
 - ExifのDateTimeタグから取得
-- フォーマット: YYYY.MM.DD、YYYY/MM/DD、YY/MM/DD、YY.MM.DD、YYYY年MM月DD日
+- **フォーマット**: `format`は自由な文字列で、`YYYY`/`YY`/`MM`/`DD`のトークンを組み合わせて指定する（`getFormattedDate()`が文字列置換で処理）。UIには8種類のプリセット（YYYY.MM.DD、YYYY/MM/DD、YY/MM/DD、YY.MM.DD、YYYY年MM月DD日、MM/DD/YYYY、DD/MM/YYYY、YYYY-MM-DD）を選ぶselectと、任意の書式を直接打てる自由入力欄が両方あり、常に同じ`format`値を指しているため相互に同期する（select選択→自由入力欄にも反映、自由入力→マッチするプリセットがあればselectもそれを指す、なければ「プリセットから選択...」に戻る）。出力アスペクト比（7.2節）と同じ「プリセット+自由入力」のUIパターン
 
 **Exif情報表示**:
-- 表示項目をチェックボックスで選択（Make、Model、LensModel、FNumber、ExposureTime、ISOSpeedRatings、FocalLength）
-- カスタムテキストエリアで編集可能
-- 自動生成されたテキストを編集可能
+- **対応タグ**: Make（メーカー名）、Model（機種名）、LensModel（レンズ情報）、FNumber（F値）、ExposureTime（シャッタースピード）、ISOSpeedRatings（ISO感度）、FocalLength（焦点距離）、ExposureBiasValue（露出補正、例: `+0.3EV`）。定義は`uiDefinitions.js`の`exifTagDefinitions`配列（`{ key, label }`の並び）
+- **表示項目の選択と並び替え**: `textSettings.exif.items`は「選んだタグのkeyを表示順に並べた配列」であり、この配列の並び順がそのまま出力テキストの並び順になる（以前は表示順が`uiController.js`内に別途ハードコードされた固定配列で決まっており、`items`の並びは無視されていた。これを修正し、`items`自体の並びを唯一の情報源にした）
+  - UIは「利用可能な項目」（`exifTagDefinitions`のうちまだ`items`に含まれていないタグをチップ表示、クリックで`items`の末尾に追加）と「使用する項目」（現在の`items`を上から順に表示するリスト、各行に`⠿`のドラッグハンドルと`×`の削除ボタン）の2つの領域で構成される
+  - 並び替えは`uiController.js`の`attachExifDragHandle()`が素のPointer Eventsで実装している。ドラッグ中はDOM上の行要素を直接並べ替えるだけで状態（`textSettings.exif.items`）へは書き込まず、`pointerup`時に最終的な並び順をまとめて一度だけ`updateState()`でコミットする。これは、ドラッグ中に`updateState()`のたびにリストを再構築すると、ドラッグ中の行のDOM要素自体が作り直されてポインタ操作が中断してしまうため（`interaction/canvasInteraction.js`の拡大・回転ハンドルとは異なる構成だが、「状態を書き換えるとDOMが壊れてドラッグが継続できなくなる」という同種の問題への対処という点で共通する設計判断）
+  - 生成された表示テキストは読み取り専用のプレビュー欄（`#textExifPreview`）に表示される。**以前あった「生成されたテキストを手動編集できるテキストエリア」は廃止した**（チェックボックスの状態を変えるたびに手動編集内容が丸ごと上書きされてしまう壊れた導線だったため、上記の並び替えUIに置き換えた）
 
 **自由テキスト（`customTexts[]`）**:
 - 個数の制限なく追加・削除できる（「文字入力」タブの「+ テキストを追加」ボタン）
@@ -826,7 +839,7 @@ Blobをダウンロード
 
 ### 11.1 インタラクション基盤の続き
 - ✅ 構図調整（クロップのズーム・パン）の数値UI化（7.1節参照）。on-canvasドラッグでの構図調整（「写真の枠内配置ドラッグ」との操作競合）は未対応のまま
-- ✅ テキストの拡大・回転ハンドル（5.22節参照。photo/backgroundは対象外）
+- ✅ テキストの拡大・回転ハンドル（5.22節参照。自由テキスト・撮影日・Exifブロックいずれも対応。photo/backgroundは対象外）
 - 自由テキストレイヤーの並び替え・複製
 - 複数選択・一括移動
 - タッチデバイスでの実機確認（Pointer Events自体は実装済みだが未検証）
@@ -845,7 +858,7 @@ Blobをダウンロード
 - より高度な画像フィルター
 - レイヤーのグループ化・整列/分布ツール
 - アニメーションGIF出力
-- より多くのExifタグの対応
+- より多くのExifタグの対応（露出補正は対応済み。7.5節参照。GPS位置情報等は未対応）
 - モバイル操作最適化（フリック・タップ操作、レスポンシブレイアウトの改善）
 
 ## 12. 仕様書v1との対応状況
@@ -859,7 +872,7 @@ Blobをダウンロード
 - ✅ 出力フォーマット設定（目標アスペクト比、基準余白）
 - ✅ 背景編集（単色、拡大ぼかし。拡大ぼかしはドラッグでの位置調整にも対応）
 - ✅ フレーム加工（角丸、超楕円、影、縁取り）
-- ✅ テキストオーバーレイ（撮影日、Exif情報、自由テキスト。自由テキストは複数レイヤー・ドラッグ移動に対応）
+- ✅ テキストオーバーレイ（撮影日、Exif情報、自由テキスト。いずれもドラッグ移動に対応。自由テキストは複数レイヤー・拡大・回転にも対応）
 - ✅ Exif情報の表示と再埋め込み
 - ✅ 数値精度と丸め処理のポリシー（写真描画の厳格な整数化）
 - ✅ レイアウト計算の詳細フロー

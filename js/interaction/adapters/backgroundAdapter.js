@@ -21,9 +21,11 @@ const backgroundAdapter = {
         if (!ctx || !ctx.photoShortSidePx) return startValue;
         const dxPercent = (dxPx / ctx.photoShortSidePx) * 100;
         const dyPercent = (dyPx / ctx.photoShortSidePx) * 100;
+        // 0.1%単位に丸める（textAdapter.jsのcomputeChangesと同じ理由。割り算由来の
+        // 循環小数をそのまま状態に持たせると、表示欄が桁あふれを起こすため）。
         return {
-            offsetXPercent: startValue.offsetXPercent + dxPercent,
-            offsetYPercent: startValue.offsetYPercent + dyPercent
+            offsetXPercent: Math.round((startValue.offsetXPercent + dxPercent) * 10) / 10,
+            offsetYPercent: Math.round((startValue.offsetYPercent + dyPercent) * 10) / 10
         };
     },
 

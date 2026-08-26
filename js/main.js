@@ -9,6 +9,7 @@ import { processImageFile, handleDownload } from './fileManager.js';
 import { displayExifInfo } from './exifHandler.js';   // Exif表示用
 import { initializeTabs } from './tabManager.js';
 import { initCanvasInteraction } from './interaction/canvasInteraction.js';
+import * as selectionStore from './interaction/selectionStore.js';
 import { initHistory, recordStateChange, undo, redo, onHistoryChange, onSnapshotApplied } from './history/historyManager.js';
 
 /**
@@ -78,6 +79,14 @@ document.addEventListener('DOMContentLoaded', () => {
     addStateChangeListener(requestRedraw);
     addStateChangeListener(syncUIFromState);
     addStateChangeListener(recordStateChange);
+
+    // 選択状態（selectionStore）はeditStateとは別管理のため、通常のstateChangeListenerでは
+    // 再描画がトリガーされない。ドラッグを伴わない純粋なクリック選択（当たり判定の結果、
+    // 移動量ゼロでpointermoveが一度も発火しないケース）でも選択ハイライト・ハンドルが
+    // 即座に表示されるよう、選択変更でも明示的に再描画する。
+    selectionStore.onSelectionChange(() => {
+        requestRedraw();
+    });
 
     if (uiElements.previewCanvas) {
         initCanvasInteraction(uiElements.previewCanvas);

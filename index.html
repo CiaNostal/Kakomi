@@ -294,13 +294,22 @@
                                 <div class="form-row-simple">
                                     <label for="textDateFormat">区切り形式:</label>
                                     <select id="textDateFormat">
+                                        <option value="">プリセットから選択...</option>
                                         <option value="YYYY.MM.DD">YYYY.MM.DD</option>
                                         <option value="YYYY/MM/DD">YYYY/MM/DD</option>
                                         <option value="YY/MM/DD">YY/MM/DD</option>
                                         <option value="YY.MM.DD">YY.MM.DD</option>
                                         <option value="YYYY年MM月DD日">YYYY年MM月DD日</option>
+                                        <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                                        <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                                        <option value="YYYY-MM-DD">YYYY-MM-DD</option>
                                     </select>
                                 </div>
+                                <div class="form-row-simple">
+                                    <label for="textDateFormatCustom">自由入力:</label>
+                                    <input type="text" id="textDateFormatCustom" placeholder="例: YYYY.MM.DD">
+                                </div>
+                                <p class="custom-text-drag-hint">YYYY・YY・MM・DDを組み合わせて自由に書式を指定できます（プリセットを選ぶと自由入力欄にも反映されます）。</p>
                                 <div class="form-row-simple">
                                     <label for="textDateFont">フォント:</label>
                                     <select id="textDateFont">
@@ -341,6 +350,11 @@
                                     <input type="range" id="textDateOffsetY">
                                     <span id="textDateOffsetYValue">2%</span>
                                 </div>
+                                <div class="form-row-simple">
+                                    <label for="textDateRotation">回転 (°):</label>
+                                    <input type="number" id="textDateRotation" step="1">
+                                </div>
+                                <p class="custom-text-drag-hint">プレビュー上でドラッグして位置を移動できます。選択中は角の四角ハンドルで拡大縮小、上の丸ハンドルで回転できます（回転はShift押しながらで15°刻み）。</p>
                             </div>
                         </fieldset>
 
@@ -354,43 +368,13 @@
                             <div id="textExifSettingsContainer">
                                 <fieldset>
                                     <legend>表示項目</legend>
+                                    <p class="custom-text-drag-hint">クリックで項目を追加し、追加した項目はドラッグで並び順を変更できます。</p>
+                                    <div class="exif-available-list" id="exifAvailableList"></div>
+                                    <div class="exif-used-list" id="exifUsedList"></div>
                                     <div class="form-row-simple">
-                                        <input type="checkbox" id="textExifItemMake" value="Make"><label
-                                            for="textExifItemMake">メーカー名</label>
+                                        <label for="textExifPreview">プレビュー:</label>
                                     </div>
-                                    <div class="form-row-simple">
-                                        <input type="checkbox" id="textExifItemModel" value="Model"><label
-                                            for="textExifItemModel">機種名</label>
-                                    </div>
-                                    <div class="form-row-simple">
-                                        <input type="checkbox" id="textExifItemLensModel" value="LensModel">
-                                        <label for="textExifItemLensModel">レンズ情報</label>
-                                    </div>
-                                    <div class="form-row-simple">
-                                        <input type="checkbox" id="textExifItemFNumber" value="FNumber"><label
-                                            for="textExifItemFNumber">F値</label>
-                                    </div>
-                                    <div class="form-row-simple">
-                                        <input type="checkbox" id="textExifItemExposureTime" value="ExposureTime"><label
-                                            for="textExifItemExposureTime">シャッタースピード</label>
-                                    </div>
-                                    <div class="form-row-simple">
-                                        <input type="checkbox" id="textExifItemISOSpeedRatings"
-                                            value="ISOSpeedRatings"><label
-                                            for="textExifItemISOSpeedRatings">ISO感度</label>
-                                    </div>
-                                    <div class="form-row-simple">
-                                        <input type="checkbox" id="textExifItemFocalLength" value="FocalLength"><label
-                                            for="textExifItemFocalLength">焦点距離</label>
-                                    </div>
-                                </fieldset>
-
-                                <fieldset>
-                                    <legend>表示テキスト</legend>
-                                    <div class="form-row-simple">
-                                        <textarea id="textExifCustomTextArea" rows="3"
-                                            style="width: 100%; font-family: monospace; padding: 0.3rem; border-radius: 4px; border: 1px solid #ccd0d5;"></textarea>
-                                    </div>
+                                    <textarea id="textExifPreview" rows="2" class="exif-preview-textarea" readonly></textarea>
                                 </fieldset>
 
                                 <fieldset>
@@ -451,6 +435,11 @@
                                     <input type="range" id="textExifOffsetY">
                                     <span id="textExifOffsetYValue">2%</span>
                                 </div>
+                                <div class="form-row-simple">
+                                    <label for="textExifRotation">回転 (°):</label>
+                                    <input type="number" id="textExifRotation" step="1">
+                                </div>
+                                <p class="custom-text-drag-hint">プレビュー上でドラッグして位置を移動できます。選択中は角の四角ハンドルで拡大縮小、上の丸ハンドルで回転できます（回転はShift押しながらで15°刻み）。</p>
                             </div>
                         </fieldset>
                         <fieldset>

@@ -77,6 +77,23 @@ export const googleFonts = [
 ];
 
 /**
+ * Exif情報表示で選択できるタグの定義。
+ * keyはpiexif.jsのExif/0th IFD定数名に対応し、labelはUI表示用の日本語名。
+ * この配列の並び順は「利用可能な項目」リストの表示順であり、
+ * textSettings.exif.items（ユーザーが選んだ項目とその並び順）とは独立している。
+ */
+export const exifTagDefinitions = [
+    { key: 'Make', label: 'メーカー名' },
+    { key: 'Model', label: '機種名' },
+    { key: 'LensModel', label: 'レンズ情報' },
+    { key: 'FNumber', label: 'F値' },
+    { key: 'ExposureTime', label: 'シャッタースピード' },
+    { key: 'ISOSpeedRatings', label: 'ISO感度' },
+    { key: 'FocalLength', label: '焦点距離' },
+    { key: 'ExposureBiasValue', label: '露出補正' },
+];
+
+/**
  * 各UIコントロールの設定値 (min, max, step, defaultValue)
  * これにより、HTMLからこれらの値を分離し、JavaScriptで一元管理します。
  * defaultValue は主にUI要素の初期表示に使われ、

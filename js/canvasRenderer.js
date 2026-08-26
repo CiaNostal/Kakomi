@@ -207,7 +207,7 @@ export async function drawPreview(currentState, previewCanvas, previewCtx) { // 
     }
 
     // 8. 選択中オブジェクトのハイライト枠（プレビューのみ。出力画像には含めない）
-    // テキストレイヤーの場合は、拡大・回転ハンドルも合わせて描画する。
+    // テキスト系オブジェクト（自由テキスト・撮影日・Exif）はすべて拡大・回転ハンドルも合わせて描画する。
     const selectedId = getSelectedId();
     if (selectedId) {
         const box = interactionRegistry.getById(selectedId);
