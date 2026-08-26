@@ -27,9 +27,40 @@ body {
     /* Facebook風の青 */
     color: #fff;
     padding: 0.8rem 1rem;
-    text-align: center;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.history-controls {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    gap: 0.5rem;
+}
+
+.history-controls button {
+    padding: 0.35rem 0.7rem;
+    font-size: 0.85rem;
+    background-color: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.history-controls button:hover:not(:disabled) {
+    background-color: rgba(255, 255, 255, 0.3);
+}
+
+.history-controls button:disabled {
+    opacity: 0.4;
+    cursor: default;
 }
 
 .main-content {
@@ -401,6 +432,86 @@ fieldset div span {
     /* ユーザー指定の黒線 */
     box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
     /* Canvasに少し影 */
+    cursor: default;
+    /* ドラッグ中にブラウザ側のスクロール/ズームジェスチャーと競合しないようにする */
+    touch-action: none;
+}
+
+#previewCanvas.dragging-object {
+    cursor: grabbing;
+}
+
+/* 自由テキストレイヤーのチップ一覧 */
+.custom-texts-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 0.6rem;
+}
+
+.custom-text-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.6rem;
+    border: 1px solid #ccd0d5;
+    border-radius: 999px;
+    background-color: #f0f2f5;
+    font-size: 0.85rem;
+    cursor: pointer;
+    color: #333;
+}
+
+.custom-text-chip.selected {
+    border-color: #1877f2;
+    background-color: #e7f0ff;
+    color: #1877f2;
+}
+
+.custom-text-chip.disabled {
+    opacity: 0.5;
+}
+
+.custom-text-chip-delete {
+    color: #90949c;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.custom-text-chip-delete:hover {
+    color: #e41e3f;
+}
+
+.add-custom-text-button {
+    display: block;
+    width: 100%;
+    padding: 0.5rem;
+    margin-bottom: 0.8rem;
+    border: 1px dashed #1877f2;
+    border-radius: 6px;
+    background-color: transparent;
+    color: #1877f2;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.add-custom-text-button:hover {
+    background-color: #e7f0ff;
+}
+
+.custom-text-settings-panel {
+    border-top: 1px solid #e4e6eb;
+    padding-top: 0.6rem;
+}
+
+.custom-text-empty-hint,
+.custom-text-drag-hint {
+    color: #65676b;
+    font-size: 0.85rem;
+}
+
+.custom-text-drag-hint {
+    margin-top: 0.4rem;
 }
 
 #downloadButton {

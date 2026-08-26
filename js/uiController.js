@@ -1,8 +1,10 @@
 // js/uiController.js
-import { getState, updateState } from './stateManager.js';
+import { getState, updateState, addCustomTextLayer, removeCustomTextLayer, updateCustomTextLayer } from './stateManager.js';
 import { controlsConfig, googleFonts } from './uiDefinitions.js';
 import { loadGoogleFonts } from './textRenderer.js';
 import { stripCustomPrefix } from './layoutCalculator.js';
+import * as selectionStore from './interaction/selectionStore.js';
+import { enhanceAsScrubInput } from './ui/scrubInput.js';
 
 export const uiElements = {
     imageLoader: document.getElementById('imageLoader'),
@@ -10,6 +12,8 @@ export const uiElements = {
     previewCtx: null,
     downloadButton: document.getElementById('downloadButton'),
     canvasContainer: document.querySelector('.canvas-container'),
+    undoButton: document.getElementById('undoButton'),
+    redoButton: document.getElementById('redoButton'),
 
     // レイアウト設定タブ
     outputAspectRatioSelect: document.getElementById('outputAspectRatio'),
@@ -124,43 +128,10 @@ export const uiElements = {
     textExifOpacitySlider: document.getElementById('textExifOpacity'),
     textExifOpacityValueSpan: document.getElementById('textExifOpacityValue'),
 
-    // 自由入力テキスト
-    textFreeEnabledCheckbox: document.getElementById('textFreeEnabled'),
-    textFreeSettingsContainer: document.getElementById('textFreeSettingsContainer'),
-    textFreeCustomTextArea: document.getElementById('textFreeCustomTextArea'),
-    textFreeAlignLeftRadio: document.getElementById('textFreeAlignLeft'),
-    textFreeAlignCenterRadio: document.getElementById('textFreeAlignCenter'),
-    textFreeAlignRightRadio: document.getElementById('textFreeAlignRight'),
-    textFreeFontSelect: document.getElementById('textFreeFont'),
-    textFreeSizeSlider: document.getElementById('textFreeSize'),
-    textFreeSizeValueSpan: document.getElementById('textFreeSizeValue'),
-    textFreeColorInput: document.getElementById('textFreeColor'),
-    textFreePositionSelect: document.getElementById('textFreePosition'),
-    textFreeOffsetXSlider: document.getElementById('textFreeOffsetX'),
-    textFreeOffsetXValueSpan: document.getElementById('textFreeOffsetXValue'),
-    textFreeOffsetYSlider: document.getElementById('textFreeOffsetY'),
-    textFreeOffsetYValueSpan: document.getElementById('textFreeOffsetYValue'),
-    textFreeOpacitySlider: document.getElementById('textFreeOpacity'),
-    textFreeOpacityValueSpan: document.getElementById('textFreeOpacityValue'),
-
-    // 自由入力テキスト2
-    textFree2EnabledCheckbox: document.getElementById('textFree2Enabled'),
-    textFree2SettingsContainer: document.getElementById('textFree2SettingsContainer'),
-    textFree2CustomTextArea: document.getElementById('textFree2CustomTextArea'),
-    textFree2AlignLeftRadio: document.getElementById('textFree2AlignLeft'),
-    textFree2AlignCenterRadio: document.getElementById('textFree2AlignCenter'),
-    textFree2AlignRightRadio: document.getElementById('textFree2AlignRight'),
-    textFree2FontSelect: document.getElementById('textFree2Font'),
-    textFree2SizeSlider: document.getElementById('textFree2Size'),
-    textFree2SizeValueSpan: document.getElementById('textFree2SizeValue'),
-    textFree2ColorInput: document.getElementById('textFree2Color'),
-    textFree2PositionSelect: document.getElementById('textFree2Position'),
-    textFree2OffsetXSlider: document.getElementById('textFree2OffsetX'),
-    textFree2OffsetXValueSpan: document.getElementById('textFree2OffsetXValue'),
-    textFree2OffsetYSlider: document.getElementById('textFree2OffsetY'),
-    textFree2OffsetYValueSpan: document.getElementById('textFree2OffsetYValue'),
-    textFree2OpacitySlider: document.getElementById('textFree2Opacity'),
-    textFree2OpacityValueSpan: document.getElementById('textFree2OpacityValue'),
+    // 自由テキスト（可変長レイヤー）
+    customTextsListContainer: document.getElementById('customTextsList'),
+    addCustomTextButton: document.getElementById('addCustomTextButton'),
+    customTextSettingsPanel: document.getElementById('customTextSettingsPanel'),
 };
 
 let redrawDebounced = null; // ★追加: デバウンスされた再描画関数を保持する変数
@@ -188,9 +159,7 @@ export function initializeUIFromState() {
     // フォント選択を最初に設定
     populateFontSelect(uiElements.textDateFontSelect, state.textSettings.date.font);
     populateFontSelect(uiElements.textExifFontSelect, state.textSettings.exif.font);
-    // ★追加
-    populateFontSelect(uiElements.textFreeFontSelect, state.textSettings.freeText.font);
-    populateFontSelect(uiElements.textFree2FontSelect, state.textSettings.freeText2.font);
+    // 自由テキストレイヤーのフォントセレクトは、レイヤーごとにrenderCustomTextSettingsPanel()内で生成する
 
 
     const setupInputAttributesAndValue = (element, configKey, stateValue) => {
@@ -331,42 +300,14 @@ export function initializeUIFromState() {
     setupInputAttributesAndValue(uiElements.textExifOffsetYSlider, 'textExifOffsetY', tes.offsetY);
     setupInputAttributesAndValue(uiElements.textExifOpacitySlider, 'textOpacity', tes.opacity);
 
-    // ★追加: 文字入力 - 自由テキスト設定
-    const tfs = state.textSettings.freeText;
-    if (uiElements.textFreeEnabledCheckbox) uiElements.textFreeEnabledCheckbox.checked = tfs.enabled;
-    if (uiElements.textFreeCustomTextArea) uiElements.textFreeCustomTextArea.value = tfs.text;
-    if (uiElements.textFreeAlignLeftRadio) uiElements.textFreeAlignLeftRadio.checked = (tfs.textAlign === 'left');
-    if (uiElements.textFreeAlignCenterRadio) uiElements.textFreeAlignCenterRadio.checked = (tfs.textAlign === 'center');
-    if (uiElements.textFreeAlignRightRadio) uiElements.textFreeAlignRightRadio.checked = (tfs.textAlign === 'right');
-    if (uiElements.textFreeFontSelect) uiElements.textFreeFontSelect.value = tfs.font;
-    setupInputAttributesAndValue(uiElements.textFreeSizeSlider, 'textFreeSize', tfs.size);
-    if (uiElements.textFreeColorInput) uiElements.textFreeColorInput.value = tfs.color;
-    if (uiElements.textFreePositionSelect) uiElements.textFreePositionSelect.value = tfs.position;
-    setupInputAttributesAndValue(uiElements.textFreeOffsetXSlider, 'textFreeOffsetX', tfs.offsetX);
-    setupInputAttributesAndValue(uiElements.textFreeOffsetYSlider, 'textFreeOffsetY', tfs.offsetY);
-    setupInputAttributesAndValue(uiElements.textFreeOpacitySlider, 'textOpacity', tfs.opacity);
-
-    const tfs2 = state.textSettings.freeText2;
-    if (uiElements.textFree2EnabledCheckbox) uiElements.textFree2EnabledCheckbox.checked = tfs2.enabled;
-    if (uiElements.textFree2CustomTextArea) uiElements.textFree2CustomTextArea.value = tfs2.text;
-    if (uiElements.textFree2AlignLeftRadio) uiElements.textFree2AlignLeftRadio.checked = (tfs2.textAlign === 'left');
-    if (uiElements.textFree2AlignCenterRadio) uiElements.textFree2AlignCenterRadio.checked = (tfs2.textAlign === 'center');
-    if (uiElements.textFree2AlignRightRadio) uiElements.textFree2AlignRightRadio.checked = (tfs2.textAlign === 'right');
-    if (uiElements.textFree2FontSelect) uiElements.textFree2FontSelect.value = tfs2.font;
-    setupInputAttributesAndValue(uiElements.textFree2SizeSlider, 'textFreeSize', tfs2.size); // configはfreeTextと共通
-    if (uiElements.textFree2ColorInput) uiElements.textFree2ColorInput.value = tfs2.color;
-    if (uiElements.textFree2PositionSelect) uiElements.textFree2PositionSelect.value = tfs2.position;
-    setupInputAttributesAndValue(uiElements.textFree2OffsetXSlider, 'textFreeOffsetX', tfs2.offsetX); // configは共通
-    setupInputAttributesAndValue(uiElements.textFree2OffsetYSlider, 'textFreeOffsetY', tfs2.offsetY); // configは共通
-    setupInputAttributesAndValue(uiElements.textFree2OpacitySlider, 'textOpacity', tfs2.opacity); // configは共通
-
+    // 自由テキストレイヤー（可変長）
+    renderCustomTextsList();
+    renderCustomTextSettingsPanel();
 
     toggleBackgroundSettingsVisibility();
     updateFrameSettingsVisibility();
     updateTextDateSettingsVisibility();
     updateTextExifSettingsVisibility();
-    updateTextFreeSettingsVisibility();
-    updateTextFree2SettingsVisibility();
     updateSliderValueDisplays();
 }
 
@@ -377,11 +318,19 @@ export function updateSliderValueDisplays() {
         const val = parseFloat(state.photoViewParams.offsetX);
         const displayVal = Math.round((val - 0.5) * 2 * 100);
         uiElements.photoPosXValueSpan.textContent = displayVal === 0 ? '中央' : `${displayVal}%`;
+        // Canvas上のドラッグ操作でも変化しうる値なので、つまみの位置もあわせて同期する
+        // （フォーカス中でも range input は矢印キー入力以外で編集中になることはないため、無条件で同期して問題ない）
+        if (document.activeElement !== uiElements.photoPosXSlider) {
+            uiElements.photoPosXSlider.value = val;
+        }
     }
     if (uiElements.photoPosYValueSpan && uiElements.photoPosYSlider) {
         const val = parseFloat(state.photoViewParams.offsetY);
         const displayVal = Math.round((val - 0.5) * 2 * 100);
         uiElements.photoPosYValueSpan.textContent = displayVal === 0 ? '中央' : `${displayVal}%`;
+        if (document.activeElement !== uiElements.photoPosYSlider) {
+            uiElements.photoPosYSlider.value = val;
+        }
     }
     if (uiElements.baseMarginPercentValueSpan && uiElements.baseMarginPercentInput) {
         uiElements.baseMarginPercentValueSpan.textContent = `${state.baseMarginPercent}%`;
@@ -400,9 +349,15 @@ export function updateSliderValueDisplays() {
     }
     if (uiElements.bgOffsetXValueSpan && uiElements.bgOffsetXSlider) {
         uiElements.bgOffsetXValueSpan.textContent = `${state.imageBlurBackgroundParams.offsetXPercent}%`;
+        if (document.activeElement !== uiElements.bgOffsetXSlider) {
+            uiElements.bgOffsetXSlider.value = state.imageBlurBackgroundParams.offsetXPercent;
+        }
     }
     if (uiElements.bgOffsetYValueSpan && uiElements.bgOffsetYSlider) {
         uiElements.bgOffsetYValueSpan.textContent = `${state.imageBlurBackgroundParams.offsetYPercent}%`;
+        if (document.activeElement !== uiElements.bgOffsetYSlider) {
+            uiElements.bgOffsetYSlider.value = state.imageBlurBackgroundParams.offsetYPercent;
+        }
     }
     if (uiElements.jpgQualityValueSpan && uiElements.jpgQualitySlider) {
         uiElements.jpgQualityValueSpan.textContent = `${state.outputSettings.quality}`;
@@ -452,32 +407,6 @@ export function updateSliderValueDisplays() {
     if (uiElements.textExifOpacityValueSpan && uiElements.textExifOpacitySlider) {
         uiElements.textExifOpacityValueSpan.textContent = tes.opacity.toFixed(2);
     }
-    const tfs = state.textSettings.freeText;
-    if (uiElements.textFreeSizeValueSpan && uiElements.textFreeSizeSlider) {
-        uiElements.textFreeSizeValueSpan.textContent = `${tfs.size}%`;
-    }
-    if (uiElements.textFreeOffsetXValueSpan && uiElements.textFreeOffsetXSlider) {
-        uiElements.textFreeOffsetXValueSpan.textContent = `${tfs.offsetX}%`;
-    }
-    if (uiElements.textFreeOffsetYValueSpan && uiElements.textFreeOffsetYSlider) {
-        uiElements.textFreeOffsetYValueSpan.textContent = `${tfs.offsetY}%`;
-    }
-    if (uiElements.textFreeOpacityValueSpan && uiElements.textFreeOpacitySlider) {
-        uiElements.textFreeOpacityValueSpan.textContent = tfs.opacity.toFixed(2);
-    }
-    const tfs2 = state.textSettings.freeText2;
-    if (uiElements.textFree2SizeValueSpan && uiElements.textFree2SizeSlider) {
-        uiElements.textFree2SizeValueSpan.textContent = `${tfs2.size}%`;
-    }
-    if (uiElements.textFree2OffsetXValueSpan && uiElements.textFree2OffsetXSlider) {
-        uiElements.textFree2OffsetXValueSpan.textContent = `${tfs2.offsetX}%`;
-    }
-    if (uiElements.textFree2OffsetYValueSpan && uiElements.textFree2OffsetYSlider) {
-        uiElements.textFree2OffsetYValueSpan.textContent = `${tfs2.offsetY}%`;
-    }
-    if (uiElements.textFree2OpacityValueSpan && uiElements.textFree2OpacitySlider) {
-        uiElements.textFree2OpacityValueSpan.textContent = tfs2.opacity.toFixed(2);
-    }
 }
 
 export function toggleBackgroundSettingsVisibility() {
@@ -520,18 +449,198 @@ function updateTextExifSettingsVisibility() {
     }
 }
 
-function updateTextFreeSettingsVisibility() {
-    const freeTextSettingsEnabled = getState().textSettings.freeText.enabled;
-    if (uiElements.textFreeSettingsContainer) {
-        uiElements.textFreeSettingsContainer.style.display = freeTextSettingsEnabled ? '' : 'none';
+// --- 自由テキストレイヤー（可変長）のUI ---
+
+/** レイヤー一覧（チップ）を再描画する。テキスト内容の変更・追加・削除・選択変更時に呼ぶ。 */
+function renderCustomTextsList() {
+    const container = uiElements.customTextsListContainer;
+    if (!container) return;
+    const state = getState();
+    const selectedId = selectionStore.getSelectedId();
+    container.innerHTML = '';
+
+    state.textSettings.customTexts.forEach((layer, index) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'custom-text-chip' + (layer.id === selectedId ? ' selected' : '');
+        if (!layer.enabled) chip.classList.add('disabled');
+
+        const label = document.createElement('span');
+        const preview = (layer.text || '').trim();
+        label.textContent = preview ? preview.slice(0, 8) : `テキスト${index + 1}`;
+        chip.appendChild(label);
+
+        const del = document.createElement('span');
+        del.className = 'custom-text-chip-delete';
+        del.textContent = '×';
+        del.title = '削除';
+        del.addEventListener('click', (e) => {
+            e.stopPropagation();
+            selectionStore.clearSelectionIfMatches(layer.id);
+            removeCustomTextLayer(layer.id);
+            renderCustomTextsList();
+            renderCustomTextSettingsPanel();
+        });
+        chip.appendChild(del);
+
+        chip.addEventListener('click', () => selectionStore.setSelectedId(layer.id));
+        container.appendChild(chip);
+    });
+}
+
+/** 選択中レイヤーの設定パネルを丸ごと再構築する。選択変更・追加・削除時に呼ぶ（毎ドラッグでは呼ばない）。 */
+function renderCustomTextSettingsPanel() {
+    const panel = uiElements.customTextSettingsPanel;
+    if (!panel) return;
+    const state = getState();
+    const layer = state.textSettings.customTexts.find(t => t.id === selectionStore.getSelectedId());
+
+    if (!layer) {
+        panel.innerHTML = '<p class="custom-text-empty-hint">上のリストからテキストを選択、または「+ テキストを追加」で新規作成してください。</p>';
+        return;
+    }
+
+    panel.innerHTML = `
+        <div class="form-row-simple">
+            <label for="customTextEnabled">表示する:</label>
+            <input type="checkbox" id="customTextEnabled">
+        </div>
+        <div class="form-row-simple">
+            <textarea id="customTextArea" rows="3"
+                style="width: 100%; font-family: monospace; padding: 0.3rem; border-radius: 4px; border: 1px solid #ccd0d5;"></textarea>
+        </div>
+        <div class="form-row-simple" style="justify-content: space-around;">
+            <div class="radio-group"><input type="radio" id="customTextAlignLeft" name="customTextAlign" value="left"><label for="customTextAlignLeft">左寄せ</label></div>
+            <div class="radio-group"><input type="radio" id="customTextAlignCenter" name="customTextAlign" value="center"><label for="customTextAlignCenter">中央</label></div>
+            <div class="radio-group"><input type="radio" id="customTextAlignRight" name="customTextAlign" value="right"><label for="customTextAlignRight">右寄せ</label></div>
+        </div>
+        <div class="form-row-simple">
+            <label for="customTextFont">フォント:</label>
+            <select id="customTextFont"></select>
+        </div>
+        <div class="form-row-slider">
+            <label for="customTextSize">サイズ (%):</label>
+            <input type="range" id="customTextSize">
+            <span id="customTextSizeValue"></span>
+        </div>
+        <div class="form-row-simple">
+            <label for="customTextColor">文字色:</label>
+            <input type="color" id="customTextColor">
+        </div>
+        <div class="form-row-slider">
+            <label for="customTextOpacity">透過度:</label>
+            <input type="range" id="customTextOpacity">
+            <span id="customTextOpacityValue"></span>
+        </div>
+        <div class="form-row-simple">
+            <label for="customTextOffsetX">横位置 (%):</label>
+            <input type="number" id="customTextOffsetX" step="0.5">
+        </div>
+        <div class="form-row-simple">
+            <label for="customTextOffsetY">縦位置 (%):</label>
+            <input type="number" id="customTextOffsetY" step="0.5">
+        </div>
+        <p class="custom-text-drag-hint">プレビュー上でドラッグして位置を調整できます（横位置/縦位置欄はドラッグでもスクラブ操作できます。矢印キーでも微調整可）。</p>
+    `;
+
+    const id = layer.id;
+    const el = (elId) => document.getElementById(elId);
+
+    populateFontSelect(el('customTextFont'), layer.font);
+    el('customTextEnabled').checked = layer.enabled;
+    el('customTextArea').value = layer.text;
+    el(`customTextAlign${layer.textAlign.charAt(0).toUpperCase()}${layer.textAlign.slice(1)}`).checked = true;
+
+    const sizeConfig = controlsConfig.textFreeSize;
+    const sizeSlider = el('customTextSize');
+    sizeSlider.min = sizeConfig.min; sizeSlider.max = sizeConfig.max; sizeSlider.step = sizeConfig.step;
+    sizeSlider.value = layer.size;
+    el('customTextSizeValue').textContent = `${layer.size}%`;
+
+    el('customTextColor').value = layer.color;
+
+    const opacitySlider = el('customTextOpacity');
+    opacitySlider.min = 0; opacitySlider.max = 1; opacitySlider.step = 0.01;
+    opacitySlider.value = layer.opacity;
+    el('customTextOpacityValue').textContent = layer.opacity.toFixed(2);
+
+    el('customTextOffsetX').value = layer.offsetX;
+    el('customTextOffsetY').value = layer.offsetY;
+
+    // --- イベント配線 ---
+    el('customTextEnabled').addEventListener('change', (e) => {
+        updateCustomTextLayer(id, { enabled: e.target.checked });
+        renderCustomTextsList();
+    });
+    el('customTextArea').addEventListener('input', debounce((e) => {
+        updateCustomTextLayer(id, { text: e.target.value });
+        renderCustomTextsList();
+    }, 300));
+    ['Left', 'Center', 'Right'].forEach(dir => {
+        el(`customTextAlign${dir}`).addEventListener('change', (e) => {
+            if (e.target.checked) updateCustomTextLayer(id, { textAlign: dir.toLowerCase() });
+        });
+    });
+    el('customTextFont').addEventListener('change', async (e) => {
+        const selectedFontObject = googleFonts.find(f => f.displayName === e.target.value);
+        if (selectedFontObject) {
+            try {
+                e.target.disabled = true;
+                await loadGoogleFonts(selectedFontObject.apiName);
+            } catch (error) {
+                alert(`フォントの読み込みに失敗しました: ${selectedFontObject.displayName}`);
+            } finally {
+                e.target.disabled = false;
+            }
+        }
+        updateCustomTextLayer(id, { font: e.target.value });
+    });
+    el('customTextSize').addEventListener('input', (e) => {
+        const value = parseFloat(e.target.value);
+        el('customTextSizeValue').textContent = `${value}%`;
+        updateCustomTextLayer(id, { size: value });
+    });
+    el('customTextColor').addEventListener('input', (e) => {
+        updateCustomTextLayer(id, { color: e.target.value });
+    });
+    el('customTextOpacity').addEventListener('input', (e) => {
+        const value = parseFloat(e.target.value);
+        el('customTextOpacityValue').textContent = value.toFixed(2);
+        updateCustomTextLayer(id, { opacity: value });
+    });
+    enhanceAsScrubInput(el('customTextOffsetX'), { sensitivity: 0.2, onChange: (v) => updateCustomTextLayer(id, { offsetX: v }) });
+    enhanceAsScrubInput(el('customTextOffsetY'), { sensitivity: 0.2, onChange: (v) => updateCustomTextLayer(id, { offsetY: v }) });
+}
+
+/**
+ * ドラッグ等でcustomTextsのオフセットが変化した際、開いている設定パネルの数値欄だけを軽量に同期する。
+ * パネル全体を再構築しないので、入力中のフォーカスを奪わない。
+ * フォーカス中の欄は上書きしない（タイプ入力を妨げないため）。
+ */
+function syncCustomTextOffsetInputs(state) {
+    const selectedId = selectionStore.getSelectedId();
+    if (!selectedId) return;
+    const layer = state.textSettings.customTexts.find(t => t.id === selectedId);
+    if (!layer) return;
+
+    const xInput = document.getElementById('customTextOffsetX');
+    const yInput = document.getElementById('customTextOffsetY');
+    if (xInput && document.activeElement !== xInput) {
+        xInput.value = Math.round(layer.offsetX * 10) / 10;
+    }
+    if (yInput && document.activeElement !== yInput) {
+        yInput.value = Math.round(layer.offsetY * 10) / 10;
     }
 }
 
-function updateTextFree2SettingsVisibility() {
-    const freeText2SettingsEnabled = getState().textSettings.freeText2.enabled;
-    if (uiElements.textFree2SettingsContainer) {
-        uiElements.textFree2SettingsContainer.style.display = freeText2SettingsEnabled ? '' : 'none';
-    }
+/**
+ * 状態変更リスナーとして登録される、UI側の同期処理。
+ * どの入力源（スライダー/スクラブ入力/Canvasドラッグ/矢印キー）からの変更でも、
+ * ここを通じて他の全ビューが追従する。
+ */
+export function syncUIFromState(state) {
+    updateSliderValueDisplays();
+    syncCustomTextOffsetInputs(state);
 }
 
 export function updateExifCustomText(redrawCallback) {
@@ -667,7 +776,7 @@ export function setupEventListeners(redrawCallback) {
             if (element.type === 'checkbox') { valueToSet = e.target.checked; actualNestedKey = p1; actualSubNestedKey = p2; }
             else if (element.type === 'radio') { if (!e.target.checked) return; valueToSet = p1; actualNestedKey = p2; actualSubNestedKey = p3; }
             else { valueToSet = e.target.value; actualNestedKey = p1; actualSubNestedKey = p2; }
-            if ((element.id === 'textDateFontSelect' || element.id === 'textExifFontSelect' || element.id === 'textFreeFontSelect' || element.id === 'textFree2FontSelect') && valueToSet) {
+            if ((element.id === 'textDateFontSelect' || element.id === 'textExifFontSelect') && valueToSet) {
                 const selectedFontObject = googleFonts.find(f => f.displayName === valueToSet);
                 if (selectedFontObject) {
                     try {
@@ -689,8 +798,6 @@ export function setupEventListeners(redrawCallback) {
             } else if (stateKey === 'textSettings') {
                 if (actualNestedKey === 'date' && actualSubNestedKey === 'enabled') updateTextDateSettingsVisibility();
                 else if (actualNestedKey === 'exif' && actualSubNestedKey === 'enabled') updateTextExifSettingsVisibility();
-                else if (actualNestedKey === 'freeText' && actualSubNestedKey === 'enabled') updateTextFreeSettingsVisibility();
-                else if (actualNestedKey === 'freeText2' && actualSubNestedKey === 'enabled') updateTextFree2SettingsVisibility(); // ★追加
             }
             updateSliderValueDisplays();
             redrawCallback();
@@ -886,48 +993,20 @@ export function setupEventListeners(redrawCallback) {
     addNumericInputListener(uiElements.textExifOpacitySlider, 'textOpacity', 'textSettings', 'exif', 'opacity');
 
 
-    // --- 文字入力タブ - 自由テキスト ---
-    addOptionChangeListener(uiElements.textFreeEnabledCheckbox, 'textSettings', 'freeText', 'enabled');
-
-    if (uiElements.textFreeCustomTextArea) {
-        uiElements.textFreeCustomTextArea.addEventListener('input', debounce((e) => {
-            updateState({ textSettings: { freeText: { text: e.target.value } } });
-            redrawCallback();
-        }, 300));
+    // --- 文字入力タブ - 自由テキスト（可変長レイヤー） ---
+    // レイヤー個別の設定UIはrenderCustomTextSettingsPanel()内でレイヤーごとに配線されるため、
+    // ここでは「追加ボタン」と「選択変更に応じたUI再描画」のみを配線する。
+    if (uiElements.addCustomTextButton) {
+        uiElements.addCustomTextButton.addEventListener('click', () => {
+            const id = addCustomTextLayer();
+            selectionStore.setSelectedId(id);
+            renderCustomTextsList();
+            renderCustomTextSettingsPanel();
+        });
     }
-
-    [uiElements.textFreeAlignLeftRadio, uiElements.textFreeAlignCenterRadio, uiElements.textFreeAlignRightRadio].forEach(radio => {
-        addOptionChangeListener(radio, 'textSettings', radio.value, 'freeText', 'textAlign');
+    selectionStore.onSelectionChange(() => {
+        renderCustomTextsList();
+        renderCustomTextSettingsPanel();
     });
-
-    addOptionChangeListener(uiElements.textFreeFontSelect, 'textSettings', 'freeText', 'font');
-    addNumericInputListener(uiElements.textFreeSizeSlider, 'textFreeSize', 'textSettings', 'freeText', 'size');
-    addColorInputListener(uiElements.textFreeColorInput, 'textSettings', 'freeText', 'color');
-    addOptionChangeListener(uiElements.textFreePositionSelect, 'textSettings', 'freeText', 'position');
-    addNumericInputListener(uiElements.textFreeOffsetXSlider, 'textFreeOffsetX', 'textSettings', 'freeText', 'offsetX'); // ★キーを修正
-    addNumericInputListener(uiElements.textFreeOffsetYSlider, 'textFreeOffsetY', 'textSettings', 'freeText', 'offsetY'); // ★キーを修正
-    addNumericInputListener(uiElements.textFreeOpacitySlider, 'textOpacity', 'textSettings', 'freeText', 'opacity');
-
-    // --- 文字入力タブ - 自由テキスト2 ---
-    addOptionChangeListener(uiElements.textFree2EnabledCheckbox, 'textSettings', 'freeText2', 'enabled');
-
-    if (uiElements.textFree2CustomTextArea) {
-        uiElements.textFree2CustomTextArea.addEventListener('input', debounce((e) => {
-            updateState({ textSettings: { freeText2: { text: e.target.value } } });
-            redrawCallback();
-        }, 300));
-    }
-
-    [uiElements.textFree2AlignLeftRadio, uiElements.textFree2AlignCenterRadio, uiElements.textFree2AlignRightRadio].forEach(radio => {
-        addOptionChangeListener(radio, 'textSettings', radio.value, 'freeText2', 'textAlign');
-    });
-
-    addOptionChangeListener(uiElements.textFree2FontSelect, 'textSettings', 'freeText2', 'font');
-    addNumericInputListener(uiElements.textFree2SizeSlider, 'textFreeSize', 'textSettings', 'freeText2', 'size');
-    addColorInputListener(uiElements.textFree2ColorInput, 'textSettings', 'freeText2', 'color');
-    addOptionChangeListener(uiElements.textFree2PositionSelect, 'textSettings', 'freeText2', 'position');
-    addNumericInputListener(uiElements.textFree2OffsetXSlider, 'textFreeOffsetX', 'textSettings', 'freeText2', 'offsetX');
-    addNumericInputListener(uiElements.textFree2OffsetYSlider, 'textFreeOffsetY', 'textSettings', 'freeText2', 'offsetY');
-    addNumericInputListener(uiElements.textFree2OpacitySlider, 'textOpacity', 'textSettings', 'freeText2', 'opacity');
 
 }

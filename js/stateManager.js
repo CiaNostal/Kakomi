@@ -88,30 +88,8 @@ let editState = {
             offsetX: 0,
             offsetY: 0
         },
-        freeText: {
-            enabled: false,
-            text: '',
-            textAlign: 'left',
-            font: googleFonts[0].displayName,
-            size: 4, // デフォルトサイズを少し大きめに
-            color: '#333333',
-            opacity: 1, 
-            position: 'bottom-center', // デフォルトは中央に
-            offsetX: 0,
-            offsetY: 0
-        },
-        freeText2: { 
-            enabled: false,
-            text: '',
-            textAlign: 'left',
-            font: googleFonts[0].displayName,
-            size: 4,
-            color: '#333333',
-            opacity: 1,
-            position: 'bottom-center', // デフォルト位置を少し変えておくと分かりやすい
-            offsetX: 0,
-            offsetY: 0
-        }
+        // 自由テキストは可変長のレイヤー配列として保持する（1個目もaddCustomTextLayer()で追加される）
+        customTexts: []
     },
     // 出力関連の設定を追加
     outputSettings: {
@@ -153,20 +131,33 @@ function removeStateChangeListener(listener) {
     }
 }
 
+// 同一Tick内で複数回発生した通知を1回にまとめるためのフラグ。
+// これにより、リスナー内でのupdateState呼び出し（例: レイアウト計算結果の書き戻し）が
+// 無限に再入するのを防ぎつつ、複数の変更を1回の再描画・UI同期にまとめられる。
+let notifyScheduled = false;
+
 /**
- * 全ての状態変更リスナーを呼び出す
+ * 全ての状態変更リスナーを呼び出す（マイクロタスクでまとめて実行）
  */
 function notifyStateChange() {
-    for (const listener of stateChangeListeners) {
-        listener(editState); // getState()ではなく、現在のeditStateを渡すことで、リスナー側で最新の状態を参照できるようにする
-    }
+    if (notifyScheduled) return;
+    notifyScheduled = true;
+    queueMicrotask(() => {
+        notifyScheduled = false;
+        for (const listener of stateChangeListeners) {
+            listener(editState); // getState()ではなく、現在のeditStateを渡すことで、リスナー側で最新の状態を参照できるようにする
+        }
+    });
 }
 
 /**
  * 編集状態を更新する
  * @param {Object} updates - 更新するプロパティと値を含むオブジェクト
+ * @param {Object} [options] - { silent: true }を指定すると、状態は更新するがリスナーへの通知は行わない。
+ *   layoutCalculatorの計算結果（photoDrawConfig等）のような「派生データの書き戻し」に使う。
+ *   これをリスナー経由の再描画から呼ぶと無限ループになるため。
  */
-function updateState(updates) {
+function updateState(updates, options = {}) {
     function deepMerge(target, source) {
         for (const key in source) {
             if (source.hasOwnProperty(key)) {
@@ -184,7 +175,56 @@ function updateState(updates) {
     // 状態を更新
     deepMerge(editState, updates);
 
-    // 変更を通知
+    // 変更を通知（silent指定時はスキップ）
+    if (!options.silent) {
+        notifyStateChange();
+    }
+}
+
+/**
+ * 自由テキストレイヤーを1つ追加する
+ * @returns {string} 追加されたレイヤーのid
+ */
+function addCustomTextLayer() {
+    const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `text-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    editState.textSettings.customTexts.push({
+        id,
+        enabled: true,
+        text: 'テキスト',
+        textAlign: 'center',
+        font: googleFonts[0].displayName,
+        size: 5,
+        color: '#333333',
+        opacity: 1,
+        position: 'middle-center',
+        offsetX: 0,
+        offsetY: 0
+    });
+    notifyStateChange();
+    return id;
+}
+
+/**
+ * 自由テキストレイヤーを削除する
+ * @param {string} id
+ */
+function removeCustomTextLayer(id) {
+    editState.textSettings.customTexts = editState.textSettings.customTexts.filter(t => t.id !== id);
+    notifyStateChange();
+}
+
+/**
+ * 自由テキストレイヤーのプロパティを部分更新する
+ * （customTextsは配列なので、updateState()の汎用deepMergeでは配列全体が置き換わってしまうため専用関数を用意している）
+ * @param {string} id
+ * @param {Object} changes
+ */
+function updateCustomTextLayer(id, changes) {
+    const layer = editState.textSettings.customTexts.find(t => t.id === id);
+    if (!layer) return;
+    Object.assign(layer, changes);
     notifyStateChange();
 }
 
@@ -215,74 +255,6 @@ function getState() {
 
 
 /**
- * 初期状態にリセットする
- */
-function resetState() {
-    const imageBackup = editState.image;
-    const originalWidthBackup = editState.originalWidth;
-    const originalHeightBackup = editState.originalHeight;
-    const exifDataBackup = editState.exifData;
-    const originalFileNameBackup = editState.originalFileName;
-
-    editState = { // Re-assign with initial structure
-        image: imageBackup,
-        originalWidth: originalWidthBackup,
-        originalHeight: originalHeightBackup,
-        originalFileName: originalFileNameBackup,
-        photoViewParams: { offsetX: 0.5, offsetY: 0.5 },
-        outputTargetAspectRatioString: '1:1',
-        baseMarginPercent: 5,
-        backgroundColor: '#ffffff',
-        backgroundType: 'color',
-        imageBlurBackgroundParams: {
-            scale: 2.0,
-            blurAmountPercent: 3,
-            brightness: 100,
-            saturation: 100,
-            offsetXPercent: 0, // リセット時のデフォルト値
-            offsetYPercent: 0  // リセット時のデフォルト値 
-        },
-        photoDrawConfig: { sourceX: 0, sourceY: 0, sourceWidth: 0, sourceHeight: 0, destWidth: 0, destHeight: 0, destXonOutputCanvas: 0, destYonOutputCanvas: 0 },
-        outputCanvasConfig: { width: 0, height: 0 },
-        frameSettings: {
-            cornerStyle: 'none',
-            cornerRadiusPercent: 0,
-            superellipseN: 4,
-            shadowEnabled: false,
-            shadowType: 'drop',
-            shadowParams: {
-                offsetX: 0,
-                offsetY: 0,
-                blur: 2,
-                effectRangePercent: 2,
-                color: '#000000', // RGBカラー
-                opacity: 0.5      // 不透明度
-            },
-            border: {
-                enabled: false,
-                width: 1,
-                color: '#000000',
-                style: 'solid'
-            }
-        },
-        textSettings: {
-            date: {
-                enabled: false, format: 'YYYY/MM/DD', font: googleFonts[0].displayName,
-                size: 2, color: '#000000', position: 'bottom-right', offsetX: 0, offsetY: 0
-            },
-            exif: {
-                enabled: false, items: ['Make', 'Model', 'FNumber', 'ExposureTime', 'ISOSpeedRatings', 'FocalLength', 'LensModel'],
-                font: googleFonts[0].displayName, size: 2, color: '#000000', position: 'bottom-left', offsetX: 0, offsetY: 0
-            }
-        },
-        outputSettings: { quality: 100, preserveExif: true },
-        cropSettings: { aspectRatio: 'original', zoom: 1.0, offsetX: 0.5, offsetY: 0.5 },
-        exifData: exifDataBackup
-    };
-    notifyStateChange();
-}
-
-/**
  * 新しい画像がロードされたときの処理
  * @param {HTMLImageElement} img - ロードされた画像要素
  * @param {Object} exifData - 画像から抽出されたExifデータ (オプション)
@@ -305,5 +277,6 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
 }
 
 export {
-    getState, updateState, addStateChangeListener, removeStateChangeListener, resetState, setImage
+    getState, updateState, addStateChangeListener, removeStateChangeListener, setImage,
+    addCustomTextLayer, removeCustomTextLayer, updateCustomTextLayer
 };

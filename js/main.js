@@ -2,12 +2,14 @@
 // アプリケーションのエントリーポイント。各モジュールをインポートし、初期化処理を行います。
 
 import { getState, updateState, addStateChangeListener } from './stateManager.js';
-import { uiElements, initializeUIFromState, setupEventListeners } from './uiController.js'; // updateFrameSettingsVisibility を追加
+import { uiElements, initializeUIFromState, setupEventListeners, syncUIFromState } from './uiController.js'; // updateFrameSettingsVisibility を追加
 import { calculateLayout } from './layoutCalculator.js'; // 正しいレイアウト計算モジュール
 import { drawPreview } from './canvasRenderer.js';     // 現在の描画モジュール
 import { processImageFile, handleDownload } from './fileManager.js';
 import { displayExifInfo } from './exifHandler.js';   // Exif表示用
 import { initializeTabs } from './tabManager.js';
+import { initCanvasInteraction } from './interaction/canvasInteraction.js';
+import { initHistory, recordStateChange, undo, redo, onHistoryChange, onSnapshotApplied } from './history/historyManager.js';
 
 /**
  * プレビューの再描画を要求します。
@@ -29,10 +31,13 @@ export async function requestRedraw() {
 
     const layoutInfo = calculateLayout(currentState);
 
+    // 派生データ（レイアウト計算結果）の書き戻しなのでsilent指定。
+    // これをsilentにしないと、requestRedraw自身がstateChangeListenerとして登録された際に
+    // updateState → 通知 → requestRedraw → updateState … の無限ループになる。
     updateState({
         photoDrawConfig: layoutInfo.photoDrawConfig,
         outputCanvasConfig: layoutInfo.outputCanvasConfig
-    });
+    }, { silent: true });
 
     // updateStateにより内部のeditStateは更新された。
     // 描画やExif表示には、この最新の状態（特にphotoDrawConfigとoutputCanvasConfigが反映されたもの）を使いたい。
@@ -62,15 +67,34 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     initializeUIFromState();
-    setupEventListeners(requestRedraw); // requestRedrawをコールバックとして渡す
+    setupEventListeners(requestRedraw); // requestRedrawをコールバックとして渡す（既存のスライダー等はこの直接呼び出しのまま）
     initializeTabs();
 
-    // (オプション) stateManagerのリスナーとしてrequestRedrawを登録する場合の検討:
-    // addStateChangeListener(requestRedraw);
-    // この場合、uiController内の各イベントリスナーはredrawCallbackを呼ばず、updateStateのみを行う形になる。
-    // これにより、状態変更が一元的にrequestRedrawをトリガーするようになるが、
-    // updateStateがrequestRedraw内で呼ばれる場合（現状photoDrawConfigなどの保存で発生）の
-    // 無限ループや不要な再描画を防ぐ工夫が必要になる場合がある。現状はコールバック方式を維持。
+    // 状態変更リスナーを実戦投入する。
+    // Canvasドラッグ・矢印キーnudge・スクラブ数値入力など、新しく追加した入力経路は
+    // redrawCallbackを直接呼ばず、updateState()を呼ぶだけでここを通じて反映される。
+    // （既存のスライダー等はredrawCallbackの直接呼び出しも残っているため二重に走るが、
+    //   requestRedrawは冪等なので実害はない。）
+    addStateChangeListener(requestRedraw);
+    addStateChangeListener(syncUIFromState);
+    addStateChangeListener(recordStateChange);
+
+    if (uiElements.previewCanvas) {
+        initCanvasInteraction(uiElements.previewCanvas);
+    }
+
+    initHistory();
+    onHistoryChange(({ canUndo, canRedo }) => {
+        if (uiElements.undoButton) uiElements.undoButton.disabled = !canUndo;
+        if (uiElements.redoButton) uiElements.redoButton.disabled = !canRedo;
+    });
+    // undo/redoはcustomTexts配列の個数など非連続な変化を伴いうるため、
+    // 通常のドラッグ用の軽量同期ではなくUI全体を再構築する
+    onSnapshotApplied(() => {
+        initializeUIFromState();
+    });
+    if (uiElements.undoButton) uiElements.undoButton.addEventListener('click', undo);
+    if (uiElements.redoButton) uiElements.redoButton.addEventListener('click', redo);
 
     if (uiElements.imageLoader) {
         uiElements.imageLoader.addEventListener('change', (event) => {

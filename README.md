@@ -11,8 +11,13 @@
   - プリセット比率に加え、幅/高さを自由入力するカスタム比率にも対応
 - 背景編集（単色背景、拡大ぼかし背景）
 - フレーム加工（角丸、超楕円、ドロップ/インナーシャドウ、縁取り）
-- テキストオーバーレイ（撮影日、Exif情報、自由テキスト×2）
+- テキストオーバーレイ（撮影日、Exif情報、自由テキスト）
+  - 自由テキストは個数無制限で追加・削除可能
   - 多数のGoogle Fonts（欧文・和文）から選択可能
+- プレビュー上でのインタラクティブな操作
+  - 写真・拡大ぼかし背景・自由テキストをプレビュー上で直接ドラッグして配置調整
+  - ドラッグ中はキャンバス中央線・端・他オブジェクトへのスナップとガイド線表示（Altキーで一時無効化）
+  - 選択中は矢印キーで微調整、数値入力欄はドラッグでのスクラブ操作にも対応
 - Exif情報の抽出・画面表示・出力画像への再埋め込み
 - 高解像度JPEG出力（元画像の解像度を維持したまま書き出し）
 
@@ -37,7 +42,7 @@ npx serve .
 - **[piexif.js](https://github.com/hMatoba/piexifjs)**（CDN経由）: Exif情報の読み取り・書き込み
 - **Google Fonts**: テキスト描画用Webフォント
 
-対応ブラウザは Chrome / Edge / Firefox / Safari の最新版を想定しています（ES6 Modules、Canvas API、FileReader API が必要）。
+対応ブラウザは Chrome / Edge / Firefox / Safari の最新版を想定しています（ES6 Modules、Canvas API、FileReader API、Pointer Events API が必要）。
 
 ## プロジェクト構成
 
@@ -58,12 +63,19 @@ Kakomi/
     ├── textRenderer.js      # テキスト描画
     ├── fileManager.js       # ファイル読み込み・ダウンロード
     ├── exifHandler.js       # Exif情報の抽出・埋め込み
+    ├── interaction/         # Canvasドラッグ・選択状態・スナップ
+    │   ├── interactionRegistry.js
+    │   ├── selectionStore.js
+    │   ├── guideStore.js
+    │   ├── snapEngine.js
+    │   ├── canvasInteraction.js
+    │   └── adapters/        # 対象種別ごとの値変換（テキスト・写真・背景）
+    ├── ui/
+    │   └── scrubInput.js    # ドラッグ/クリック両対応の数値入力コンポーネント
     └── utils/
         └── canvasUtils.js   # Canvas操作ユーティリティ
 ```
 
 ## ドキュメント
 
-各モジュールの詳細な仕様、状態オブジェクトの構造、レイアウト計算アルゴリズム、数値精度に関するポリシーなどは [`spec.md`](./spec.md) を参照してください。
-
-なお [`Kakomi_refactoring.md`](./Kakomi_refactoring.md) は Fabric.js を用いた ver 2.0 への全面リライト計画書であり、現時点では未実装です。現在動作しているアプリの仕様とは別物である点にご注意ください。
+各モジュールの詳細な仕様、状態オブジェクトの構造、レイアウト計算アルゴリズム、数値精度に関するポリシー、インタラクション基盤の設計などは [`spec.md`](./spec.md) を参照してください。

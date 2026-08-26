@@ -108,23 +108,18 @@ export async function drawText(ctx, currentState, canvasWidth, canvasHeight, bas
         if (text.trim() !== '') textTasks.push({ settings, text });
     }
 
-    // 自由テキストの表示タスク準備
-    if (currentState.textSettings.freeText.enabled) {
-        const settings = currentState.textSettings.freeText;
-        const text = settings.text || '';
-        if (text.trim() !== '') textTasks.push({ settings, text });
+    // 自由テキストレイヤー（可変長）の表示タスク準備
+    for (const layer of currentState.textSettings.customTexts || []) {
+        if (!layer.enabled) continue;
+        const text = layer.text || '';
+        if (text.trim() !== '') textTasks.push({ settings: layer, text, id: layer.id });
     }
 
-    // 自由テキスト2の表示タスク準備
-    if (currentState.textSettings.freeText2.enabled) {
-        const settings = currentState.textSettings.freeText2;
-        const text = settings.text || '';
-        if (text.trim() !== '') textTasks.push({ settings, text });
-    }
-
-    // すべてのテキスト描画タスクを実行
+    // すべてのテキスト描画タスクを実行。
+    // customTextsのレイヤー（id持ち）は、ドラッグ操作の当たり判定用にbboxを収集して返す。
+    const registrations = [];
     for (const task of textTasks) {
-        const { settings, text } = task;
+        const { settings, text, id } = task;
         const fontObject = googleFonts.find(f => f.displayName === settings.font);
 
         if (!fontObject) {
@@ -136,17 +131,21 @@ export async function drawText(ctx, currentState, canvasWidth, canvasHeight, bas
             await loadSingleGoogleFont(fontObject.apiName);
             const fontCheckString = `${fontObject.fontWeightForCanvas} 1em "${fontObject.fontFamilyForCanvas}"`;
             await document.fonts.load(fontCheckString, text);
-            drawSingleText(ctx, settings, text, fontObject, basePhotoShortSideForTextPx, canvasWidth, canvasHeight);
+            const bbox = drawSingleText(ctx, settings, text, fontObject, basePhotoShortSideForTextPx, canvasWidth, canvasHeight);
+            if (id && bbox) {
+                registrations.push({ id, type: 'text', ...bbox });
+            }
         } catch (error) {
             console.error(`[TextRenderer] Failed to load or draw with font ${fontObject.apiName}:`, error);
         }
     }
+    return registrations;
 }
 
 /**
  * 単一のテキストブロックを描画する共通関数
  * @param {CanvasRenderingContext2D} ctx
- * @param {Object} settings - textSettings.date, .exif, .freeText のいずれか
+ * @param {Object} settings - textSettings.date, .exif, .customTexts[]の要素のいずれか
  * @param {string} textToDraw - 描画する実際の文字列
  * @param {Object} fontObject
  * @param {number} basePhotoShortSidePx
@@ -155,7 +154,7 @@ export async function drawText(ctx, currentState, canvasWidth, canvasHeight, bas
  */
 function drawSingleText(ctx, settings, textToDraw, fontObject, basePhotoShortSidePx, canvasWidth, canvasHeight) {
     const fontSizePx = (settings.size / 100) * basePhotoShortSidePx;
-    if (fontSizePx <= 0) return;
+    if (fontSizePx <= 0) return null;
 
     ctx.save();
     ctx.font = `${fontObject.fontWeightForCanvas} ${fontSizePx}px "${fontObject.fontFamilyForCanvas}"`;
@@ -215,6 +214,19 @@ function drawSingleText(ctx, settings, textToDraw, fontObject, basePhotoShortSid
         });
     }
     ctx.restore();
+
+    // 当たり判定用のバウンディングボックス（左上原点）を、実際の描画基準点(x, y)から逆算する
+    let boxLeft;
+    if (textAlign === 'left') boxLeft = x;
+    else if (textAlign === 'center') boxLeft = x - maxWidth / 2;
+    else boxLeft = x - maxWidth; // right
+
+    let boxTop;
+    if (textBaseline === 'top') boxTop = y;
+    else if (textBaseline === 'middle') boxTop = y - textBlockHeight / 2;
+    else boxTop = y - textBlockHeight; // bottom
+
+    return { x: boxLeft, y: boxTop, width: maxWidth, height: textBlockHeight };
 }
 
 function calculateTextPosition(position, offsetXPercent, offsetYPercent, textWidth, textHeight, photoShortSidePx, canvasWidth, canvasHeight, textAlign = 'left', textBaseline = 'top') {

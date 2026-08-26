@@ -13,7 +13,9 @@ Kakomiは、写真にフレーム加工とテキストオーバーレイを追�
 - プレビューは軽量に、出力は高解像度で、両者の一貫性を保つ
 
 **本ドキュメントについて:**
-本ファイルは、現在リポジトリに存在する実装（Vanilla JS + Canvas API版）のコードを実際に読んで検証・記述した技術仕様書です。リポジトリには `Kakomi_refactoring.md` という別ファイルも存在しますが、これは Fabric.js を用いた ver 2.0 への全面リライト計画書であり、現時点では実装されていません。本ドキュメントが記述する内容とは別物である点に注意してください。
+本ファイルは、現在リポジトリに存在する実装（Vanilla JS + Canvas API版）のコードを実際に読んで検証・記述した技術仕様書です。
+
+なお、以前は Fabric.js を用いた全面リライト計画書（`Kakomi_refactoring.md`）が別途存在していましたが、その計画が目指していた「インタラクティブなオブジェクト操作（ドラッグ移動）」「選択中オブジェクトに応じて内容が変わる設定パネル」は、Fabric.js等の外部ライブラリを導入せずVanilla JSのまま実現したため（5.12節以降を参照）、計画書自体は削除しました。
 
 ### 主な機能
 - 写真の読み込み（ファイル選択またはドラッグ&ドロップ）
@@ -21,7 +23,8 @@ Kakomiは、写真にフレーム加工とテキストオーバーレイを追�
 - レイアウト設定（出力アスペクト比、余白、写真位置調整）
 - 背景編集（単色背景、拡大ぼかし背景）
 - フレーム加工（角丸、超楕円、影、縁取り）
-- テキストオーバーレイ（撮影日、Exif情報、自由テキスト）
+- テキストオーバーレイ（撮影日、Exif情報、自由テキスト。自由テキストは個数無制限で追加可能）
+- プレビュー上でのインタラクティブなドラッグ操作（写真配置・背景位置・自由テキスト。スナップ/ガイド、矢印キーでの微調整に対応）
 - Exif情報の表示と保持
 - 高解像度JPEG出力（元画像解像度維持）
 
@@ -46,23 +49,23 @@ Kakomiは、写真にフレーム加工とテキストオーバーレイを追�
 
 ### 設計パターン
 - **モジュール化アーキテクチャ**: 機能ごとに独立したモジュールに分割
-- **状態管理**: 中央集約型の状態管理（stateManager.js）
-- **描画パイプライン**: プレビュー描画と最終出力描画の分離
+- **状態管理**: 中央集約型の状態管理（stateManager.js）。単一の`editState`をあらゆる入力経路（UIコントロール、Canvasドラッグ、矢印キー、スクラブ入力）が共通の`updateState()`経由で更新し、状態変更リスナー（`requestRedraw`, `syncUIFromState`）が全ビューを追従させる
+- **描画パイプライン**: プレビュー描画と最終出力描画の分離（immediate-mode。状態が変わるたびCanvasを毎回描き直す）
+- **インタラクション層**: Canvas上のクリック選択・ドラッグ・スナップは、immediate-mode描画方式を変えずに「描画と同時に当たり判定用バウンディングボックスを記録する」という設計で実現している（詳細は5.12節以降）
 
 ### データフロー
 ```
-ユーザー操作
+ユーザー操作（UI操作 / Canvasドラッグ / 矢印キー / スクラブ入力）
   ↓
-UIイベント (uiController.js)
+状態更新 (stateManager.js: updateState() / updateCustomTextLayer())
   ↓
-状態更新 (stateManager.js)
-  ↓
-レイアウト計算 (layoutCalculator.js)
-  ↓
-描画処理 (canvasRenderer.js)
-  ├─ 背景描画 (backgroundRenderer.js)
-  ├─ フレーム加工 (frameRenderer.js)
-  └─ テキスト描画 (textRenderer.js)
+状態変更リスナーへ通知（同一Tick内はqueueMicrotaskでまとめて1回）
+  ├─ レイアウト計算 (layoutCalculator.js) → 描画処理 (canvasRenderer.js)
+  │     ├─ 背景描画 (backgroundRenderer.js)
+  │     ├─ フレーム加工 (frameRenderer.js)
+  │     ├─ テキスト描画 (textRenderer.js)
+  │     └─ 当たり判定の登録・選択枠/スナップガイドの描画 (interaction/interactionRegistry.js, guideStore.js)
+  └─ UIの数値欄・スライダーの同期 (uiController.js: syncUIFromState())
   ↓
 プレビュー更新 / 最終出力
 ```
@@ -74,7 +77,6 @@ Kakomi/
 ├── index.html              # メインHTMLファイル
 ├── style.css               # スタイルシート
 ├── spec.md                  # 技術仕様書（本ファイル）
-├── Kakomi_refactoring.md   # リファクタリング仕様書
 └── js/
     ├── main.js             # エントリーポイント
     ├── stateManager.js     # 状態管理
@@ -88,6 +90,18 @@ Kakomi/
     ├── textRenderer.js     # テキスト描画
     ├── fileManager.js      # ファイル読み込みとダウンロード処理
     ├── exifHandler.js      # Exif情報の抽出と埋め込み
+    ├── interaction/        # Canvas上のドラッグ操作・選択状態・スナップを扱う
+    │   ├── interactionRegistry.js  # 描画済みオブジェクトの当たり判定用バウンディングボックス帳簿
+    │   ├── selectionStore.js       # 選択中オブジェクトID（editStateとは別管理の一時的UI状態）
+    │   ├── guideStore.js           # ドラッグ中に表示するスナップガイド線の一時状態
+    │   ├── snapEngine.js           # スナップ（吸着）位置の計算
+    │   ├── canvasInteraction.js    # pointerイベント処理・ドラッグ状態機械・矢印キーnudge
+    │   └── adapters/
+    │       ├── textAdapter.js        # 自由テキストレイヤーの値変換
+    │       ├── photoAdapter.js       # 写真の枠内配置の値変換
+    │       └── backgroundAdapter.js  # 拡大ぼかし背景の位置の値変換
+    ├── ui/
+    │   └── scrubInput.js   # ドラッグでスクラブ／クリックでタイプ入力できる数値入力コンポーネント
     └── utils/
         └── canvasUtils.js  # Canvas操作ユーティリティ
 ```
@@ -161,8 +175,10 @@ Kakomi/
   textSettings: {                     // テキスト設定
     date: { enabled, format, font, size, color, opacity, position, offsetX, offsetY },
     exif: { enabled, items, customText, textAlign, font, size, color, opacity, position, offsetX, offsetY },
-    freeText: { enabled, text, textAlign, font, size, color, opacity, position, offsetX, offsetY },
-    freeText2: { enabled, text, textAlign, font, size, color, opacity, position, offsetX, offsetY }
+    customTexts: [                    // 自由テキストレイヤー（可変長の配列。個数の制限なし）
+      { id, enabled, text, textAlign, font, size, color, opacity, position, offsetX, offsetY }
+      // ...ユーザーが「+ テキストを追加」で追加した分だけ要素が増える
+    ]
   },
   outputSettings: {                    // 出力設定
     quality: number,                  // JPEG品質（1-100）
@@ -180,14 +196,17 @@ Kakomi/
 
 **主要関数:**
 - `getState()`: 現在の状態のディープコピーを取得
-- `updateState(updates)`: 状態を更新（ディープマージ）
+- `updateState(updates, options)`: 状態を更新（ディープマージ）。`options.silent`が`true`の場合はリスナーへの通知を行わない（後述）
 - `setImage(img, exifData, fileName)`: 新しい画像を設定
-- `resetState()`: 状態を初期値にリセット
-- `addStateChangeListener(listener)`: 状態変更リスナーを登録
+- `addStateChangeListener(listener)` / `removeStateChangeListener(listener)`: 状態変更リスナーの登録／解除
+- `addCustomTextLayer()`: 自由テキストレイヤーを1つ追加し、そのidを返す
+- `removeCustomTextLayer(id)`: 指定idの自由テキストレイヤーを削除
+- `updateCustomTextLayer(id, changes)`: 指定idの自由テキストレイヤーのプロパティを部分更新
 
-**現状のコードに関する補足（未使用・不整合箇所）:**
-- `resetState()` と `addStateChangeListener()` / `removeStateChangeListener()` はエクスポートされているが、現在のUIには「リセット」ボタンが存在せず、`main.js` 内の `addStateChangeListener(requestRedraw)` の呼び出しもコメントアウトされたままになっている。そのため、これらは実行時には呼び出されない未使用コードとなっている。
-- `resetState()` が再構築する初期値は、モジュール先頭の `editState` 初期値と一部食い違っている（例: `frameSettings.cornerRadiusPercent` が `10` ではなく `0`、`superellipseN` が `10` ではなく `4` にリセットされる。また `textSettings` に `freeText` / `freeText2` が含まれず、`date`/`exif` の初期値も微妙に異なる）。呼び出し自体が行われないため実害はないが、将来リセット機能を有効化する際は要修正。
+**状態変更通知のバッチ化と`silent`オプション（設計上の注記）:**
+- `notifyStateChange()`は同期即時実行ではなく、`queueMicrotask()`で同一Tick内の複数回呼び出しを1回にまとめてから発火する。これにより、Canvasドラッグ中に高頻度で発生する`updateState`呼び出しでも、実際の再描画・UI同期はTickごとに1回に自然に間引かれる。
+- `main.js`の`requestRedraw()`は、レイアウト計算結果（`photoDrawConfig`/`outputCanvasConfig`）を`updateState(..., { silent: true })`で書き戻している。これは「派生データの書き戻し」であり、もし通常の（silentでない）`updateState`として呼び出しリスナーに`requestRedraw`自体が登録されていると、`updateState → 通知 → requestRedraw → updateState → …`という無限ループになるため。
+- `customTexts`は配列のため、`updateState()`の汎用ディープマージ（配列は丸ごと置換される仕様）では個々のレイヤーだけを安全に部分更新できない。そのため`updateCustomTextLayer(id, changes)`という専用関数を別途用意している。
 
 ### 5.3 uiController.js
 UI要素の制御とイベントハンドリングを担当します。
@@ -198,13 +217,21 @@ UI要素の制御とイベントハンドリングを担当します。
 - UI変更から状態への同期（`setupEventListeners()`）
 - フォント選択リストの生成
 - Exifカスタムテキストの更新
+- 自由テキストレイヤー一覧・設定パネルの動的生成（`renderCustomTextsList()`, `renderCustomTextSettingsPanel()`）
+- 状態変更リスナーとしての同期処理（`syncUIFromState(state)`をエクスポートし、`main.js`から`addStateChangeListener`で登録している）
 
 **イベント処理:**
 - レイアウト設定（アスペクト比、余白、写真位置）
 - 背景設定（タイプ、色、ぼかしパラメータ）
 - フレーム設定（角スタイル、影、縁取り）
-- テキスト設定（各テキスト要素の設定）
+- テキスト設定（撮影日・Exif情報の設定、自由テキストレイヤーの追加/削除/個別設定）
 - 出力設定（JPEG品質）
+
+**自由テキストレイヤーUIの構成:**
+- 「+ テキストを追加」ボタン（`#addCustomTextButton`）で`customTexts[]`にレイヤーを追加し、`selectionStore`経由で選択状態にする
+- レイヤー一覧はチップ表示（`#customTextsList`）で、クリックで選択切り替え、×ボタンで削除
+- 選択中レイヤーの設定パネル（`#customTextSettingsPanel`）は`renderCustomTextSettingsPanel()`が選択変更のたびにHTML文字列で丸ごと再構築する。ただし、Canvasドラッグ中の座標欄（横位置/縦位置）の値だけは`syncCustomTextOffsetInputs()`が軽量に`.value`のみ更新し、パネル全体は再構築しない（入力中のフォーカスを奪わないため）
+- 横位置/縦位置の数値欄は`js/ui/scrubInput.js`の`enhanceAsScrubInput()`で拡張されており、ドラッグでスクラブ、クリックでタイプ入力ができる
 
 ### 5.4 layoutCalculator.js
 レイアウト計算を担当します。写真の切り出し領域、出力Canvasサイズ、写真の配置位置を計算します。
@@ -234,15 +261,20 @@ UI要素の制御とイベントハンドリングを担当します。
 **主要関数:**
 - `drawPreview(currentState, previewCanvas, previewCtx)`: プレビュー描画
 - `renderFinal(currentState)`: 最終出力用の高解像度Canvasを生成
+- `getLastPreviewContext()`: 直近の`drawPreview`呼び出し時点でのプレビュー⇔出力解像度の変換情報（`{ scale, photoShortSidePx }`）を返す。`canvasInteraction.js`がドラッグ量の単位変換に使用する
 
-**描画順序:**
-1. 背景描画
+**描画順序（`drawPreview`。`renderFinal`は8・9を除く1〜7のみ）:**
+1. 背景描画（拡大ぼかし背景の場合、当たり判定用に背景の矩形を`interactionRegistry`へ登録）
 2. ドロップシャドウ（有効な場合）
-3. クリッピングパス設定（角丸/超楕円）
-4. 写真本体描画
-5. インナーシャドウ（有効な場合）
-6. 縁取り（有効な場合）
-7. テキスト描画
+3. 写真の当たり判定用矩形を`interactionRegistry`へ登録
+4. クリッピングパス設定（角丸/超楕円）
+5. 写真本体描画
+6. インナーシャドウ（有効な場合）
+7. 縁取り（有効な場合）
+8. テキスト描画（`customTexts`の各レイヤーは、描画と同時に当たり判定用の矩形を`interactionRegistry`へ登録）
+9. **プレビューのみ**: 選択中オブジェクトのハイライト枠、ドラッグ中のスナップガイド線を描画（出力画像には含まれない）
+
+`interactionRegistry`は`drawPreview`が呼ばれるたびに`clear()`されてから再構築される。immediate-mode描画（毎回全部描き直す）方式を変えずに当たり判定を持たせるための設計。詳細は5.12節以降を参照。
 
 ### 5.6 backgroundRenderer.js
 背景描画を担当します。
@@ -281,9 +313,9 @@ UI要素の制御とイベントハンドリングを担当します。
 テキスト描画を担当します。
 
 **主要関数:**
-- `drawText(ctx, currentState, canvasWidth, canvasHeight, basePhotoShortSideForTextPx)`: テキストを描画
+- `drawText(ctx, currentState, canvasWidth, canvasHeight, basePhotoShortSideForTextPx)`: テキストを描画。`date`/`exif`/`customTexts[]`の各レイヤーをループして描画し、`customTexts`のうち実際に描画したレイヤーについては`{ id, type: 'text', x, y, width, height }`という当たり判定用バウンディングボックスの配列を返す（`canvasRenderer.js`がこれを`interactionRegistry`へ登録する）
 - `loadSingleGoogleFont(fontApiName)`: Google Fontを読み込む
-- `drawSingleText(ctx, settings, textToDraw, fontObject, basePhotoShortSidePx, canvasWidth, canvasHeight)`: 単一テキストブロックを描画
+- `drawSingleText(ctx, settings, textToDraw, fontObject, basePhotoShortSidePx, canvasWidth, canvasHeight)`: 単一テキストブロックを描画し、描画した矩形（左上原点の`{x, y, width, height}`）を返す
 - `calculateTextPosition(...)`: テキスト位置を計算
 - `getFormattedDate(exifDateTimeString, displayFormat)`: Exif日時をフォーマット
 
@@ -341,6 +373,68 @@ Canvas操作のユーティリティ関数を提供します。
 - `dataURLToBlob(dataURL)`: DataURLをBlobに変換
 - `fitCanvasToContainer(canvas, targetAspectRatio)`: Canvasサイズをコンテナに合わせる
 
+### 5.12 interaction/interactionRegistry.js
+直近の`drawPreview`呼び出しで描画されたインタラクティブなオブジェクト（写真・拡大ぼかし背景・自由テキストレイヤー）のバウンディングボックスを記録する帳簿。
+
+**主要関数:**
+- `clear()`: 帳簿を空にする（`drawPreview`の冒頭で呼ばれる）
+- `register(entry)`: `{ id, type, x, y, width, height }`形式の矩形を1件登録する（描画順=z順に積むこと）
+- `hitTest(px, py)`: 指定座標にヒットする最前面のオブジェクトを返す（登録順の後ろから走査するため、後から描画＝上に重なっているものが優先される）
+- `getById(id)`: idからバウンディングボックスを取得
+- `getAll()`: 登録済みの全オブジェクトを返す（スナップ判定に使用）
+
+immediate-mode描画（毎回全部描き直す）という既存の設計を変えずに当たり判定を持たせるため、「描画するたびに帳簿を作り直す」という運用にしている。
+
+### 5.13 interaction/selectionStore.js
+「今どのオブジェクトを選択しているか」という一時的なUI状態を保持する、`editState`とは意図的に分離された小さなストア。選択状態は書き出しファイルの内容にもプリセット保存にもUndo/Redoの対象にも含めるべきではないため。
+
+**主要関数:**
+- `setSelectedId(id)` / `getSelectedId()`: 選択中オブジェクトIDの設定・取得
+- `onSelectionChange(fn)`: 選択変更時に呼ばれるリスナーを登録（`uiController.js`がこれを購読し、選択中レイヤーの設定パネルを再描画する）
+- `clearSelectionIfMatches(id)`: 指定idが選択中であれば選択解除する（レイヤー削除時に使用）
+
+### 5.14 interaction/guideStore.js
+ドラッグ中に表示するスナップガイド線の情報（`{ axis: 'x'|'y', value: number }`の配列）を一時的に保持する。`canvasInteraction.js`が書き込み、`canvasRenderer.js`の`drawPreview`が読み取ってプレビューにのみ描画する。
+
+### 5.15 interaction/snapEngine.js
+ドラッグ中のオブジェクトを、キャンバス中央線・キャンバス端・他オブジェクトの端/中央に吸着させるロジック。
+
+**主要関数:**
+- `computeSnapCorrection(candidateBox, canvasWidth, canvasHeight, otherBoxes)`: スナップ適用前の候補位置と、他の登録済みオブジェクトの矩形を受け取り、`{ dx, dy, guideLines }`（吸着のための補正量とガイド線情報）を返す
+
+吸着の判定は、対象の左端/中央/右端（X軸）・上端/中央/下端（Y軸）それぞれについて、候補となるターゲット線（キャンバス端/中央、他オブジェクトの端/中央）との距離が閾値（6px）以内かどうかで行う。対象の種類（テキスト/写真/背景）を問わずバウンディングボックス同士の位置関係だけで判定するため、将来オブジェクトの種類が増えても変更不要。
+
+### 5.16 interaction/canvasInteraction.js
+`previewCanvas`上でのクリック選択・ドラッグ移動・矢印キーnudgeを扱う共通コントローラ。対象がテキストであろうと写真・背景であろうと同じロジックで処理できるよう、実際の値の読み書きは種類ごとのアダプタ（5.17節）に委譲している。
+
+**主要関数:**
+- `initCanvasInteraction(canvas)`: `previewCanvas`にpointerイベントとキーボードイベントを配線する。`main.js`からアプリ初期化時に一度だけ呼び出される
+
+**操作仕様:**
+- ドラッグ移動: `pointerdown`で`interactionRegistry.hitTest()`により対象を特定し選択、`pointermove`で移動量を計算して対応するアダプタの`commit()`を呼ぶ
+- スナップ: ドラッグ中は既定でスナップが有効。**Altキーを押しながらドラッグするとスナップを一時的に無効化**できる
+- 矢印キーnudge: 何かが選択されている状態で矢印キーを押すと1px相当、Shift+矢印キーで10px相当（いずれもプレビューcanvas上のpx単位）移動する。フォーカスが入力欄（input/textarea/select）にある間は無効化される
+
+### 5.17 interaction/adapters/*.js
+「ドラッグ量（プレビューpx）」と「各対象が実際に状態として持っている値の単位系」との変換を吸収する層。`canvasInteraction.js`は対象の種類を意識せず、共通インターフェース（`getValue`, `computeChanges`, `commit`）越しに扱う。
+
+| アダプタ | 対象 | 値の単位系 | 備考 |
+|---|---|---|---|
+| `textAdapter.js` | `customTexts[]`の各レイヤー | 写真短辺基準の% | `updateCustomTextLayer()`経由で配列内の該当レイヤーのみ更新 |
+| `photoAdapter.js` | 写真の枠内配置（`photoViewParams`） | 可動範囲(movable width/height)に対する0.0〜1.0の割合 | `layoutCalculator.js`の可動範囲計算と対応させる必要があり、`getLastPreviewContext().scale`を使った変換が必要 |
+| `backgroundAdapter.js` | 拡大ぼかし背景の位置（`imageBlurBackgroundParams`） | 写真短辺基準の%（textAdapterと同じ単位系） | 単色背景（`backgroundType === 'color'`）の場合はそもそも`interactionRegistry`に登録されないため、ドラッグ対象にならない |
+
+**単位変換上の注意（重要）:** `getLastPreviewContext()`が返す`photoShortSidePx`は、写真の実解像度ではなく**プレビュー描画時に縮小された後の短辺px**を指す。ドラッグのポインタ移動量（`dxPx`/`dyPx`）も同じプレビューcanvasのpx空間の値であるため、`textAdapter`や`backgroundAdapter`ではscaleによる再変換は不要で、単純な比率計算（`dxPx / photoShortSidePx * 100`）だけで正しく変換できる。過去にここへ誤って`/ scale`を追加してしまい、プレビューの縮小率次第でドラッグ量が数倍に増幅される不具合が発生したことがあるため、新しいアダプタを追加する際は注意すること。
+
+### 5.18 ui/scrubInput.js
+`<input type="number">`を「ドラッグしてスクラブ」「クリックしてタイプ入力」の両方に対応させる軽量な機能拡張。Figma/After Effects等にある数値入力の挙動を、素のPointer Eventsだけで再現している（外部ライブラリ不要）。
+
+**主要関数:**
+- `enhanceAsScrubInput(inputEl, { sensitivity, precision, onChange })`: 指定した数値入力要素を拡張する
+  - フォーカスされていない状態で押してドラッグ → 値が連続的に変化（スクラブ）
+  - 押してすぐ離す（ドラッグしなかった）→ 通常のテキスト入力にフォーカスして選択状態にする
+  - フォーカス中の直接クリックはスクラブを起動しない（タイプ入力を優先）
+
 ## 6. データフロー
 
 ### 6.1 画像読み込みフロー
@@ -378,7 +472,23 @@ canvasRenderer.drawPreview() で描画
   └─ textRenderer.drawText()
 ```
 
-### 6.3 ダウンロードフロー
+### 6.3 インタラクティブ操作フロー（Canvasドラッグ／矢印キーnudge／数値スクラブ入力）
+```
+Canvasドラッグ / 矢印キーnudge / スクラブ入力によるタイプ入力
+  ↓
+interaction/adapters/*.js の computeChanges() で値を計算
+  ↓
+adapter.commit() → stateManager.updateState() または updateCustomTextLayer()
+  ↓
+notifyStateChange()（同一Tick内はqueueMicrotaskで1回にまとめられる）
+  ↓
+登録済みリスナーが呼ばれる
+  ├─ main.requestRedraw()（Canvas再描画。photoDrawConfig等の書き戻しはsilent指定で再度の通知を起こさない）
+  └─ uiController.syncUIFromState()（スライダー・数値欄の値を同期。フォーカス中の欄は上書きしない）
+```
+どの入力経路（スライダー・Canvasドラッグ・矢印キー・数値欄への直接入力）から状態が変更されても、`updateState`という単一の入口を通る限り、上記のリスナーを通じて他の全ビューが自動的に追従する。
+
+### 6.4 ダウンロードフロー
 ```
 ユーザーがダウンロードボタンをクリック
   ↓
@@ -444,7 +554,8 @@ Blobをダウンロード
 - **写真位置調整**: 出力画像のフレーム内で、写真をどこに配置するか
   - X方向: 0.0-1.0の範囲で調整（0.0=左端、0.5=中央、1.0=右端）
   - Y方向: 0.0-1.0の範囲で調整（0.0=上端、0.5=中央、1.0=下端）
-  - **注意:** 仕様書v1では「9点から選択」とあるが、現在の実装では連続的な位置調整となっている
+  - スライダーでの調整に加え、**プレビュー上で写真を直接ドラッグしても位置を調整できる**（`interaction/adapters/photoAdapter.js`）。ドラッグ中はキャンバス中央線・端・他オブジェクトへのスナップも働く
+  - **注意:** 仕様書v1では「9点から選択」とあるが、現在の実装では連続的な位置調整（スライダー・ドラッグの両方）となっている
 
 ### 7.3 背景編集
 - **背景タイプ**: 「単色」または「写真の拡大ぼかし画像」から選択
@@ -465,6 +576,7 @@ Blobをダウンロード
 - **Y方向オフセット**: -500%〜500%（写真短辺基準、デフォルト0%）
   - 背景として使用する元画像の表示位置を上下に調整
   - **注意:** 仕様書v1では-50%～50%とあるが、現在の実装では-500%～500%となっている
+- 拡大ぼかし背景が有効な場合、スライダーでの調整に加え、**プレビュー上で写真の外側（余白部分）を直接ドラッグしても位置を調整できる**（`interaction/adapters/backgroundAdapter.js`）。単色背景の場合は位置の概念がないためドラッグ対象にならない
 
 **実装詳細:**
 - Canvas全体を覆うように画像を拡大（cover方式）
@@ -491,17 +603,16 @@ Blobをダウンロード
     - **実装状況の補足**: `frameRenderer.js` の `applyBorder()` は `border.style === 'dashed'` の場合に `ctx.setLineDash()` で破線描画をサポートしており、`uiController.js` にも `frameBorderStyleSelect` 用のイベントリスナーが用意されている。しかし `index.html` 内の実際の `<select id="frameBorderStyle">` はHTMLコメントとして無効化されており、現在のUI画面上からは破線を選択する手段がない（`border.style` は常に初期値の `'solid'` のまま）。つまり、描画ロジックとイベント配線は実装済みだが、UIコントロール自体が非表示のため、実質的に破線は使用できない状態にある。
 
 ### 7.5 テキストオーバーレイ
-各テキスト要素（撮影日、Exif情報、自由テキスト×2）に対して以下を設定可能:
+撮影日、Exif情報、自由テキスト（`customTexts[]`）の各テキスト要素に対して以下を設定可能:
 
 - **有効/無効**: チェックボックスで切り替え
 - **フォント**: Google Fontsから選択
 - **サイズ**: 写真短辺に対する%（0.1-10%または0.1-50%）
 - **色**: HEXカラーコード
 - **不透明度**: 0-1
-- **位置**: 左上、中央上、右上、左下、中央下、右下から選択
-- **オフセットX/Y**: %で指定（-50%〜50%または-100%〜100%）
+- **位置**: 左上、中央上、右上、左下、中央下、右下から選択（アンカー）＋オフセットX/Y（%指定、アンカーからのさらなる微調整）
 - **水平方向の配置（textAlign）**: 左寄せ、中央、右寄せ
-  - Exif情報、自由テキスト、自由テキスト2にはこの配置ラジオボタンが存在する。
+  - Exif情報、自由テキストにはこの配置ラジオボタンが存在する。
   - **撮影日表示にはこの配置コントロールが存在しない**（`textDateAlign〜`に相当するUI要素はなく、`textRenderer.js`側でも撮影日設定オブジェクトに`textAlign`が定義されていないため、位置指定文字列から自動的に左/中央/右寄せが決まる）。
 
 **撮影日表示**:
@@ -513,9 +624,15 @@ Blobをダウンロード
 - カスタムテキストエリアで編集可能
 - 自動生成されたテキストを編集可能
 
-**自由テキスト**:
-- 2つの独立したテキスト要素
+**自由テキスト（`customTexts[]`）**:
+- 個数の制限なく追加・削除できる（「文字入力」タブの「+ テキストを追加」ボタン）
+- 各レイヤーは独立した`id`を持ち、テキスト内容・フォント・サイズ・色・不透明度・位置を個別に設定できる
 - 改行対応（\nで区切る）
+- 新規追加時は初期文言「テキスト」でCanvas中央（`position: 'middle-center'`）に配置される
+- **プレビュー上で直接ドラッグして位置を移動できる**（当たり判定・ドラッグ処理は5.12〜5.17節のインタラクション基盤による）。ドラッグ中はキャンバス中央線・端・写真・他のテキストレイヤーへのスナップが働き、Altキー押下でスナップを無効化できる
+- 選択中は矢印キーで1px相当（Shift+矢印で10px相当）の微調整ができる
+- 横位置/縦位置の数値欄はドラッグでスクラブ、クリックでタイプ入力の両方に対応（`ui/scrubInput.js`）
+- レイヤー一覧はチップ表示で、クリックで選択（プレビュー上での選択とも連動する）、×ボタンで削除できる
 
 ### 7.6 出力設定
 - **JPEG品質**: 1-100（スライダー、`jpgQuality`）
@@ -629,8 +746,10 @@ Blobをダウンロード
 - ES6 Modules
 - Canvas API
 - FileReader API
+- Pointer Events API（Canvas上のドラッグ操作・スクラブ数値入力に使用。マウス/タッチ/ペンを統一的に扱う）
 - OffscreenCanvas（オプション、フォールバックあり）
 - structuredClone（オプション、フォールバックあり）
+- crypto.randomUUID（自由テキストレイヤーのid生成に使用。非対応環境向けのフォールバックあり）
 
 ## 10. パフォーマンス考慮事項
 
@@ -639,6 +758,32 @@ Blobをダウンロード
 - フォント読み込みの非同期処理
 - オフスクリーンCanvasの適切な使用
 
+## 11. 今後の拡張可能性
+
+### 11.1 インタラクション基盤の続き
+- **構図調整（クロップのズーム・パン）の数値UI化**: `cropSettings`はまだUIから操作できない（12.3節参照）。まずスライダー/スクラブ入力での有効化を優先する。on-canvasドラッグでの構図調整は「写真の枠内配置ドラッグ」（7.2節）と操作が競合するため、修飾キー等によるモード切替の設計が必要
+- テキストの拡大・回転ハンドル（現状はドラッグ移動のみ対応）
+- 自由テキストレイヤーの並び替え・複製
+- 複数選択・一括移動
+- タッチデバイスでの実機確認（Pointer Events自体は実装済みだが未検証）
+
+### 11.2 編集効率まわり
+- 編集履歴（Undo/Redo）機能 — `getState()`が既に`structuredClone`でディープコピーを返す設計のため、スナップショット方式の履歴は実装しやすい
+- 編集設定のテンプレートプリセット保存／呼び出し機能（`localStorage`を想定）
+- カラーパレットで選んだ色の履歴を残して次回素早く呼び出せる機能（`localStorage`を想定）
+
+### 11.3 出力・確認体験
+- 出力前確認画面の強化（等倍/ズームでの確認）
+- 出力フォーマットの選択肢追加（PNG等、透過が必要な用途向け）
+
+### 11.4 スケール系（優先度低）
+- 複数画像のバッチ処理
+- より高度な画像フィルター
+- レイヤーのグループ化・整列/分布ツール
+- アニメーションGIF出力
+- より多くのExifタグの対応
+- モバイル操作最適化（フリック・タップ操作、レスポンシブレイアウトの改善）
+
 ## 12. 仕様書v1との対応状況
 
 ### 12.1 実装済みの仕様
@@ -646,11 +791,11 @@ Blobをダウンロード
 以下の仕様は仕様書v1の要求通りに実装されています：
 
 - ✅ 単位系の定義（写真短辺基準の%指定）
-- ✅ 構図調整機能（内部実装、`cropSettings`として実装）
+- ✅ 構図調整機能（内部実装、`cropSettings`として実装。UIは12.3節参照）
 - ✅ 出力フォーマット設定（目標アスペクト比、基準余白）
-- ✅ 背景編集（単色、拡大ぼかし）
+- ✅ 背景編集（単色、拡大ぼかし。拡大ぼかしはドラッグでの位置調整にも対応）
 - ✅ フレーム加工（角丸、超楕円、影、縁取り）
-- ✅ テキストオーバーレイ（撮影日、Exif情報、自由テキスト）
+- ✅ テキストオーバーレイ（撮影日、Exif情報、自由テキスト。自由テキストは複数レイヤー・ドラッグ移動に対応）
 - ✅ Exif情報の表示と再埋め込み
 - ✅ 数値精度と丸め処理のポリシー（写真描画の厳格な整数化）
 - ✅ レイアウト計算の詳細フロー
@@ -668,7 +813,11 @@ Blobをダウンロード
 
 **写真の配置方法:**
 - **仕様書v1の要求**: 9点から選択（中央、上、下、左、右、左上、右上、左下、右下）
-- **現在の実装**: 連続的な位置調整（X/Y方向それぞれ0.0-1.0の範囲でスライダー調整）
+- **現在の実装**: 連続的な位置調整（スライダー、およびプレビュー上でのドラッグ。スナップにより中央や端への位置決めも可能）
+
+**自由テキストの個数:**
+- **仕様書v1の要求**: 自由テキスト2つ（固定枠）
+- **現在の実装**: `customTexts[]`による可変長レイヤー（個数制限なし、追加/削除可能）
 
 ### 12.3 未実装の仕様
 
@@ -679,27 +828,7 @@ Blobをダウンロード
 - 現在の実装では、構図調整機能は内部（`cropSettings`）として実装されているが、UIから直接操作できない
 - 構図調整のパラメータ（アスペクト比、拡大率、位置）はデフォルト値で動作
 
-**その他の未実装機能（v2以降の拡張案として記載）:**
+**その他の未実装機能（11章の拡張案を参照）:**
 - カラーパレットで選んだ色の履歴機能
 - 編集設定のテンプレートプリセット保存／呼び出し機能
 - 編集履歴（Undo/Redo）機能
-
-（`resetState()`によるリセット機能や、状態変更リスナーの仕組み自体はコードとして存在するが、UI・呼び出し元とも配線されておらず、実質的に未使用である点は5.2節を参照。）
-
-## 11. 今後の拡張可能性
-
-### 11.1 仕様書v1で提案されている機能
-- 構図調整のUI実装（アスペクト比、拡大率、位置調整のコントロール）
-- 写真の配置を9点から選択する機能
-- カラーパレットで選んだ色の履歴を残して次回素早く呼び出せる機能
-- 編集設定のテンプレートプリセット保存／呼び出し機能
-- 編集履歴（Undo/Redo）機能
-- 出力前確認画面の強化（ズームなど）
-- モバイル操作最適化（フリック・タップ操作）
-
-### 11.2 その他の拡張案
-- 複数画像のバッチ処理
-- より高度な画像フィルター
-- レイヤー管理機能
-- アニメーションGIF出力
-- より多くのExifタグの対応
