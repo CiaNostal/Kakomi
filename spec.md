@@ -91,13 +91,14 @@ Kakomi/
     ├── fileManager.js      # ファイル読み込みとダウンロード処理
     ├── exifHandler.js      # Exif情報の抽出と埋め込み
     ├── interaction/        # Canvas上のドラッグ操作・選択状態・スナップを扱う
-    │   ├── interactionRegistry.js  # 描画済みオブジェクトの当たり判定用バウンディングボックス帳簿
+    │   ├── interactionRegistry.js  # 描画済みオブジェクトの当たり判定用バウンディングボックス帳簿（回転対応）
     │   ├── selectionStore.js       # 選択中オブジェクトID（editStateとは別管理の一時的UI状態）
     │   ├── guideStore.js           # ドラッグ中に表示するスナップガイド線の一時状態
+    │   ├── textHandleStore.js      # 選択中テキストの拡大・回転ハンドルの画面上座標の一時状態
     │   ├── snapEngine.js           # スナップ（吸着）位置の計算
-    │   ├── canvasInteraction.js    # pointerイベント処理・ドラッグ状態機械・矢印キーnudge
+    │   ├── canvasInteraction.js    # pointerイベント処理・ドラッグ状態機械・矢印キーnudge・拡大回転ハンドル操作
     │   └── adapters/
-    │       ├── textAdapter.js        # 自由テキストレイヤーの値変換
+    │       ├── textAdapter.js        # 自由テキストレイヤーの値変換（位置・サイズ・回転）
     │       ├── photoAdapter.js       # 写真の枠内配置の値変換
     │       └── backgroundAdapter.js  # 拡大ぼかし背景の位置の値変換
     ├── ui/
@@ -107,7 +108,8 @@ Kakomi/
     │   ├── presetStore.js       # 編集設定のプリセット保存・一覧・削除・適用（localStorage）
     │   └── colorHistoryStore.js # カラーピッカーで選んだ色の履歴（localStorage、全ピッカー共通）
     └── utils/
-        └── canvasUtils.js  # Canvas操作ユーティリティ
+        ├── canvasUtils.js  # Canvas操作ユーティリティ
+        └── geometry.js     # 回転を伴う当たり判定・ハンドル配置用の幾何ヘルパー（rotatePoint）
 ```
 
 ## 5. 主要モジュールの説明
@@ -180,8 +182,9 @@ Kakomi/
     date: { enabled, format, font, size, color, opacity, position, offsetX, offsetY },
     exif: { enabled, items, customText, textAlign, font, size, color, opacity, position, offsetX, offsetY },
     customTexts: [                    // 自由テキストレイヤー（可変長の配列。個数の制限なし）
-      { id, enabled, text, textAlign, font, size, color, opacity, position, offsetX, offsetY }
+      { id, enabled, text, textAlign, font, size, color, opacity, position, offsetX, offsetY, rotation }
       // ...ユーザーが「+ テキストを追加」で追加した分だけ要素が増える
+      // rotation: 度数。拡大・回転ハンドル（7.5節）またはパネルの数値入力で操作する
     ]
   },
   outputSettings: {                    // 出力設定
@@ -279,9 +282,11 @@ UI要素の制御とイベントハンドリングを担当します。
 6. インナーシャドウ（有効な場合）
 7. 縁取り（有効な場合）
 8. テキスト描画（`customTexts`の各レイヤーは、描画と同時に当たり判定用の矩形を`interactionRegistry`へ登録）
-9. **プレビューのみ**: 選択中オブジェクトのハイライト枠、ドラッグ中のスナップガイド線を描画（出力画像には含まれない）
+9. **プレビューのみ**: 選択中オブジェクトのハイライト枠（回転している場合はボックス中心を軸に回転させて描画）、選択中がテキストレイヤーの場合は拡大・回転ハンドル、ドラッグ中のスナップガイド線を描画（出力画像には含まれない）
 
 `interactionRegistry`は`drawPreview`が呼ばれるたびに`clear()`されてから再構築される。immediate-mode描画（毎回全部描き直す）方式を変えずに当たり判定を持たせるための設計。詳細は5.12節以降を参照。
+
+**拡大・回転ハンドルの描画（`drawTextHandles`）:** 選択中オブジェクトが`type === 'text'`の場合のみ、ボックス右下角に拡大ハンドル（四角）、ボックス上端中央から少し離れた位置に回転ハンドル（丸、接続線付き）を描画する。回転時はハンドルもボックスと一緒に回転させて描く。同時に、その画面上の座標（回転適用後）を`interaction/textHandleStore.js`に記録し、`canvasInteraction.js`がポインタ操作時の当たり判定に使う。詳細は5.22節参照。
 
 ### 5.6 backgroundRenderer.js
 背景描画を担当します。
@@ -320,11 +325,13 @@ UI要素の制御とイベントハンドリングを担当します。
 テキスト描画を担当します。
 
 **主要関数:**
-- `drawText(ctx, currentState, canvasWidth, canvasHeight, basePhotoShortSideForTextPx)`: テキストを描画。`date`/`exif`/`customTexts[]`の各レイヤーをループして描画し、`customTexts`のうち実際に描画したレイヤーについては`{ id, type: 'text', x, y, width, height }`という当たり判定用バウンディングボックスの配列を返す（`canvasRenderer.js`がこれを`interactionRegistry`へ登録する）
+- `drawText(ctx, currentState, canvasWidth, canvasHeight, basePhotoShortSideForTextPx)`: テキストを描画。`date`/`exif`/`customTexts[]`の各レイヤーをループして描画し、`customTexts`のうち実際に描画したレイヤーについては`{ id, type: 'text', x, y, width, height, rotation }`という当たり判定用バウンディングボックスの配列を返す（`canvasRenderer.js`がこれを`interactionRegistry`へ登録する）
 - `loadSingleGoogleFont(fontApiName)`: Google Fontを読み込む
-- `drawSingleText(ctx, settings, textToDraw, fontObject, basePhotoShortSidePx, canvasWidth, canvasHeight)`: 単一テキストブロックを描画し、描画した矩形（左上原点の`{x, y, width, height}`）を返す
+- `drawSingleText(ctx, settings, textToDraw, fontObject, basePhotoShortSidePx, canvasWidth, canvasHeight)`: 単一テキストブロックを描画し、描画した矩形（左上原点の`{x, y, width, height, rotation}`）を返す
 - `calculateTextPosition(...)`: テキスト位置を計算
 - `getFormattedDate(exifDateTimeString, displayFormat)`: Exif日時をフォーマット
+
+**回転（`customTexts[]`の`rotation`、度数）:** `settings.rotation`が非0の場合、描画前に（バウンディングボックスの中心を軸に）`ctx.translate`＋`ctx.rotate`＋`ctx.translate`で座標系を回転させてから`fillText`する。バウンディングボックス自体は「回転前のローカル座標」のまま返す（`x, y, width, height`は無回転の値）。回転適用の有無や当たり判定・ハンドル描画への影響は5.12節・5.22節を参照。`date`/`exif`には`rotation`の概念はなく、`customTexts[]`のみ対応する。
 
 **フォント読み込み:**
 - Google Fonts APIから動的にCSSを読み込み
@@ -385,8 +392,8 @@ Canvas操作のユーティリティ関数を提供します。
 
 **主要関数:**
 - `clear()`: 帳簿を空にする（`drawPreview`の冒頭で呼ばれる）
-- `register(entry)`: `{ id, type, x, y, width, height }`形式の矩形を1件登録する（描画順=z順に積むこと）
-- `hitTest(px, py)`: 指定座標にヒットする最前面のオブジェクトを返す（登録順の後ろから走査するため、後から描画＝上に重なっているものが優先される）
+- `register(entry)`: `{ id, type, x, y, width, height, rotation? }`形式の矩形を1件登録する（描画順=z順に積むこと）。`rotation`（度）は自由テキストレイヤーのみ持ちうる（写真・背景は常に無回転）
+- `hitTest(px, py)`: 指定座標にヒットする最前面のオブジェクトを返す（登録順の後ろから走査するため、後から描画＝上に重なっているものが優先される）。`entry.rotation`が非0の場合、クリック座標をボックス中心を軸に`-rotation`だけ逆回転させてから通常のAABB判定を行う（`utils/geometry.js`の`rotatePoint()`を使用）。これにより、ボックス自体は常に「回転前のローカル座標」を保持したまま、見た目上回転した矩形への当たり判定が成立する
 - `getById(id)`: idからバウンディングボックスを取得
 - `getAll()`: 登録済みの全オブジェクトを返す（スナップ判定に使用）
 
@@ -421,6 +428,9 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 - ドラッグ移動: `pointerdown`で`interactionRegistry.hitTest()`により対象を特定し選択、`pointermove`で移動量を計算して対応するアダプタの`commit()`を呼ぶ
 - スナップ: ドラッグ中は既定でスナップが有効。**Altキーを押しながらドラッグするとスナップを一時的に無効化**できる
 - 矢印キーnudge: 何かが選択されている状態で矢印キーを押すと1px相当、Shift+矢印キーで10px相当（いずれもプレビューcanvas上のpx単位）移動する。フォーカスが入力欄（input/textarea/select）にある間は無効化される
+- **拡大・回転ハンドル（自由テキストのみ）**: `pointerdown`時、通常のオブジェクト当たり判定（`interactionRegistry.hitTest()`）より先に`textHandleStore.getTextHandles()`のハンドル座標との距離判定を行う（当たり判定半径`HANDLE_HIT_RADIUS = 10px`）。ヒットした場合は`dragState.mode`を`'resize'`または`'rotate'`にしてドラッグを開始し、通常の移動ドラッグ（`mode: 'move'`）とは別処理で`textAdapter.commitResize()`/`commitRotate()`を直接呼ぶ（アダプタの`getValue`/`computeChanges`/`commit`という汎用インターフェースではなく、テキスト専用の`getTransform`/`commitResize`/`commitRotate`を使う。写真・背景にはこの概念がないため）
+  - 拡大: ボックス中心からハンドルまでの距離の比（現在距離÷ドラッグ開始時距離）をドラッグ開始時点の`size`に掛ける。回転角に関わらず「ハンドルを中心から遠ざける/近づける」動作になる
+  - 回転: ボックス中心から見たポインタの角度（`Math.atan2`）の変化量をドラッグ開始時点の`rotation`に加算する。**Shiftキーを押しながらドラッグすると15度刻みにスナップ**する
 
 ### 5.17 interaction/adapters/*.js
 「ドラッグ量（プレビューpx）」と「各対象が実際に状態として持っている値の単位系」との変換を吸収する層。`canvasInteraction.js`は対象の種類を意識せず、共通インターフェース（`getValue`, `computeChanges`, `commit`）越しに扱う。
@@ -432,6 +442,11 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 | `backgroundAdapter.js` | 拡大ぼかし背景の位置（`imageBlurBackgroundParams`） | 写真短辺基準の%（textAdapterと同じ単位系） | 単色背景（`backgroundType === 'color'`）の場合はそもそも`interactionRegistry`に登録されないため、ドラッグ対象にならない |
 
 **単位変換上の注意（重要）:** `getLastPreviewContext()`が返す`photoShortSidePx`は、写真の実解像度ではなく**プレビュー描画時に縮小された後の短辺px**を指す。ドラッグのポインタ移動量（`dxPx`/`dyPx`）も同じプレビューcanvasのpx空間の値であるため、`textAdapter`や`backgroundAdapter`ではscaleによる再変換は不要で、単純な比率計算（`dxPx / photoShortSidePx * 100`）だけで正しく変換できる。過去にここへ誤って`/ scale`を追加してしまい、プレビューの縮小率次第でドラッグ量が数倍に増幅される不具合が発生したことがあるため、新しいアダプタを追加する際は注意すること。
+
+**`textAdapter.js`の拡張（拡大・回転ハンドル用）:** 通常の`getValue`/`computeChanges`/`commit`（位置移動用）に加えて、以下を持つ。
+- `getTransform(id)`: ドラッグ開始時点の`{ size, rotation }`を取得
+- `commitResize(id, startSize, scaleFactor)`: `startSize * scaleFactor`を`controlsConfig.textFreeSize`の`min`/`max`でクランプして`size`に反映
+- `commitRotate(id, newRotationDeg)`: `rotation`に反映（0.1度単位に丸め）
 
 ### 5.18 ui/scrubInput.js
 `<input type="number">`を「ドラッグしてスクラブ」「クリックしてタイプ入力」の両方に対応させる軽量な機能拡張。Figma/After Effects等にある数値入力の挙動を、素のPointer Eventsだけで再現している（外部ライブラリ不要）。
@@ -467,6 +482,20 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 - `attachColorHistory(inputEl)`: 指定した色入力要素にスウォッチ行を追加する。`.form-row-simple`（flexコンテナ）の直下ではなく、その行コンテナ自体の直後に独立した行として挿入する（`inputEl.closest('.form-row-simple')`で行コンテナを特定）
   - `change`イベントで確定した色を`colorHistoryStore.recordColor()`に記録し、画面上の全スウォッチ行（`customTextSettingsPanel`のように毎回作り直されるものも含む）を再描画する
   - 再描画対象はモジュール内の`registry`で管理し、パネル再構築等でDOMから外れた行は次回更新時に自動的に間引かれる
+
+### 5.22 interaction/textHandleStore.js
+選択中の自由テキストレイヤーに表示する「拡大ハンドル」「回転ハンドル」の画面上の座標（回転適用後、previewCanvasのpx空間）を一時的に保持する、`guideStore.js`と同じ「描画側が書き、操作側が読む」パターンの小さなストア。`canvasRenderer.js`の`drawTextHandles()`が`drawPreview`のたびに書き込み、`canvasInteraction.js`の`pointerdown`がハンドルへの当たり判定に読み取る。
+
+**主要関数:**
+- `setTextHandles(h)`: `{ id, center: {x,y}, resize: {x,y}, rotate: {x,y} }`を設定する
+- `getTextHandles()`: 現在の値を取得する（未選択またはテキスト以外を選択中は`null`）
+- `clearTextHandles()`: 値をクリアする（`drawPreview`の冒頭で`interactionRegistry.clear()`と合わせて呼ばれる）
+
+### 5.23 utils/geometry.js
+回転を伴う当たり判定・ハンドル配置で共通して使う、小さな幾何ヘルパー。
+
+**主要関数:**
+- `rotatePoint(x, y, cx, cy, angleDeg)`: 点`(x, y)`を中心`(cx, cy)`を軸に`angleDeg`度（時計回り、Canvas座標系）回転させた座標を返す。逆回転させたい場合は`-angleDeg`を渡す（`interactionRegistry.hitTest()`がクリック座標をローカル座標に戻す用途で使用）。`canvasRenderer.js`の`drawTextHandles()`はハンドルの画面上座標（回転適用後）を求めるのに使用する
 
 ## 6. データフロー
 
@@ -553,21 +582,22 @@ Blobをダウンロード
 
 この単位系により、写真のサイズに関わらず一貫した視覚的な比率で装飾を適用できる。
 
-### 7.1 構図調整（内部実装）
+### 7.1 構図調整（トリミング）
 
-**注意:** 現在のUIには構図調整の直接的なコントロールは表示されていないが、内部では`cropSettings`として実装されている。
+`cropSettings`として実装されており、「レイアウト設定」タブの「構図調整（トリミング）」フィールドセットからスライダー・数値入力で操作できる（出力アスペクト比と同じ、プリセットselect＋幅/高さ自由入力＋⇄反転ボタンのパターン）。
 
 **設定項目:**
 - **アスペクト比**: 元画像から切り出す部分のアスペクト比
-  - `'original'`: 元画像の比率を使用
-  - `'1:1'`, `'4:3'`, `'16:9'`など: 指定された比率で切り出し
+  - `'original'`: 元画像の比率を使用（UI上は「元画像のまま」）
+  - `'1:1'`, `'4:3'`, `'16:9'`など: 指定された比率で切り出し。プリセット（1:1, 4:3, 3:4, 16:9, 9:16）に加え、「カスタム」選択時は幅/高さの自由入力＋⇄反転ボタンで任意の比率を指定できる
 - **拡大率（ズーム）**: 元画像の解像度を維持する範囲でのトリミング領域の調整
-  - 範囲: 1.0以上（1.0で拡大なし）
-  - 中心から拡大する方式
-- **位置調整（offsetX/Y）**: 切り出し領域の位置を調整
+  - 範囲: 1.0〜5.0（1.0で拡大なし、UIスライダーの上限。内部計算上は1.0以上であれば動作する）
+  - 基準サイズ（ズーム1.0時点でアスペクト比に収まる最大の切り出し窓）を、指定したズーム倍率で均等に縮小する方式
+- **位置調整（パン、offsetX/Y）**: ズームによって生まれた可動範囲内で、切り出し窓の位置を調整
   - 範囲: 0.0-1.0（0.5が中央）
-  - X方向: 横方向の位置
-  - Y方向: 縦方向の位置
+  - X方向: 横方向の位置、Y方向: 縦方向の位置
+  - **重要な設計上の注記**: 可動範囲は`元画像のサイズ - ズーム後の切り出し窓のサイズ`で決まるため、ズームするほどパンできる範囲が広がる。ズーム1.0かつアスペクト比が`'original'`（元画像と同じ比率）の場合は可動範囲が0になり、パンしても見た目は変化しない（切り出し窓がすでに原画像いっぱいのため）
+  - 以前の実装では、パン位置を「ズーム前の基準窓内での位置」として決定してからズームで中心を縮小する方式だったため、`'original'`のようにズーム前の可動範囲が0のケースではズームインしてもパンが一切効かないという制約があった。現在の実装（`layoutCalculator.js`）はズーム後の可動範囲を基準にパン位置を計算するため、常に「ズームした分だけパンできる」という直感的な挙動になっている
 
 **実装詳細:**
 - `layoutCalculator.js`の`calculateLayout()`関数で処理
@@ -664,8 +694,9 @@ Blobをダウンロード
 - 新規追加時は初期文言「テキスト」でCanvas中央（`position: 'middle-center'`）に配置される
 - **プレビュー上で直接ドラッグして位置を移動できる**（当たり判定・ドラッグ処理は5.12〜5.17節のインタラクション基盤による）。ドラッグ中はキャンバス中央線・端・写真・他のテキストレイヤーへのスナップが働き、Altキー押下でスナップを無効化できる
 - 選択中は矢印キーで1px相当（Shift+矢印で10px相当）の微調整ができる
-- 横位置/縦位置の数値欄はドラッグでスクラブ、クリックでタイプ入力の両方に対応（`ui/scrubInput.js`）
+- 横位置/縦位置/回転の数値欄はドラッグでスクラブ、クリックでタイプ入力の両方に対応（`ui/scrubInput.js`）
 - レイヤー一覧はチップ表示で、クリックで選択（プレビュー上での選択とも連動する）、×ボタンで削除できる
+- **拡大・回転（`rotation`、度数）**: 選択中はプレビュー上に拡大ハンドル（右下角の四角）と回転ハンドル（上端中央から少し離れた丸）が表示され、ドラッグで直接操作できる（5.16・5.22節参照）。回転ハンドルはShiftキー併用で15度刻みにスナップする。設定パネルには数値入力欄もあり、ハンドルドラッグ中はこの数値欄・サイズスライダーもリアルタイムに追従する
 
 ### 7.6 出力設定
 - **JPEG品質**: 1-100（スライダー、`jpgQuality`）
@@ -794,8 +825,8 @@ Blobをダウンロード
 ## 11. 今後の拡張可能性
 
 ### 11.1 インタラクション基盤の続き
-- **構図調整（クロップのズーム・パン）の数値UI化**: `cropSettings`はまだUIから操作できない（12.3節参照）。まずスライダー/スクラブ入力での有効化を優先する。on-canvasドラッグでの構図調整は「写真の枠内配置ドラッグ」（7.2節）と操作が競合するため、修飾キー等によるモード切替の設計が必要
-- テキストの拡大・回転ハンドル（現状はドラッグ移動のみ対応）
+- ✅ 構図調整（クロップのズーム・パン）の数値UI化（7.1節参照）。on-canvasドラッグでの構図調整（「写真の枠内配置ドラッグ」との操作競合）は未対応のまま
+- ✅ テキストの拡大・回転ハンドル（5.22節参照。photo/backgroundは対象外）
 - 自由テキストレイヤーの並び替え・複製
 - 複数選択・一括移動
 - タッチデバイスでの実機確認（Pointer Events自体は実装済みだが未検証）
@@ -824,7 +855,7 @@ Blobをダウンロード
 以下の仕様は仕様書v1の要求通りに実装されています：
 
 - ✅ 単位系の定義（写真短辺基準の%指定）
-- ✅ 構図調整機能（内部実装、`cropSettings`として実装。UIは12.3節参照）
+- ✅ 構図調整機能（`cropSettings`として実装。「レイアウト設定」タブからUIで操作可能）
 - ✅ 出力フォーマット設定（目標アスペクト比、基準余白）
 - ✅ 背景編集（単色、拡大ぼかし。拡大ぼかしはドラッグでの位置調整にも対応）
 - ✅ フレーム加工（角丸、超楕円、影、縁取り）
@@ -837,6 +868,7 @@ Blobをダウンロード
 - ✅ 編集履歴（Undo/Redo）機能
 - ✅ 編集設定のテンプレートプリセット保存／呼び出し機能
 - ✅ カラーパレットで選んだ色の履歴機能
+- ✅ テキストの拡大・回転ハンドル
 
 ### 12.2 実装が異なる仕様
 
@@ -857,13 +889,6 @@ Blobをダウンロード
 
 ### 12.3 未実装の仕様
 
-以下の仕様は仕様書v1に記載されているが、現在のUIには実装されていません：
-
-**構図調整のUI:**
-- 仕様書v1では「レイアウト設定タブ」に構図調整のコントロールが含まれる想定
-- 現在の実装では、構図調整機能は内部（`cropSettings`）として実装されているが、UIから直接操作できない
-- 構図調整のパラメータ（アスペクト比、拡大率、位置）はデフォルト値で動作
-
-**その他の未実装機能（11章の拡張案を参照）:**
-- 構図調整（クロップのズーム・パン）の数値UI化（11.1節参照）
-- テキストの拡大・回転ハンドル、複数選択・一括移動（11.1節参照）
+**未実装機能（11章の拡張案を参照）:**
+- 自由テキストレイヤーの並び替え・複製、複数選択・一括移動（11.1節参照）
+- タッチデバイスでの実機確認（11.1節参照）

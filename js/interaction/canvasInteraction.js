@@ -13,6 +13,7 @@ import { setActiveGuides, clearActiveGuides } from './guideStore.js';
 import { computeSnapCorrection } from './snapEngine.js';
 import { getLastPreviewContext } from '../canvasRenderer.js';
 import { isEditableElement } from '../utils/domUtils.js';
+import { getTextHandles } from './textHandleStore.js';
 import textAdapter from './adapters/textAdapter.js';
 import photoAdapter from './adapters/photoAdapter.js';
 import backgroundAdapter from './adapters/backgroundAdapter.js';
@@ -23,6 +24,9 @@ const adaptersByType = {
     background: backgroundAdapter
 };
 
+// 拡大・回転ハンドルは小さいため、実際の描画サイズより広めの当たり判定半径を設ける（px）
+const HANDLE_HIT_RADIUS = 10;
+
 let dragState = null;
 
 function toCanvasCoords(canvas, clientX, clientY) {
@@ -30,6 +34,10 @@ function toCanvasCoords(canvas, clientX, clientY) {
     const scaleX = rect.width > 0 ? canvas.width / rect.width : 1;
     const scaleY = rect.height > 0 ? canvas.height / rect.height : 1;
     return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+}
+
+function distance(x1, y1, x2, y2) {
+    return Math.hypot(x1 - x2, y1 - y2);
 }
 
 /**
@@ -42,6 +50,39 @@ export function initCanvasInteraction(canvas) {
 
     canvas.addEventListener('pointerdown', (e) => {
         const { x, y } = toCanvasCoords(canvas, e.clientX, e.clientY);
+
+        // 選択中テキストの拡大・回転ハンドルへの当たり判定を、通常のオブジェクト選択より先に行う。
+        // （ハンドルはそのオブジェクトが選択されている間だけ表示・有効なため）
+        const handles = getTextHandles();
+        if (handles) {
+            if (distance(x, y, handles.resize.x, handles.resize.y) <= HANDLE_HIT_RADIUS) {
+                const startValue = textAdapter.getTransform(handles.id);
+                if (startValue) {
+                    dragState = {
+                        mode: 'resize', id: handles.id, center: handles.center,
+                        startDist: distance(x, y, handles.center.x, handles.center.y),
+                        startSize: startValue.size
+                    };
+                    canvas.setPointerCapture(e.pointerId);
+                    canvas.classList.add('dragging-object');
+                    return;
+                }
+            }
+            if (distance(x, y, handles.rotate.x, handles.rotate.y) <= HANDLE_HIT_RADIUS) {
+                const startValue = textAdapter.getTransform(handles.id);
+                if (startValue) {
+                    dragState = {
+                        mode: 'rotate', id: handles.id, center: handles.center,
+                        startAngle: Math.atan2(y - handles.center.y, x - handles.center.x),
+                        startRotation: startValue.rotation
+                    };
+                    canvas.setPointerCapture(e.pointerId);
+                    canvas.classList.add('dragging-object');
+                    return;
+                }
+            }
+        }
+
         const hit = interactionRegistry.hitTest(x, y);
         selectionStore.setSelectedId(hit ? hit.id : null);
         if (!hit) return;
@@ -51,13 +92,31 @@ export function initCanvasInteraction(canvas) {
         const startValue = adapter.getValue(hit.id);
         if (!startValue) return;
 
-        dragState = { id: hit.id, adapter, startClientX: e.clientX, startClientY: e.clientY, startValue, startBox: hit };
+        dragState = { mode: 'move', id: hit.id, adapter, startClientX: e.clientX, startClientY: e.clientY, startValue, startBox: hit };
         canvas.setPointerCapture(e.pointerId);
         canvas.classList.add('dragging-object');
     });
 
     canvas.addEventListener('pointermove', (e) => {
         if (!dragState) return;
+
+        if (dragState.mode === 'resize') {
+            const { x, y } = toCanvasCoords(canvas, e.clientX, e.clientY);
+            const currentDist = distance(x, y, dragState.center.x, dragState.center.y);
+            const scaleFactor = dragState.startDist > 0 ? currentDist / dragState.startDist : 1;
+            textAdapter.commitResize(dragState.id, dragState.startSize, scaleFactor);
+            return;
+        }
+        if (dragState.mode === 'rotate') {
+            const { x, y } = toCanvasCoords(canvas, e.clientX, e.clientY);
+            const currentAngle = Math.atan2(y - dragState.center.y, x - dragState.center.x);
+            let deltaDeg = (currentAngle - dragState.startAngle) * 180 / Math.PI;
+            let newRotation = dragState.startRotation + deltaDeg;
+            if (e.shiftKey) newRotation = Math.round(newRotation / 15) * 15; // Shiftで15度刻みにスナップ
+            textAdapter.commitRotate(dragState.id, newRotation);
+            return;
+        }
+
         let dxPx = e.clientX - dragState.startClientX;
         let dyPx = e.clientY - dragState.startClientY;
 

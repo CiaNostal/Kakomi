@@ -83,6 +83,12 @@ export const googleFonts = [
  * stateManager.js の初期状態は別途 stateManager.js 内で定義されます。
  */
 export const controlsConfig = {
+    // レイアウト設定タブ - 構図調整（クロップ）
+    cropAspectRatio: { defaultValue: 'original' }, // select要素のデフォルト選択値
+    cropZoom: { defaultValue: 1.0, min: 1.0, max: 5.0, step: 0.05 }, // range input
+    cropOffsetX: { defaultValue: 0.5, min: 0, max: 1, step: 0.01 }, // range input（パン）
+    cropOffsetY: { defaultValue: 0.5, min: 0, max: 1, step: 0.01 }, // range input（パン）
+
     // レイアウト設定タブ
     outputAspectRatio: { defaultValue: '1:1' }, // select要素のデフォルト選択値
     baseMarginPercent: { defaultValue: 5, min: 0, max: 100, step: 0.5 }, // number input

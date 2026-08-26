@@ -17,6 +17,19 @@ export const uiElements = {
     undoButton: document.getElementById('undoButton'),
     redoButton: document.getElementById('redoButton'),
 
+    // レイアウト設定タブ - 構図調整（クロップ）
+    cropAspectRatioSelect: document.getElementById('cropAspectRatio'),
+    cropCustomAspectRatioContainer: document.getElementById('cropCustomAspectRatioContainer'),
+    cropCustomAspectRatioWidthInput: document.getElementById('cropCustomAspectRatioWidth'),
+    cropCustomAspectRatioHeightInput: document.getElementById('cropCustomAspectRatioHeight'),
+    cropSwapAspectRatioButton: document.getElementById('cropSwapAspectRatio'),
+    cropZoomSlider: document.getElementById('cropZoom'),
+    cropZoomValueSpan: document.getElementById('cropZoomValue'),
+    cropOffsetXSlider: document.getElementById('cropOffsetX'),
+    cropOffsetXValueSpan: document.getElementById('cropOffsetXValue'),
+    cropOffsetYSlider: document.getElementById('cropOffsetY'),
+    cropOffsetYValueSpan: document.getElementById('cropOffsetYValue'),
+
     // レイアウト設定タブ
     outputAspectRatioSelect: document.getElementById('outputAspectRatio'),
     customAspectRatioContainer: document.getElementById('customAspectRatioContainer'),
@@ -191,6 +204,31 @@ export function initializeUIFromState() {
         }
     };
 
+    // 構図調整（クロップ）設定
+    if (uiElements.cropAspectRatioSelect) {
+        const cropAspect = state.cropSettings.aspectRatio;
+        if (cropAspect !== 'original') {
+            const parts = cropAspect.split(':');
+            if (parts.length === 2) {
+                const width = parseFloat(parts[0]);
+                const height = parseFloat(parts[1]);
+                if (!isNaN(width) && width > 0 && uiElements.cropCustomAspectRatioWidthInput) {
+                    uiElements.cropCustomAspectRatioWidthInput.value = String(width);
+                }
+                if (!isNaN(height) && height > 0 && uiElements.cropCustomAspectRatioHeightInput) {
+                    uiElements.cropCustomAspectRatioHeightInput.value = String(height);
+                }
+            }
+            const optionExists = Array.from(uiElements.cropAspectRatioSelect.options).some(opt => opt.value === cropAspect);
+            uiElements.cropAspectRatioSelect.value = optionExists ? cropAspect : 'custom';
+        } else {
+            uiElements.cropAspectRatioSelect.value = 'original';
+        }
+    }
+    setupInputAttributesAndValue(uiElements.cropZoomSlider, 'cropZoom', state.cropSettings.zoom);
+    setupInputAttributesAndValue(uiElements.cropOffsetXSlider, 'cropOffsetX', state.cropSettings.offsetX);
+    setupInputAttributesAndValue(uiElements.cropOffsetYSlider, 'cropOffsetY', state.cropSettings.offsetY);
+
     // レイアウト設定
     if (uiElements.outputAspectRatioSelect) {
         const aspectRatioValue = state.outputTargetAspectRatioString;
@@ -324,6 +362,25 @@ export function initializeUIFromState() {
 
 export function updateSliderValueDisplays() {
     const state = getState();
+    if (uiElements.cropZoomValueSpan && uiElements.cropZoomSlider) {
+        uiElements.cropZoomValueSpan.textContent = `${parseFloat(state.cropSettings.zoom).toFixed(2)}x`;
+    }
+    if (uiElements.cropOffsetXValueSpan && uiElements.cropOffsetXSlider) {
+        const val = parseFloat(state.cropSettings.offsetX);
+        const displayVal = Math.round((val - 0.5) * 2 * 100);
+        uiElements.cropOffsetXValueSpan.textContent = displayVal === 0 ? '中央' : `${displayVal}%`;
+        if (document.activeElement !== uiElements.cropOffsetXSlider) {
+            uiElements.cropOffsetXSlider.value = val;
+        }
+    }
+    if (uiElements.cropOffsetYValueSpan && uiElements.cropOffsetYSlider) {
+        const val = parseFloat(state.cropSettings.offsetY);
+        const displayVal = Math.round((val - 0.5) * 2 * 100);
+        uiElements.cropOffsetYValueSpan.textContent = displayVal === 0 ? '中央' : `${displayVal}%`;
+        if (document.activeElement !== uiElements.cropOffsetYSlider) {
+            uiElements.cropOffsetYSlider.value = val;
+        }
+    }
     if (uiElements.photoPosXValueSpan && uiElements.photoPosXSlider) {
         const val = parseFloat(state.photoViewParams.offsetX);
         const displayVal = Math.round((val - 0.5) * 2 * 100);
@@ -550,7 +607,11 @@ function renderCustomTextSettingsPanel() {
             <label for="customTextOffsetY">縦位置 (%):</label>
             <input type="number" id="customTextOffsetY" step="0.5">
         </div>
-        <p class="custom-text-drag-hint">プレビュー上でドラッグして位置を調整できます（横位置/縦位置欄はドラッグでもスクラブ操作できます。矢印キーでも微調整可）。</p>
+        <div class="form-row-simple">
+            <label for="customTextRotation">回転 (°):</label>
+            <input type="number" id="customTextRotation" step="1">
+        </div>
+        <p class="custom-text-drag-hint">プレビュー上でドラッグして位置を調整できます（横位置/縦位置欄はドラッグでもスクラブ操作できます。矢印キーでも微調整可）。選択中はプレビュー上に表示される角の四角ハンドルで拡大縮小、上の丸ハンドルで回転できます（回転は Shift 押しながらで15°刻み）。</p>
     `;
 
     const id = layer.id;
@@ -577,6 +638,7 @@ function renderCustomTextSettingsPanel() {
 
     el('customTextOffsetX').value = layer.offsetX;
     el('customTextOffsetY').value = layer.offsetY;
+    el('customTextRotation').value = layer.rotation || 0;
 
     // --- イベント配線 ---
     el('customTextEnabled').addEventListener('change', (e) => {
@@ -621,14 +683,17 @@ function renderCustomTextSettingsPanel() {
     });
     enhanceAsScrubInput(el('customTextOffsetX'), { sensitivity: 0.2, onChange: (v) => updateCustomTextLayer(id, { offsetX: v }) });
     enhanceAsScrubInput(el('customTextOffsetY'), { sensitivity: 0.2, onChange: (v) => updateCustomTextLayer(id, { offsetY: v }) });
+    enhanceAsScrubInput(el('customTextRotation'), { sensitivity: 0.5, onChange: (v) => updateCustomTextLayer(id, { rotation: v }) });
 }
 
 /**
- * ドラッグ等でcustomTextsのオフセットが変化した際、開いている設定パネルの数値欄だけを軽量に同期する。
+ * ドラッグ等でcustomTextsのオフセット・サイズ・回転が変化した際、
+ * 開いている設定パネルの数値欄だけを軽量に同期する。
  * パネル全体を再構築しないので、入力中のフォーカスを奪わない。
  * フォーカス中の欄は上書きしない（タイプ入力を妨げないため）。
+ * 拡大・回転ハンドルのドラッグ中は、offsetX/Yではなくsize/rotationが変化する。
  */
-function syncCustomTextOffsetInputs(state) {
+function syncCustomTextLiveInputs(state) {
     const selectedId = selectionStore.getSelectedId();
     if (!selectedId) return;
     const layer = state.textSettings.customTexts.find(t => t.id === selectedId);
@@ -636,11 +701,22 @@ function syncCustomTextOffsetInputs(state) {
 
     const xInput = document.getElementById('customTextOffsetX');
     const yInput = document.getElementById('customTextOffsetY');
+    const rotationInput = document.getElementById('customTextRotation');
+    const sizeSlider = document.getElementById('customTextSize');
+    const sizeValueSpan = document.getElementById('customTextSizeValue');
+
     if (xInput && document.activeElement !== xInput) {
         xInput.value = Math.round(layer.offsetX * 10) / 10;
     }
     if (yInput && document.activeElement !== yInput) {
         yInput.value = Math.round(layer.offsetY * 10) / 10;
+    }
+    if (rotationInput && document.activeElement !== rotationInput) {
+        rotationInput.value = Math.round((layer.rotation || 0) * 10) / 10;
+    }
+    if (sizeSlider && document.activeElement !== sizeSlider) {
+        sizeSlider.value = layer.size;
+        if (sizeValueSpan) sizeValueSpan.textContent = `${layer.size}%`;
     }
 }
 
@@ -704,7 +780,7 @@ function renderPresetsList() {
  */
 export function syncUIFromState(state) {
     updateSliderValueDisplays();
-    syncCustomTextOffsetInputs(state);
+    syncCustomTextLiveInputs(state);
 }
 
 export function updateExifCustomText(redrawCallback) {
@@ -880,6 +956,73 @@ export function setupEventListeners(redrawCallback) {
             redrawCallback();
         });
     };
+
+    // --- 構図調整（クロップ）タブ ---
+    // クロップのアスペクト比入力フィールドのイベントリスナー（出力アスペクト比と同じパターン）
+    const updateCropAspectRatioFromInputs = () => {
+        if (!uiElements.cropCustomAspectRatioWidthInput || !uiElements.cropCustomAspectRatioHeightInput) return;
+        const width = parseFloat(uiElements.cropCustomAspectRatioWidthInput.value);
+        const height = parseFloat(uiElements.cropCustomAspectRatioHeightInput.value);
+        if (!isNaN(width) && !isNaN(height) && width > 0 && height > 0) {
+            const aspectRatioString = `${width}:${height}`;
+            updateState({ cropSettings: { aspectRatio: aspectRatioString } });
+            if (uiElements.cropAspectRatioSelect) {
+                const optionExists = Array.from(uiElements.cropAspectRatioSelect.options).some(
+                    opt => opt.value === aspectRatioString
+                );
+                uiElements.cropAspectRatioSelect.value = optionExists ? aspectRatioString : 'custom';
+            }
+            redrawCallback();
+        }
+    };
+
+    if (uiElements.cropAspectRatioSelect) {
+        uiElements.cropAspectRatioSelect.addEventListener('change', (e) => {
+            const selectedValue = e.target.value;
+            if (!selectedValue) return;
+            if (selectedValue === 'custom') {
+                updateCropAspectRatioFromInputs();
+            } else if (selectedValue === 'original') {
+                updateState({ cropSettings: { aspectRatio: 'original' } });
+                redrawCallback();
+            } else {
+                const parts = selectedValue.split(':');
+                if (parts.length === 2) {
+                    const width = parseFloat(parts[0]);
+                    const height = parseFloat(parts[1]);
+                    if (!isNaN(width) && width > 0 && uiElements.cropCustomAspectRatioWidthInput) {
+                        uiElements.cropCustomAspectRatioWidthInput.value = String(width);
+                    }
+                    if (!isNaN(height) && height > 0 && uiElements.cropCustomAspectRatioHeightInput) {
+                        uiElements.cropCustomAspectRatioHeightInput.value = String(height);
+                    }
+                    updateState({ cropSettings: { aspectRatio: selectedValue } });
+                    redrawCallback();
+                }
+            }
+        });
+    }
+    if (uiElements.cropCustomAspectRatioWidthInput) {
+        uiElements.cropCustomAspectRatioWidthInput.addEventListener('input', updateCropAspectRatioFromInputs);
+    }
+    if (uiElements.cropCustomAspectRatioHeightInput) {
+        uiElements.cropCustomAspectRatioHeightInput.addEventListener('input', updateCropAspectRatioFromInputs);
+    }
+    if (uiElements.cropSwapAspectRatioButton) {
+        uiElements.cropSwapAspectRatioButton.addEventListener('click', () => {
+            if (!uiElements.cropCustomAspectRatioWidthInput || !uiElements.cropCustomAspectRatioHeightInput) return;
+            const width = parseFloat(uiElements.cropCustomAspectRatioWidthInput.value);
+            const height = parseFloat(uiElements.cropCustomAspectRatioHeightInput.value);
+            if (!isNaN(width) && !isNaN(height) && width > 0 && height > 0) {
+                uiElements.cropCustomAspectRatioWidthInput.value = String(height);
+                uiElements.cropCustomAspectRatioHeightInput.value = String(width);
+                updateCropAspectRatioFromInputs();
+            }
+        });
+    }
+    addNumericInputListener(uiElements.cropZoomSlider, 'cropZoom', 'cropSettings', 'zoom');
+    addNumericInputListener(uiElements.cropOffsetXSlider, 'cropOffsetX', 'cropSettings', 'offsetX');
+    addNumericInputListener(uiElements.cropOffsetYSlider, 'cropOffsetY', 'cropSettings', 'offsetY');
 
     // --- 各種イベントリスナーの設定 (大部分は変更なし) ---
     // アスペクト比セレクトのイベントリスナー

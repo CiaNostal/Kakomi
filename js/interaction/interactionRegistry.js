@@ -8,6 +8,8 @@
  * 「描画するたびにこの帳簿を作り直す」という運用にしている。
  */
 
+import { rotatePoint } from '../utils/geometry.js';
+
 let boxes = [];
 
 /** 帳簿を空にする（drawPreviewの冒頭で呼ぶ） */
@@ -24,15 +26,25 @@ export function register(entry) {
 }
 
 /**
- * 指定座標にヒットする最前面のオブジェクトを返す
+ * 指定座標にヒットする最前面のオブジェクトを返す。
+ * エントリが`rotation`（度）を持つ場合、クリック座標をボックス中心を軸に逆回転させてから
+ * 判定する（=ボックス自体は常に「回転前のローカル座標系」でx/y/width/heightを保持する）。
  * @param {number} px
  * @param {number} py
- * @returns {{id: string, type: string, x: number, y: number, width: number, height: number}|null}
+ * @returns {{id: string, type: string, x: number, y: number, width: number, height: number, rotation?: number}|null}
  */
 export function hitTest(px, py) {
     for (let i = boxes.length - 1; i >= 0; i--) {
         const b = boxes[i];
-        if (px >= b.x && px <= b.x + b.width && py >= b.y && py <= b.y + b.height) {
+        let testX = px, testY = py;
+        if (b.rotation) {
+            const cx = b.x + b.width / 2;
+            const cy = b.y + b.height / 2;
+            const local = rotatePoint(px, py, cx, cy, -b.rotation);
+            testX = local.x;
+            testY = local.y;
+        }
+        if (testX >= b.x && testX <= b.x + b.width && testY >= b.y && testY <= b.y + b.height) {
             return b;
         }
     }

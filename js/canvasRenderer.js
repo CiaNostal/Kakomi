@@ -6,6 +6,12 @@ import { drawImageWithPrecision } from './utils/canvasUtils.js';
 import * as interactionRegistry from './interaction/interactionRegistry.js';
 import { getSelectedId } from './interaction/selectionStore.js';
 import { getActiveGuides } from './interaction/guideStore.js';
+import { setTextHandles, clearTextHandles } from './interaction/textHandleStore.js';
+import { rotatePoint } from './utils/geometry.js';
+
+const HANDLE_SIZE = 8; // 拡大ハンドル（四角）の一辺の長さ(px)
+const ROTATE_HANDLE_RADIUS = 4; // 回転ハンドル（丸）の半径(px)
+const ROTATE_HANDLE_OFFSET = 22; // 回転ハンドルをボックス上端からどれだけ離すか(px)
 
 // コンテナサイズをキャッシュして、canvasサイズ変更によるレイアウト再計算の影響を防ぐ
 let cachedContainerSize = null;
@@ -23,7 +29,16 @@ export function getLastPreviewContext() {
 }
 
 function drawSelectionOutline(ctx, box) {
+    const rotation = box.rotation || 0;
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+
     ctx.save();
+    if (rotation) {
+        ctx.translate(cx, cy);
+        ctx.rotate(rotation * Math.PI / 180);
+        ctx.translate(-cx, -cy);
+    }
     ctx.strokeStyle = '#1877f2';
     ctx.lineWidth = 1.5;
     ctx.setLineDash([4, 3]);
@@ -31,8 +46,61 @@ function drawSelectionOutline(ctx, box) {
     ctx.restore();
 }
 
+/**
+ * 選択中の自由テキストレイヤーに「拡大ハンドル」（右下角、四角）と
+ * 「回転ハンドル」（上端中央から少し離れた丸）を描画し、その画面上の座標
+ * （回転適用後）をtextHandleStoreに記録する（canvasInteraction.jsが当たり判定に使う）。
+ */
+function drawTextHandles(ctx, box) {
+    const rotation = box.rotation || 0;
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+
+    const resizeLocal = { x: box.x + box.width, y: box.y + box.height };
+    const rotateLocal = { x: cx, y: box.y - ROTATE_HANDLE_OFFSET };
+
+    setTextHandles({
+        id: box.id,
+        center: { x: cx, y: cy },
+        resize: rotatePoint(resizeLocal.x, resizeLocal.y, cx, cy, rotation),
+        rotate: rotatePoint(rotateLocal.x, rotateLocal.y, cx, cy, rotation)
+    });
+
+    ctx.save();
+    if (rotation) {
+        ctx.translate(cx, cy);
+        ctx.rotate(rotation * Math.PI / 180);
+        ctx.translate(-cx, -cy);
+    }
+
+    // 回転ハンドルへの接続線
+    ctx.strokeStyle = '#1877f2';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(cx, box.y);
+    ctx.lineTo(rotateLocal.x, rotateLocal.y);
+    ctx.stroke();
+
+    // 拡大ハンドル（四角）
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#1877f2';
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(resizeLocal.x - HANDLE_SIZE / 2, resizeLocal.y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
+    ctx.strokeRect(resizeLocal.x - HANDLE_SIZE / 2, resizeLocal.y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
+
+    // 回転ハンドル（丸）
+    ctx.beginPath();
+    ctx.arc(rotateLocal.x, rotateLocal.y, ROTATE_HANDLE_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.restore();
+}
+
 export async function drawPreview(currentState, previewCanvas, previewCtx) { // async追加
     interactionRegistry.clear();
+    clearTextHandles();
 
     if (!currentState.image) {
         if (previewCtx && previewCanvas) previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
@@ -139,10 +207,14 @@ export async function drawPreview(currentState, previewCanvas, previewCtx) { // 
     }
 
     // 8. 選択中オブジェクトのハイライト枠（プレビューのみ。出力画像には含めない）
+    // テキストレイヤーの場合は、拡大・回転ハンドルも合わせて描画する。
     const selectedId = getSelectedId();
     if (selectedId) {
         const box = interactionRegistry.getById(selectedId);
-        if (box) drawSelectionOutline(ctx, box);
+        if (box) {
+            drawSelectionOutline(ctx, box);
+            if (box.type === 'text') drawTextHandles(ctx, box);
+        }
     }
 
     // 9. ドラッグ中のスナップガイド線（プレビューのみ。出力画像には含めない）

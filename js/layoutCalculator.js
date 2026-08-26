@@ -50,30 +50,31 @@ function calculateLayout(currentState) {
         cropAspectRatio = parseFloat(parts[0]) / parseFloat(parts[1]);
     }
 
-    // 切り出し領域のサイズと位置を計算
+    // ズーム1.0（拡大なし）時点で元画像に収まる最大サイズの切り出し窓（基準サイズ）を決定
+    let baseWidth, baseHeight;
     if (originalImgWidth / originalImgHeight > cropAspectRatio) {
         // 元画像が切り出し比率より横長の場合、高さに合わせる
-        sourceHeight = originalImgHeight;
-        sourceWidth = sourceHeight * cropAspectRatio;
-        sourceY = 0;
-        sourceX = (originalImgWidth - sourceWidth) * cropSettings.offsetX;
+        baseHeight = originalImgHeight;
+        baseWidth = baseHeight * cropAspectRatio;
     } else {
         // 元画像が切り出し比率より縦長の場合、幅に合わせる
-        sourceWidth = originalImgWidth;
-        sourceHeight = sourceWidth / cropAspectRatio;
-        sourceX = 0;
-        sourceY = (originalImgHeight - sourceHeight) * cropSettings.offsetY;
+        baseWidth = originalImgWidth;
+        baseHeight = baseWidth / cropAspectRatio;
     }
 
-    // ズーム適用（中心から拡大）
-    if (cropSettings.zoom > 1.0) {
-        const centerX = sourceX + sourceWidth / 2;
-        const centerY = sourceY + sourceHeight / 2;
-        sourceWidth /= cropSettings.zoom;
-        sourceHeight /= cropSettings.zoom;
-        sourceX = centerX - sourceWidth / 2;
-        sourceY = centerY - sourceHeight / 2;
-    }
+    // ズームを適用：基準サイズより小さい窓ほど拡大されて見える
+    const zoom = Math.max(1.0, cropSettings.zoom || 1.0);
+    sourceWidth = baseWidth / zoom;
+    sourceHeight = baseHeight / zoom;
+
+    // パン：ズームによって生まれた可動範囲（元画像内で切り出し窓が動ける範囲）の中で、
+    // offsetX/offsetY（0.0-1.0、0.5が中央）に応じて窓を配置する。
+    // 可動範囲はズームするほど広がるため、ズームインして初めてパンが効くようになる
+    // （ズーム1.0かつaspectRatioが'original'の場合は可動範囲が0になり、パンは無効）。
+    const movableSourceX = originalImgWidth - sourceWidth;
+    const movableSourceY = originalImgHeight - sourceHeight;
+    sourceX = movableSourceX * cropSettings.offsetX;
+    sourceY = movableSourceY * cropSettings.offsetY;
 
     // 描画サイズ = 切り出したサイズ（元の解像度を維持）
     const photoDrawWidthPx = sourceWidth;

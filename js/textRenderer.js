@@ -201,6 +201,28 @@ function drawSingleText(ctx, settings, textToDraw, fontObject, basePhotoShortSid
         y += visualCorrection;
     }
 
+    // 当たり判定・回転ハンドル配置用のバウンディングボックス（左上原点）を、
+    // 実際の描画基準点(x, y)から逆算する。回転はこのボックスの中心を軸に適用するため、
+    // 描画（fillText）より先に計算しておく必要がある。
+    let boxLeft;
+    if (textAlign === 'left') boxLeft = x;
+    else if (textAlign === 'center') boxLeft = x - maxWidth / 2;
+    else boxLeft = x - maxWidth; // right
+
+    let boxTop;
+    if (textBaseline === 'top') boxTop = y;
+    else if (textBaseline === 'middle') boxTop = y - textBlockHeight / 2;
+    else boxTop = y - textBlockHeight; // bottom
+
+    const rotation = settings.rotation || 0;
+    if (rotation) {
+        const centerX = boxLeft + maxWidth / 2;
+        const centerY = boxTop + textBlockHeight / 2;
+        ctx.translate(centerX, centerY);
+        ctx.rotate(rotation * Math.PI / 180);
+        ctx.translate(-centerX, -centerY);
+    }
+
     if (textBaseline === 'bottom') {
         const reversedLines = [...lines].reverse();
         reversedLines.forEach((line, index) => {
@@ -215,18 +237,7 @@ function drawSingleText(ctx, settings, textToDraw, fontObject, basePhotoShortSid
     }
     ctx.restore();
 
-    // 当たり判定用のバウンディングボックス（左上原点）を、実際の描画基準点(x, y)から逆算する
-    let boxLeft;
-    if (textAlign === 'left') boxLeft = x;
-    else if (textAlign === 'center') boxLeft = x - maxWidth / 2;
-    else boxLeft = x - maxWidth; // right
-
-    let boxTop;
-    if (textBaseline === 'top') boxTop = y;
-    else if (textBaseline === 'middle') boxTop = y - textBlockHeight / 2;
-    else boxTop = y - textBlockHeight; // bottom
-
-    return { x: boxLeft, y: boxTop, width: maxWidth, height: textBlockHeight };
+    return { x: boxLeft, y: boxTop, width: maxWidth, height: textBlockHeight, rotation };
 }
 
 function calculateTextPosition(position, offsetXPercent, offsetYPercent, textWidth, textHeight, photoShortSidePx, canvasWidth, canvasHeight, textAlign = 'left', textBaseline = 'top') {

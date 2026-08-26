@@ -217,7 +217,8 @@ function addCustomTextLayer() {
         opacity: 1,
         position: 'middle-center',
         offsetX: 0,
-        offsetY: 0
+        offsetY: 0,
+        rotation: 0
     });
     notifyStateChange();
     return id;

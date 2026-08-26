@@ -9,6 +9,7 @@
  * ここで変換してから状態に書き戻す。
  */
 import { getState, updateCustomTextLayer } from '../../stateManager.js';
+import { controlsConfig } from '../../uiDefinitions.js';
 
 const textAdapter = {
     type: 'text',
@@ -46,6 +47,39 @@ const textAdapter = {
     /** 変更を実際の状態に書き戻す */
     commit(id, changes) {
         updateCustomTextLayer(id, changes);
+    },
+
+    /**
+     * 拡大・回転ハンドルのドラッグ開始時点の値（サイズ・回転角）を取得する。
+     * canvasInteraction.jsがドラッグ開始時の基準値として保持する。
+     */
+    getTransform(id) {
+        const layer = getState().textSettings.customTexts.find(t => t.id === id);
+        if (!layer) return null;
+        return { size: layer.size, rotation: layer.rotation || 0 };
+    },
+
+    /**
+     * 拡大ハンドルのドラッグによるサイズ変更を反映する。
+     * 中心からハンドルまでの距離の比（scaleFactor）を開始時点のサイズに掛けることで、
+     * 回転角に関わらず「ハンドルを中心から遠ざける/近づける」という直感的な拡大縮小になる。
+     * @param {string} id
+     * @param {number} startSize - ドラッグ開始時点のsize（%）
+     * @param {number} scaleFactor - 開始時距離に対する現在距離の比
+     */
+    commitResize(id, startSize, scaleFactor) {
+        const { min, max } = controlsConfig.textFreeSize;
+        const newSize = Math.round(Math.min(max, Math.max(min, startSize * scaleFactor)) * 100) / 100;
+        updateCustomTextLayer(id, { size: newSize });
+    },
+
+    /**
+     * 回転ハンドルのドラッグによる回転角の変更を反映する。
+     * @param {string} id
+     * @param {number} newRotationDeg
+     */
+    commitRotate(id, newRotationDeg) {
+        updateCustomTextLayer(id, { rotation: Math.round(newRotationDeg * 10) / 10 });
     }
 };
 
