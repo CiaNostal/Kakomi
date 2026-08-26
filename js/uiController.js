@@ -282,6 +282,11 @@ export function updateSliderValueDisplays() {
     const state = getState();
     if (uiElements.cropZoomValueSpan && uiElements.cropZoomSlider) {
         uiElements.cropZoomValueSpan.textContent = `${parseFloat(state.cropSettings.zoom).toFixed(2)}x`;
+        // 写真の四隅ドラッグ（オンキャンバス直接トリミング）でもこの値は変わりうるため、
+        // つまみの位置もあわせて同期する（photoPosX/Yスライダーと同じ理由）。
+        if (document.activeElement !== uiElements.cropZoomSlider) {
+            uiElements.cropZoomSlider.value = state.cropSettings.zoom;
+        }
     }
     if (uiElements.cropOffsetXValueSpan && uiElements.cropOffsetXSlider) {
         const val = parseFloat(state.cropSettings.offsetX);
@@ -319,6 +324,11 @@ export function updateSliderValueDisplays() {
     }
     if (uiElements.baseMarginPercentValueSpan && uiElements.baseMarginPercentInput) {
         uiElements.baseMarginPercentValueSpan.textContent = `${state.baseMarginPercent}%`;
+        // 写真上でのホイール操作でもこの値は変わりうるため、入力欄の値もあわせて同期する
+        // （photoPosX/Yスライダーと同じ理由）。
+        if (document.activeElement !== uiElements.baseMarginPercentInput) {
+            uiElements.baseMarginPercentInput.value = state.baseMarginPercent;
+        }
     }
     if (uiElements.bgScaleValueSpan && uiElements.bgScaleSlider) {
         uiElements.bgScaleValueSpan.textContent = `${parseFloat(state.imageBlurBackgroundParams.scale).toFixed(1)}x`;

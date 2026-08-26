@@ -14,9 +14,13 @@ import { computeSnapCorrection } from './snapEngine.js';
 import { getLastPreviewContext } from '../canvasRenderer.js';
 import { isEditableElement } from '../utils/domUtils.js';
 import { getTextHandles } from './textHandleStore.js';
+import { getCropHandles } from './photoCropStore.js';
 import textAdapter from './adapters/textAdapter.js';
 import photoAdapter from './adapters/photoAdapter.js';
 import backgroundAdapter from './adapters/backgroundAdapter.js';
+
+// ホイール1刻みあたりのbaseMarginPercentの増減量(%)。写真上でのホイール操作用。
+const MARGIN_WHEEL_STEP = 1;
 
 const adaptersByType = {
     text: textAdapter,
@@ -83,6 +87,26 @@ export function initCanvasInteraction(canvas) {
             }
         }
 
+        // 選択中の写真のクロップハンドル（四隅、オンキャンバス直接トリミング）への当たり判定も、
+        // テキストのハンドルと同様に通常のオブジェクト選択より先に行う。
+        const cropHandles = getCropHandles();
+        if (cropHandles) {
+            for (const corner of Object.values(cropHandles.corners)) {
+                if (distance(x, y, corner.x, corner.y) <= HANDLE_HIT_RADIUS) {
+                    const startZoom = photoAdapter.getCropTransform().zoom;
+                    dragState = {
+                        mode: 'cropResize',
+                        center: cropHandles.center,
+                        startDist: distance(x, y, cropHandles.center.x, cropHandles.center.y),
+                        startZoom
+                    };
+                    canvas.setPointerCapture(e.pointerId);
+                    canvas.classList.add('dragging-object');
+                    return;
+                }
+            }
+        }
+
         const hit = interactionRegistry.hitTest(x, y);
         selectionStore.setSelectedId(hit ? hit.id : null);
         if (!hit) return;
@@ -105,6 +129,13 @@ export function initCanvasInteraction(canvas) {
             const currentDist = distance(x, y, dragState.center.x, dragState.center.y);
             const scaleFactor = dragState.startDist > 0 ? currentDist / dragState.startDist : 1;
             textAdapter.commitResize(dragState.id, dragState.startSize, scaleFactor);
+            return;
+        }
+        if (dragState.mode === 'cropResize') {
+            const { x, y } = toCanvasCoords(canvas, e.clientX, e.clientY);
+            const currentDist = distance(x, y, dragState.center.x, dragState.center.y);
+            const scaleFactor = dragState.startDist > 0 ? currentDist / dragState.startDist : 1;
+            photoAdapter.commitCropZoom(dragState.startZoom, scaleFactor);
             return;
         }
         if (dragState.mode === 'rotate') {
@@ -149,6 +180,20 @@ export function initCanvasInteraction(canvas) {
     };
     canvas.addEventListener('pointerup', endDrag);
     canvas.addEventListener('pointercancel', endDrag);
+
+    // 写真上でのホイール操作でbaseMarginPercent（余白）を調整する。
+    // 写真以外の上ではpreventDefaultしないため、ページの通常スクロールは妨げない。
+    canvas.addEventListener('wheel', (e) => {
+        if (dragState) return;
+        const { x, y } = toCanvasCoords(canvas, e.clientX, e.clientY);
+        const hit = interactionRegistry.hitTest(x, y);
+        if (!hit || hit.type !== 'photo') return;
+
+        e.preventDefault();
+        // 上スクロール(deltaY < 0)で写真を大きく＝余白を減らす、下スクロールで余白を増やす
+        const delta = e.deltaY < 0 ? -MARGIN_WHEEL_STEP : MARGIN_WHEEL_STEP;
+        photoAdapter.commitMarginDelta(delta);
+    }, { passive: false });
 
     // 矢印キーによる微調整（Shiftで10px相当、通常は1px相当。ドラッグと同じ「プレビュー上のpx」単位で扱う）
     document.addEventListener('keydown', (e) => {

@@ -125,7 +125,8 @@ Kakomi/
     │   ├── guideStore.js           # ドラッグ中に表示するスナップガイド線の一時状態
     │   ├── textHandleStore.js      # 選択中テキストの拡大・回転ハンドルの画面上座標の一時状態
     │   ├── snapEngine.js           # スナップ（吸着）位置の計算
-    │   ├── canvasInteraction.js    # pointerイベント処理・ドラッグ状態機械・矢印キーnudge・拡大回転ハンドル操作
+    │   ├── canvasInteraction.js    # pointerイベント処理・ドラッグ状態機械・矢印キーnudge・拡大回転ハンドル操作・写真クロップハンドル操作・ホイール操作
+    │   ├── photoCropStore.js       # 選択中の写真のクロップ矩形の四隅ハンドル座標（一時的なUI状態）
     │   └── adapters/
     │       ├── textAdapter.js        # 自由テキストレイヤーの値変換（位置・サイズ・回転）
     │       ├── photoAdapter.js       # 写真の枠内配置の値変換
@@ -325,6 +326,8 @@ UI要素の制御とイベントハンドリングを担当します。
 
 **拡大・回転ハンドルの描画（`drawTextHandles`）:** 選択中オブジェクトが`type === 'text'`の場合のみ、ボックス右下角に拡大ハンドル（四角）、ボックス上端中央から少し離れた位置に回転ハンドル（丸、接続線付き）を描画する。回転時はハンドルもボックスと一緒に回転させて描く。同時に、その画面上の座標（回転適用後）を`interaction/textHandleStore.js`に記録し、`canvasInteraction.js`がポインタ操作時の当たり判定に使う。詳細は5.22節参照。
 
+**写真選択中のクロップオーバーレイ描画（`drawCropOverlay`。5.24節参照）:** 選択中オブジェクトが写真（`getSelectedId() === 'photo'`）の場合、通常のフレーム装飾（角丸・影・縁取り）の代わりにこちらを描画する。Lightroom風に、クロップ範囲外（ズーム1.0相当で見えるはずの周辺部分）を暗くマスクしつつ、実際のクロップ矩形は通常表示＋四隅ハンドル付きで描く。
+
 ### 5.6 backgroundRenderer.js
 背景描画を担当します。
 
@@ -472,6 +475,8 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 - スナップ: ドラッグ中は既定でスナップが有効。**Altキーを押しながらドラッグするとスナップを一時的に無効化**できる
 - 矢印キーnudge: 何かが選択されている状態で矢印キーを押すと1px相当、Shift+矢印キーで10px相当（いずれもプレビューcanvas上のpx単位）移動する。フォーカスが入力欄（input/textarea/select）にある間は無効化される
 - **拡大・回転ハンドル（テキスト系オブジェクトのみ。自由テキスト・撮影日・Exifブロックいずれも対応）**: `pointerdown`時、通常のオブジェクト当たり判定（`interactionRegistry.hitTest()`）より先に`textHandleStore.getTextHandles()`のハンドル座標との距離判定を行う（当たり判定半径`HANDLE_HIT_RADIUS = 10px`）。ヒットした場合は`dragState.mode`を`'resize'`または`'rotate'`にしてドラッグを開始し、通常の移動ドラッグ（`mode: 'move'`）とは別処理で`textAdapter.commitResize()`/`commitRotate()`を直接呼ぶ（アダプタの`getValue`/`computeChanges`/`commit`という汎用インターフェースではなく、テキスト専用の`getTransform`/`commitResize`/`commitRotate`を使う。写真・背景にはこの概念がないため）
+- **写真のクロップハンドル（四隅、オンキャンバス直接トリミング。5.24節参照）**: テキストの拡大ハンドルと同じパターンで、`pointerdown`時に`photoCropStore.getCropHandles()`の四隅座標との距離判定を通常のオブジェクト当たり判定より先に行う。ヒットした場合は`dragState.mode = 'cropResize'`にしてドラッグを開始し、`pointermove`で中心からの距離比（`scaleFactor`）を`photoAdapter.commitCropZoom()`に渡して`cropSettings.zoom`を更新する。写真本体（ハンドル以外の領域）のドラッグは、選択中かどうかに関わらず従来通り`photoAdapter`の`move`処理（`photoViewParams`更新）のまま変更していない
+- **写真上でのホイール操作（余白調整）**: `previewCanvas`に`wheel`イベントリスナーを追加。`interactionRegistry.hitTest()`で写真上かどうかを判定し、写真上でなければ`preventDefault()`せずページの通常スクロールに委ねる。写真上であれば`preventDefault()`した上で`photoAdapter.commitMarginDelta()`を呼び、`baseMarginPercent`を1刻み（`MARGIN_WHEEL_STEP`）で増減する（上スクロールで写真を大きく＝余白を減らす、下スクロールで余白を増やす）
 - **選択変更と再描画（設計上の注記）:** `selectionStore`の選択状態変更（`setSelectedId()`）自体は`editState`の変更ではないため、`stateManager.js`の通常の状態変更リスナー（`requestRedraw`等）を経由しない。ドラッグを伴わない純粋なクリック選択（`pointerdown`直後に一度も`pointermove`が発火しないケース）でも選択ハイライトやハンドルが即座に表示されるよう、`main.js`が`selectionStore.onSelectionChange(() => requestRedraw())`を明示的に登録している。
   - 拡大: ボックス中心からハンドルまでの距離の比（現在距離÷ドラッグ開始時距離）をドラッグ開始時点の`size`に掛ける。回転角に関わらず「ハンドルを中心から遠ざける/近づける」動作になる
   - 回転: ボックス中心から見たポインタの角度（`Math.atan2`）の変化量をドラッグ開始時点の`rotation`に加算する。**Shiftキーを押しながらドラッグすると15度刻みにスナップ**する
@@ -482,7 +487,7 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 | アダプタ | 対象 | 値の単位系 | 備考 |
 |---|---|---|---|
 | `textAdapter.js` | `customTexts[]`の各レイヤー、および撮影日・Exifブロック（固定id `'text-date'`/`'text-exif'`） | 写真短辺基準の% | `customTexts[]`は`updateCustomTextLayer()`、撮影日・Exifは`updateState({ textSettings: { date/exif: changes } })`と、idに応じて内部で経路を振り分ける（`resolveLayer()`ヘルパー） |
-| `photoAdapter.js` | 写真の枠内配置（`photoViewParams`） | 可動範囲(movable width/height)に対する0.0〜1.0の割合 | `layoutCalculator.js`の可動範囲計算と対応させる必要があり、`getLastPreviewContext().scale`を使った変換が必要 |
+| `photoAdapter.js` | 写真の枠内配置（`photoViewParams`） | 可動範囲(movable width/height)に対する0.0〜1.0の割合 | `layoutCalculator.js`の可動範囲計算と対応させる必要があり、`getLastPreviewContext().scale`を使った変換が必要。加えて、オンキャンバス直接トリミング用に`getCropTransform()`/`commitCropZoom()`（四隅ハンドル用、`cropSettings.zoom`を操作）と`commitMarginDelta()`（写真上でのホイール用、`baseMarginPercent`を操作）を持つ（5.16節参照。通常の`getValue`/`computeChanges`/`commit`とは別の、`textAdapter`の`getTransform`/`commitResize`/`commitRotate`と同種の拡張） |
 | `backgroundAdapter.js` | 拡大ぼかし背景の位置（`imageBlurBackgroundParams`） | 写真短辺基準の%（textAdapterと同じ単位系） | 単色背景（`backgroundType === 'color'`）の場合はそもそも`interactionRegistry`に登録されないため、ドラッグ対象にならない |
 
 **単位変換上の注意（重要）:** `getLastPreviewContext()`が返す`photoShortSidePx`は、写真の実解像度ではなく**プレビュー描画時に縮小された後の短辺px**を指す。ドラッグのポインタ移動量（`dxPx`/`dyPx`）も同じプレビューcanvasのpx空間の値であるため、`textAdapter`や`backgroundAdapter`ではscaleによる再変換は不要で、単純な比率計算（`dxPx / photoShortSidePx * 100`）だけで正しく変換できる。過去にここへ誤って`/ scale`を追加してしまい、プレビューの縮小率次第でドラッグ量が数倍に増幅される不具合が発生したことがあるため、新しいアダプタを追加する際は注意すること。
@@ -543,6 +548,14 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 
 **主要関数:**
 - `rotatePoint(x, y, cx, cy, angleDeg)`: 点`(x, y)`を中心`(cx, cy)`を軸に`angleDeg`度（時計回り、Canvas座標系）回転させた座標を返す。逆回転させたい場合は`-angleDeg`を渡す（`interactionRegistry.hitTest()`がクリック座標をローカル座標に戻す用途で使用）。`canvasRenderer.js`の`drawTextHandles()`はハンドルの画面上座標（回転適用後）を求めるのに使用する
+
+### 5.24 interaction/photoCropStore.js
+選択中の写真に表示する「オンキャンバス直接トリミング」オーバーレイ（Lightroom風。5.5節`drawCropOverlay`参照）の、クロップ矩形の四隅ハンドルの画面上の座標（previewCanvasのpx空間）を一時的に保持する。`textHandleStore.js`（5.22節）と同じ「描画側が書き、操作側が読む」パターンだが、写真のクロップ矩形は回転しないため回転ハンドルは持たない。
+
+**主要関数:**
+- `setCropHandles(h)`: `{ corners: { tl, tr, bl, br }, center: {x,y} }`を設定する（`canvasRenderer.js`の`drawCropOverlay()`が`drawPreview`のたびに書き込む）
+- `getCropHandles()`: 現在の値を取得する（未選択または写真以外を選択中は`null`。`canvasInteraction.js`の`pointerdown`がハンドルへの当たり判定に読み取る）
+- `clearCropHandles()`: 値をクリアする（`drawPreview`の冒頭で`interactionRegistry.clear()`等と合わせて呼ばれる）
 
 ## 6. データフロー
 
@@ -669,7 +682,7 @@ Blobをダウンロード
 
 **UI上のグルーピング（2026年8月のUI刷新で変更）:** 「出力フォーマット」（アスペクト比＋余白）を「レイアウト」フライアウトパネルの先頭に配置し、その下に「写真の配置」fieldsetとして「元画像から使う範囲」（7.1節の構図調整＝切り出し比率・ズーム・パン）と「枠内での配置」（本節の写真位置調整）をサブセクション見出し付きでまとめている。これは「まず出力の枠を決め、その中で写真を配置する」という操作順序をUI上でも表すためのグルーピング変更であり、`cropSettings`と`photoViewParams`という2つの状態・計算ロジック自体は従来のまま独立している（統合していない）。
 
-**今後の検討（未着手）:** Photoshop/Lightroomのクロップツールのように、プレビュー上で直接クロップ窓をドラッグ・リサイズできるようにする案（オンキャンバス直接トリミング）が挙がっているが、本UI刷新のフェーズでは見送っている。11.1節参照。
+**オンキャンバス直接トリミング（2026年8月27日実装）:** 写真本体ドラッグ（枠内配置）・写真の四隅ドラッグ（クロップズーム）・写真上でのホイール（余白調整）という3種類のジェスチャーで操作対象を切り分けることで、別モード/別ビューへの切り替えなしに実現している。詳細は5.16〜5.17節、11.1節参照。
 
 ### 7.3 背景編集
 - **背景タイプ**: 「単色」または「写真の拡大ぼかし画像」から選択
@@ -883,9 +896,9 @@ Blobをダウンロード
 ## 11. 今後の拡張可能性
 
 ### 11.1 インタラクション基盤の続き
-- ✅ 構図調整（クロップのズーム・パン）の数値UI化（7.1節参照）。on-canvasドラッグでの構図調整（「写真の枠内配置ドラッグ」との操作競合）は未対応のまま
+- ✅ 構図調整（クロップのズーム・パン）の数値UI化（7.1節参照）
 - ✅ テキストの拡大・回転ハンドル（5.22節参照。自由テキスト・撮影日・Exifブロックいずれも対応。photo/backgroundは対象外）
-- **オンキャンバス直接トリミング（未着手、7.2節参照）**: Photoshop/Lightroomのクロップツールのように、プレビュー上で写真の切り出し窓を直接パン・リサイズできるようにする案。「写真の枠内配置ドラッグ」（既存）と「元画像内のクロップ範囲ドラッグ」（新規）という2つの異なる意味のドラッグをどう共存させるか（クロップモードの切り替えなど）の設計が必要で、レイアウト設定の再設計としては次のフェーズにあたる
+- ✅ **オンキャンバス直接トリミング（2026年8月27日実装、7.2節・5.16〜5.17節参照）**: 「写真の枠内配置ドラッグ」（既存、本体ドラッグ）と「クロップズーム」（新規、四隅ハンドルドラッグ）は、モード切り替えではなくジェスチャーの種類（本体/四隅ハンドル/ホイール）で操作対象を切り分けることで共存させている。写真上でのホイール操作による余白（`baseMarginPercent`）調整も同時に追加した。クロップ矩形自体のパン（`cropSettings.offsetX/Y`）は引き続き既存スライダーのみで操作する（on-canvasパンは未対応、11.5節参照）
 - 自由テキストレイヤーの並び替え・複製
 - 複数選択・一括移動
 - タッチデバイスでの実機確認（Pointer Events自体は実装済みだが未検証）

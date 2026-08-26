@@ -3,15 +3,18 @@ import { drawBackground } from './backgroundRenderer.js';
 import { createAndApplyClippingPath, applyShadow, applyBorder } from './frameRenderer.js'; // createSuperellipsePath, roundedRect はframeRenderer内部で使用
 import { drawText } from './textRenderer.js'; // テキスト描画もインポートしておく
 import { drawImageWithPrecision } from './utils/canvasUtils.js';
+import { calculateLayout } from './layoutCalculator.js';
 import * as interactionRegistry from './interaction/interactionRegistry.js';
 import { getSelectedId } from './interaction/selectionStore.js';
 import { getActiveGuides } from './interaction/guideStore.js';
 import { setTextHandles, clearTextHandles } from './interaction/textHandleStore.js';
+import { setCropHandles, clearCropHandles } from './interaction/photoCropStore.js';
 import { rotatePoint } from './utils/geometry.js';
 
 const HANDLE_SIZE = 8; // 拡大ハンドル（四角）の一辺の長さ(px)
 const ROTATE_HANDLE_RADIUS = 4; // 回転ハンドル（丸）の半径(px)
 const ROTATE_HANDLE_OFFSET = 22; // 回転ハンドルをボックス上端からどれだけ離すか(px)
+const CROP_HANDLE_SIZE = 10; // クロップ矩形の四隅ハンドル（四角）の一辺の長さ(px)
 
 // コンテナサイズをキャッシュして、canvasサイズ変更によるレイアウト再計算の影響を防ぐ
 let cachedContainerSize = null;
@@ -98,9 +101,81 @@ function drawTextHandles(ctx, box) {
     ctx.restore();
 }
 
+/**
+ * 写真選択中に表示する「オンキャンバス直接トリミング」オーバーレイ（Lightroom風）。
+ * ズーム1.0時点で見えるはずの範囲（box全体）を元画像で埋め、実際に使われている範囲
+ * （クロップ矩形、box内でzoom/offsetX/Yに応じた位置・サイズの矩形）だけ通常表示、
+ * それ以外の周辺部分は暗くマスクする。
+ *
+ * box（写真のバウンディングボックス）のscreen上のサイズ・位置は、baseMarginPercentが
+ * 写真短辺に対する比率で定義されているため、cropSettings.zoomの値によらず常に一定になる
+ * （zoomは「元画像のどれだけを使うか」だけを変え、写真とその余白の比率自体は変えないため）。
+ * そのため、box自体を「ズーム1.0相当の基準枠」としてそのまま使い、内側にzoomに応じた
+ * 縮小率のクロップ矩形を描けば、追加のスケール計算なしで一致する。
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {HTMLImageElement} img - 元画像
+ * @param {Object} currentState
+ * @param {{x:number,y:number,width:number,height:number}} box - 写真のバウンディングボックス（プレビューpx）
+ */
+function drawCropOverlay(ctx, img, currentState, box) {
+    const { zoom, offsetX: panX, offsetY: panY } = currentState.cropSettings;
+    const invZoom = 1 / Math.max(1, zoom);
+
+    const innerWidth = box.width * invZoom;
+    const innerHeight = box.height * invZoom;
+    const innerX = box.x + (box.width - innerWidth) * panX;
+    const innerY = box.y + (box.height - innerHeight) * panY;
+
+    // box全体を埋める「ズーム1.0相当」の元画像領域（sourceX/Y/Width/Height）を、
+    // 既存のlayoutCalculatorのロジックをそのまま再利用して求める（計算式の重複を避けるため）。
+    const refLayout = calculateLayout({ ...currentState, cropSettings: { ...currentState.cropSettings, zoom: 1.0 } });
+    const { sourceX: refSrcX, sourceY: refSrcY, sourceWidth: refSrcW, sourceHeight: refSrcH } = refLayout.photoDrawConfig;
+    if (refSrcW <= 0 || refSrcH <= 0) return;
+
+    ctx.save();
+
+    // box全体に「ズーム1.0相当」の元画像を敷く
+    drawImageWithPrecision(ctx, img, refSrcX, refSrcY, refSrcW, refSrcH, box.x, box.y, box.width, box.height);
+
+    // 周辺部分（クロップ矩形の外）を暗くマスク
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
+    ctx.fillRect(box.x, box.y, box.width, box.height);
+
+    // クロップ矩形の内側だけ、マスクなしで再描画
+    ctx.beginPath();
+    ctx.rect(innerX, innerY, innerWidth, innerHeight);
+    ctx.clip();
+    drawImageWithPrecision(ctx, img, refSrcX, refSrcY, refSrcW, refSrcH, box.x, box.y, box.width, box.height);
+    ctx.restore();
+
+    // クロップ矩形の枠と四隅ハンドル
+    ctx.save();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(innerX + 0.5, innerY + 0.5, Math.max(0, innerWidth - 1), Math.max(0, innerHeight - 1));
+
+    const corners = {
+        tl: { x: innerX, y: innerY },
+        tr: { x: innerX + innerWidth, y: innerY },
+        bl: { x: innerX, y: innerY + innerHeight },
+        br: { x: innerX + innerWidth, y: innerY + innerHeight }
+    };
+    setCropHandles({ corners, center: { x: innerX + innerWidth / 2, y: innerY + innerHeight / 2 } });
+
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#1877f2';
+    for (const corner of Object.values(corners)) {
+        ctx.fillRect(corner.x - CROP_HANDLE_SIZE / 2, corner.y - CROP_HANDLE_SIZE / 2, CROP_HANDLE_SIZE, CROP_HANDLE_SIZE);
+        ctx.strokeRect(corner.x - CROP_HANDLE_SIZE / 2, corner.y - CROP_HANDLE_SIZE / 2, CROP_HANDLE_SIZE, CROP_HANDLE_SIZE);
+    }
+    ctx.restore();
+}
+
 export async function drawPreview(currentState, previewCanvas, previewCtx) { // async追加
     interactionRegistry.clear();
     clearTextHandles();
+    clearCropHandles();
 
     if (!currentState.image) {
         if (previewCtx && previewCanvas) previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
@@ -163,35 +238,41 @@ export async function drawPreview(currentState, previewCanvas, previewCtx) { // 
 
     if (img && sourceWidth > 0 && sourceHeight > 0 && photoWidth > 0 && photoHeight > 0) {
         interactionRegistry.register({ id: 'photo', type: 'photo', x: photoX, y: photoY, width: photoWidth, height: photoHeight });
-        ctx.save(); // 写真とその装飾のためのコンテキスト保存
 
-        // 2. ドロップシャドウ描画 (写真本体より先)
-        if (currentState.frameSettings.shadowEnabled && currentState.frameSettings.shadowType === 'drop') {
-            // applyShadow(ctx, currentState.frameSettings.dropShadow, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
-            applyShadow(ctx, currentState.frameSettings.shadowParams, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
+        // 写真選択中は、オンキャンバス直接トリミング用のLightroom風オーバーレイ
+        // （クロップ範囲外を暗くマスク＋四隅ハンドル）に切り替える。フレーム装飾
+        // （角丸・影・縁取り）はクロップ編集中は表示しない（選択解除で通常表示に戻る）。
+        if (getSelectedId() === 'photo') {
+            drawCropOverlay(ctx, img, currentState, { x: photoX, y: photoY, width: photoWidth, height: photoHeight });
+        } else {
+            ctx.save(); // 写真とその装飾のためのコンテキスト保存
+
+            // 2. ドロップシャドウ描画 (写真本体より先)
+            if (currentState.frameSettings.shadowEnabled && currentState.frameSettings.shadowType === 'drop') {
+                applyShadow(ctx, currentState.frameSettings.shadowParams, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
+            }
+
+            // 3. 写真のクリッピングパス設定と適用 (角丸・超楕円)
+            createAndApplyClippingPath(ctx, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight);
+
+            // 4. 写真本体の描画 (クリッピングパスの内側に描画される)
+            drawImageWithPrecision(ctx, img,
+                sourceX, sourceY, sourceWidth, sourceHeight,
+                photoX, photoY, photoWidth, photoHeight
+            );
+
+            // 5. インナーシャドウ描画 (クリッピングされた写真の上に合成)
+            if (currentState.frameSettings.shadowEnabled && currentState.frameSettings.shadowType === 'inner') {
+                applyShadow(ctx, currentState.frameSettings.shadowParams, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
+            }
+
+            // 6. 縁取りの描画 (クリッピングパスに沿って)
+            if (currentState.frameSettings.border.enabled) {
+                applyBorder(ctx, currentState.frameSettings.border, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
+            }
+
+            ctx.restore(); // 写真と装飾のためのコンテキスト復元 (クリッピング解除)
         }
-
-        // 3. 写真のクリッピングパス設定と適用 (角丸・超楕円)
-        createAndApplyClippingPath(ctx, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight);
-
-        // 4. 写真本体の描画 (クリッピングパスの内側に描画される)
-        drawImageWithPrecision(ctx, img,
-            sourceX, sourceY, sourceWidth, sourceHeight,
-            photoX, photoY, photoWidth, photoHeight
-        );
-
-        // 5. インナーシャドウ描画 (クリッピングされた写真の上に合成)
-        if (currentState.frameSettings.shadowEnabled && currentState.frameSettings.shadowType === 'inner') {
-            // applyShadow(ctx, currentState.frameSettings.innerShadow, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
-            applyShadow(ctx, currentState.frameSettings.shadowParams, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
-        }
-
-        // 6. 縁取りの描画 (クリッピングパスに沿って)
-        if (currentState.frameSettings.border.enabled) {
-            applyBorder(ctx, currentState.frameSettings.border, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
-        }
-
-        ctx.restore(); // 写真と装飾のためのコンテキスト復元 (クリッピング解除)
     }
 
     // 7. テキスト描画
