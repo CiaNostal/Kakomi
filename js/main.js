@@ -101,7 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // レイアウトタブで選択したまま移ると四隅マーカーが出たまま操作不能に見えるため、
     // これらのタブへ移ったら写真の選択を解除する（onSelectionChange 経由で crop モード解除・再描画も走る）。
     onTabChange((tab) => {
-        if ((tab === 'tab-background' || tab === 'tab-frame') && selectionStore.getSelectedId() === 'photo') {
+        if ((tab === 'tab-background' || tab === 'tab-frame' || tab === 'tab-info') && selectionStore.getSelectedId() === 'photo') {
             selectionStore.setSelectedId(null);
         }
     });
@@ -123,14 +123,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (uiElements.undoButton) uiElements.undoButton.addEventListener('click', undo);
     if (uiElements.redoButton) uiElements.redoButton.addEventListener('click', redo);
 
-    // 「情報」ボタン: Exif情報のフローティングカードの開閉。
-    // タブ切り替え（tabManager.js）とは独立した仕組みのため、ここで個別に配線する。
-    if (uiElements.exifToggleButton && uiElements.exifFloatCard) {
-        uiElements.exifToggleButton.addEventListener('click', () => {
-            uiElements.exifToggleButton.classList.toggle('active');
-            uiElements.exifFloatCard.classList.toggle('open');
-        });
-    }
+    // E-3(フェーズ5): 「情報」は他タブと並列の .tab-button + .tab-pane（#tab-info）になった。
+    // タブ切り替え・再クリック収納は tabManager.js が扱うため、ここでの個別配線は不要。
+    // Exif の中身は requestRedraw() → displayExifInfo(state.exifData, exifDataContainer) が更新する。
 
     if (uiElements.imageLoader) {
         uiElements.imageLoader.addEventListener('change', (event) => {

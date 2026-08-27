@@ -97,9 +97,9 @@ export const uiElements = {
     frameBorderColorInput: document.getElementById('frameBorderColor'),
     frameBorderStyleSelect: document.getElementById('frameBorderStyle'),
 
+    // E-3(フェーズ5): Exif は「情報」タブ（#tab-info）内の #exifDataContainer に表示。
+    // 以前の独立トグル #exifToggleButton / フローティングカード #exifFloatCard は廃止。
     exifDataContainer: document.getElementById('exifDataContainer'),
-    exifToggleButton: document.getElementById('exifToggleButton'),
-    exifFloatCard: document.getElementById('exifFloatCard'),
 
     // 文字レイヤー（撮影日・Exif情報・自由テキストを統一UIで扱う。5.x節「テキストUI統合」参照）
     textLayersListContainer: document.getElementById('textLayersList'),

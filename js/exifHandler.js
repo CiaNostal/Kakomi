@@ -123,7 +123,11 @@ function formatExifForDisplay(exifData) {
         if (model) formatted.model = decodeExifString(model);
 
         const dateTime = getTagValue(zerothIFD, ImageIFD_CONSTANTS.DateTime);
-        if (dateTime) formatted.dateTime = String(dateTime).replace(/:/g, '/').replace(' ', ' ');
+        if (dateTime) {
+            // Exif の DateTime は "YYYY:MM:DD HH:MM:SS"。日付は "." 区切り、時刻は "HH:MM" までに整形する。
+            const m = String(dateTime).match(/^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2})/);
+            formatted.dateTime = m ? `${m[1]}.${m[2]}.${m[3]} ${m[4]}:${m[5]}` : String(dateTime);
+        }
     }
 
     // Exif IFD
@@ -189,53 +193,66 @@ function embedExifToJpeg(jpegDataUrl, exifDataFromState) {
     }
 }
 
+// Exif の撮影設定行。key は formatExifForDisplay() の返すキー、icon は index.html の
+// スプライト <symbol id="i-*">、label は <dt> の title（ホバーでツールチップ表示）。
+const EXIF_ROW_DEFS = [
+    { key: 'fNumber', icon: 'i-aperture', label: '絞り' },
+    { key: 'exposureTime', icon: 'i-shutter', label: 'シャッタースピード' },
+    { key: 'iso', icon: 'i-iso', label: 'ISO感度' },
+    { key: 'focalLength', icon: 'i-focal', label: '焦点距離' },
+    { key: 'dateTime', icon: 'i-cal', label: '撮影日時' },
+];
+
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"]/g, (c) => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]
+    ));
+}
+
 /**
- * Exif情報を画面に表示する (変更なし、formatExifForDisplayの結果を使用)
- * @param {Object} exifData - Exifデータ (piexif.js形式)
- * @param {HTMLElement} container - 表示するコンテナ要素
+ * Exif情報を「情報」タブ（`#exifDataContainer`）に描画する（E-3 / フェーズ5）。
+ * Lightroom Web 風に、カメラ／レンズ名だけを小さく上に置き、撮影設定は
+ * 「アイコン＋値」だけの定義リストにする。項目名（絞り・SS 等）のテキストは出さず、
+ * `<dt>` の title 属性に入れてホバーでツールチップ表示させる。
+ * @param {Object|null} exifData - piexif.js 形式のExifデータ。null なら未読込メッセージ。
+ * @param {HTMLElement} container - `#exifDataContainer`
  */
 function displayExifInfo(exifData, container) {
     if (!container) return;
-    if (!exifData) { // Exifデータがない場合はコンテナをクリア
-        container.innerHTML = '<p>Exif情報はありません。</p>';
+
+    const formatted = exifData ? formatExifForDisplay(exifData) : {};
+    const rows = EXIF_ROW_DEFS.filter((def) => formatted[def.key]);
+
+    // カメラ名: Make と Model の両方があり Model が Make で始まらなければ連結、そうでなければ Model 優先。
+    let cameraName = '';
+    if (formatted.make && formatted.model) {
+        const makeHead = formatted.make.toLowerCase().split(/\s+/)[0];
+        cameraName = formatted.model.toLowerCase().startsWith(makeHead)
+            ? formatted.model
+            : `${formatted.make} ${formatted.model}`;
+    } else {
+        cameraName = formatted.model || formatted.make || '';
+    }
+    const camLine = [cameraName, formatted.lens].filter(Boolean).join(' · ');
+
+    if (rows.length === 0 && !camLine) {
+        container.innerHTML = exifData
+            ? '<p class="exif-empty">この写真に撮影情報は含まれていません。</p>'
+            : '<p class="exif-empty">写真を読み込むと撮影情報が表示されます。</p>';
         return;
     }
 
-    const formatted = formatExifForDisplay(exifData);
-
-    if (Object.keys(formatted).length === 0) {
-        container.innerHTML = '<p>主要なExif情報は見つかりませんでした。</p>';
-        return;
+    let html = '';
+    if (camLine) html += `<p class="exif-cam">${escapeHtml(camLine)}</p>`;
+    if (rows.length) {
+        html += '<dl class="exif-dl">';
+        for (const def of rows) {
+            html += `<dt title="${def.label}" aria-label="${def.label}">`
+                + `<svg aria-hidden="true"><use href="#${def.icon}"></use></svg></dt>`;
+            html += `<dd>${escapeHtml(formatted[def.key])}</dd>`;
+        }
+        html += '</dl>';
     }
-
-    let html = '<table class="exif-table">';
-
-    if (formatted.make || formatted.model) {
-        html += '<tr><th colspan="2">カメラ情報</th></tr>';
-        if (formatted.make) html += `<tr><td>メーカー名</td><td>${formatted.make}</td></tr>`;
-        if (formatted.model) html += `<tr><td>機種名</td><td>${formatted.model}</td></tr>`;
-    }
-
-    const shootingInfoKeys = ['fNumber', 'exposureTime', 'iso', 'focalLength'];
-    if (shootingInfoKeys.some(key => formatted[key])) {
-        html += '<tr><th colspan="2">撮影設定</th></tr>';
-        if (formatted.fNumber) html += `<tr><td>F値</td><td>${formatted.fNumber}</td></tr>`;
-        if (formatted.exposureTime) html += `<tr><td>シャッタースピード</td><td>${formatted.exposureTime}</td></tr>`;
-        if (formatted.iso) html += `<tr><td>ISO感度</td><td>${formatted.iso}</td></tr>`;
-        if (formatted.focalLength) html += `<tr><td>焦点距離</td><td>${formatted.focalLength}</td></tr>`;
-    }
-
-    if (formatted.lens) {
-        html += '<tr><th colspan="2">レンズ情報</th></tr>';
-        html += `<tr><td>レンズ</td><td>${formatted.lens}</td></tr>`;
-    }
-
-    if (formatted.dateTime) {
-        html += '<tr><th colspan="2">日時情報</th></tr>';
-        html += `<tr><td>撮影日時</td><td>${formatted.dateTime}</td></tr>`;
-    }
-
-    html += '</table>';
     container.innerHTML = html;
 }
 

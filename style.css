@@ -252,9 +252,9 @@ body {
     flex: 1;
 }
 
-/* .rail-item は見た目専用のクラス（レール上の6タブ + 独立した「情報」トグルボタンの両方に付与）。
-   .tab-button はtabManager.jsが動作対象を識別するための専用クラスで、「情報」ボタンには
-   意図的に付与しない（付与するとtabManager.jsの全タブ非アクティブ化に巻き込まれてしまうため）。 */
+/* .rail-item は見た目専用のクラス。E-3(フェーズ5)以降、レール上の全ボタン
+   （レイアウト／背景／フレーム／文字／プリセット／情報）に .rail-item と .tab-button の
+   両方を付与し、tabManager.js が一律にタブとして扱う。 */
 .rail-item {
     width: 100%;
     display: flex;
@@ -672,34 +672,49 @@ fieldset div span {
     cursor: grabbing;
 }
 
-/* Exif情報：レール下部の「情報」ボタンで開閉するフローティングカード */
-.exif-float-card {
-    display: none;
-    flex-direction: column;
-    gap: 0.4rem;
-    width: min(100%, 320px);
-    max-height: 40%;
-    overflow-y: auto;
-    background-color: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-md);
-    padding: 0.8rem 1rem;
-    flex-shrink: 0;
-}
-
-.exif-float-card.open {
-    display: flex;
-}
-
-.exif-float-card h2 {
-    font-family: var(--font-cond);
-    font-weight: 700;
-    font-size: 0.95rem;
-    color: var(--ink);
+/* Exif情報（E-3 / フェーズ5）：「情報」タブ（#tab-info）の中身。
+   Lightroom Web 風に、カメラ／レンズ名だけ小さく上に、撮影設定はアイコン＋値だけ。 */
+.exif-cam {
+    margin: 0 0 0.7rem;
+    padding-bottom: 0.7rem;
     border-bottom: 1px solid var(--border);
-    padding-bottom: 0.5rem;
-    margin-bottom: 0.2rem;
+    font-size: 0.74rem;
+    color: var(--ink-dim);
+    word-break: break-word;
+}
+
+.exif-dl {
+    margin: 0;
+    display: grid;
+    grid-template-columns: 20px 1fr;
+    gap: 0.5rem 0.6rem;
+    align-items: center;
+}
+
+.exif-dl dt {
+    display: grid;
+    place-items: center;
+    color: var(--ink-faint);
+    cursor: help;
+}
+
+.exif-dl dt svg {
+    width: 15px;
+    height: 15px;
+}
+
+.exif-dl dd {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.exif-empty {
+    font-size: 0.8rem;
+    color: var(--ink-faint);
+    margin: 0;
 }
 
 /* 自由テキストレイヤー・テキストレイヤー共通のチップ一覧 */
@@ -775,11 +790,6 @@ fieldset div span {
 
 .custom-text-drag-hint {
     margin-top: 0.35rem;
-}
-
-#exifDataContainer p {
-    font-size: 0.875rem;
-    color: var(--ink-dim);
 }
 
 /* レスポンシブ対応 */
