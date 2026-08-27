@@ -655,7 +655,14 @@ fieldset div span {
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
-    border: 1px solid var(--ink);
+    /* 枠線は outline で描く（要素のレイアウトボックスに乗せない）。
+       border にすると縦長／正方形の出力比率のとき、キャンバスが「高さ基準」で決まる枝で
+       1px ぶん要素がコンテナ高さを押し上げ、ResizeObserver との正のフィードバックで
+       プレビューがじわじわ拡大し続ける（G-1 / docs/session-log-2026-08-29-3.md §13、
+       docs/session-log-2026-09-01.md）。outline はレイアウトに影響せず、
+       outline-offset: -1px でキャンバス内側に寄せてコンテナの overflow:hidden で切られないようにする。 */
+    outline: 1px solid var(--ink);
+    outline-offset: -1px;
     box-shadow: var(--shadow-sm);
     cursor: default;
     touch-action: none;

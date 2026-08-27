@@ -95,7 +95,7 @@ UI表示用とテキストオーバーレイ描画用は別系統のフォント
 ```
 
 - **タブ再クリックでパネルが出入りする（フェーズ4 E-1）**: `tabManager.js`は`.tab-button`（`data-tab`属性）のクリックで`.tab-pane`の`active`クラスを付け替える。加えて、**アクティブなタブをもう一度クリックすると`.app-shell`に`.panel-collapsed`を付けてパネル幅を 0 に畳む**（CSS トランジション。キャンバスが広がる）。別のタブを押すと`.panel-collapsed`を外して開き直す。畳まれている間は`.tab-button.active`が無いので`getActiveTab()`は`null`を返す（タブ別ドラッグは「開いているタブ」なしとして扱う＝写真ドラッグ＝枠内配置）。`onTabChange`コールバックは、畳むときは引数`null`で呼ばれる。初期表示はレイアウトのパネルが開いた状態。
-- **パネル開閉時のキャンバス再フィット**: パネルの畳み／展開でキャンバス領域の幅が変わるが window resize は発生しないため、`main.js`が`.canvas-container`に`ResizeObserver`を張り、**「幅」の変化（≥1px）を検知したときだけ**`canvasRenderer.clearContainerSizeCache()`＋`requestRedraw()`する（デバウンス 180ms）。キャンバス要素自体は`max-width:100%`でトランジション中も CSS スケールで追従する。**「幅のみ」に限定しているのは既知の不具合対策**: 縦長／正方形の出力比率ではプレビューキャンバスが「高さ基準」で決まり、その要素（1px の border 等）がコンテナ高さを数px押し上げ → `ResizeObserver`発火 → 再描画で更に高く …という正のフィードバックでキャンバスがじわじわ拡大し続ける（`docs/session-log-2026-08-29-3.md` §13）。パネル開閉で変わるのは幅なので、幅だけ見れば用は足りるうえ高さのループを断てる。根本原因（`.app-container { min-height:100vh }` でレイアウトが下へ伸びられる素地＋border 由来のオーバーシュート）は未解決で、§13.5 に対処候補を記載。
+- **パネル開閉時のキャンバス再フィット**: パネルの畳み／展開でキャンバス領域の幅が変わるが window resize は発生しないため、`main.js`が`.canvas-container`に`ResizeObserver`を張り、**「幅」の変化（≥1px）を検知したときだけ**`canvasRenderer.clearContainerSizeCache()`＋`requestRedraw()`する（デバウンス 180ms）。キャンバス要素自体は`max-width:100%`でトランジション中も CSS スケールで追従する。**「幅のみ」に限定しているのは既知の不具合 G-1 への多重防御**: 縦長／正方形の出力比率ではプレビューキャンバスが「高さ基準」で決まり、その要素がコンテナ高さを数px押し上げ → `ResizeObserver`発火 → 再描画で更に高く …という正のフィードバックでキャンバスがじわじわ拡大し続けた（`docs/session-log-2026-08-29-3.md` §13）。**根本原因＝`#previewCanvas`の`border: 1px`が要素のレイアウトボックスに乗っていたこと**は、`docs/session-log-2026-08-29-4.md`で枠線を`outline`（`outline-offset: -1px`。レイアウトに影響しない）へ置き換えて解消済み。高さ反応の`ResizeObserver`を実験的に戻しても縦長比率で拡大しないことを確認した。ガード（「幅のみに反応」）は別経路での再発防止として残す。
 - **枠囲みをやめ線ベースに（フェーズ4 E-2）**: 各パネルの`fieldset`は枠なし＋見出し＋（2つ目以降は）上罫線（`border-top`）だけで区切る。`legend`は小さめの大文字見出し。フレームタブの`.frame-card`も同様に枠を外して線区切りに寄せた。説明文（`.custom-text-drag-hint`）はアイコン＋数語まで削った（E-4）。
 - **`.rail-item`と`.tab-button`の使い分け（重要）**: レール上のボタンの見た目用クラスは`.rail-item`。5カテゴリ（レイアウト／背景／フレーム／文字／プリセット）には視覚用`.rail-item`と動作用`.tab-button`の両方を付与するが、最下部の「情報」ボタン（`#exifToggleButton`）には**`.tab-button`を意図的に付与しない**（`tabManager.js`が`.tab-button`を全件取得して非アクティブ化するため、付けると他タブを巻き込む）。「情報」を他タブと並列のタブにする案は E-3（フェーズ5）で対応予定。
 - **Exif情報表示の位置づけ（現状）**: Exif情報は独立フローティングカード（`#exifFloatCard`、`.exif-float-card`）。`#exifToggleButton`のクリックで`.open`をトグルするだけの仕組みで、`main.js`内で`tabManager.js`とは独立に配線。描画は`exifHandler.js`の`displayExifInfo()`。E-3（フェーズ5）で「他タブと並列の情報タブ＋アイコン主体表示」に作り替える予定。
@@ -328,7 +328,7 @@ UI要素の制御とイベントハンドリングを担当します。
 - `drawPreview(currentState, previewCanvas, previewCtx)`: プレビュー描画
 - `renderFinal(currentState)`: 最終出力用の高解像度Canvasを生成
 - `getLastPreviewContext()`: 直近の`drawPreview`呼び出し時点でのプレビュー⇔出力解像度の変換情報（`{ scale, photoShortSidePx }`）を返す。`canvasInteraction.js`がドラッグ量の単位変換に使用する
-- `clearContainerSizeCache()`: プレビューコンテナ寸法のキャッシュ（`cachedContainerSize`。canvasサイズ変更でレイアウトが揺れる＝正のフィードバックを防ぐためのキャッシュ）を破棄する。従来は`window`の`resize`でのみクリアしていたが、フェーズ4で設定パネルの畳み／展開でもキャンバス幅が変わるようになったため、`main.js`が`ResizeObserver`経由でこれを呼んで次の`drawPreview`に寸法を取り直させる。**ただし「幅」の変化に限定**（高さ変化に反応させると縦長比率でキャンバスが際限なく拡大する既知の不具合。3.1節・`docs/session-log-2026-08-29-3.md` §13）
+- `clearContainerSizeCache()`: プレビューコンテナ寸法のキャッシュ（`cachedContainerSize`。canvasサイズ変更でレイアウトが揺れる＝正のフィードバックを防ぐためのキャッシュ）を破棄する。従来は`window`の`resize`でのみクリアしていたが、フェーズ4で設定パネルの畳み／展開でもキャンバス幅が変わるようになったため、`main.js`が`ResizeObserver`経由でこれを呼んで次の`drawPreview`に寸法を取り直させる。**ただし「幅」の変化に限定**（既知の不具合 G-1 への多重防御。根本原因の`#previewCanvas`ボーダーは`outline`化で解消済み。3.1節・`docs/session-log-2026-08-29-3.md` §13・`docs/session-log-2026-08-29-4.md`）
 
 **描画順序（`drawPreview`。`renderFinal`は8・9を除く1〜7のみ）:**
 1. 背景描画（拡大ぼかし背景の場合、当たり判定用に背景の矩形を`interactionRegistry`へ登録）
@@ -1019,6 +1019,9 @@ Blobをダウンロード
 - ✅ **E-5**: 「出力」タブ（`#tab-output`）とレール項目を廃止。ダウンロードを上部バー右＋画質ポップオーバー（`#downloadPopover`）に（3.1節・7.6節）
 - ✅ **A-8**: 「レイアウト」パネルを ① 出力アスペクト比 → ② トリミング → ③ 余白と配置 の順に。余白を①から③へ分離（7.2節）
 - ✅ **F**: プリセットはレール下部の一項目のまま（「情報」の隣）。レイアウトの中に畳み込むのは見送り
+
+既知の不具合の解消:
+- ✅ **G-1**（縦長／正方形の出力比率でプレビューキャンバスがじわじわ拡大し続ける）: 根本原因は`#previewCanvas`の`border: 1px`が要素のレイアウトボックスに乗り、高さ基準で決まるキャンバスがコンテナ高さを押し上げて`ResizeObserver`との正のフィードバックになっていたこと。枠線を`outline`（`outline-offset: -1px`）へ置き換えて解消（`style.css`。3.1節・`docs/session-log-2026-08-29-4.md`）。フェーズ4 で入れた「幅のみに反応する`ResizeObserver`」は多重防御として維持。
 
 未着手のロードマップ項目: **フェーズ5** = E-3（「情報」を他タブと並列のタブに＝同じパネル枠で切り替わる。`#exifFloatCard` 廃止、Exif 表示をアイコン主体に）、**フェーズ6** = C-1 / A-5 / D-1・D-3 / A-4 / A-3。詳細は `docs/roadmap.md`。
 
