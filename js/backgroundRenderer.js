@@ -18,7 +18,13 @@ function drawBackground(ctx, canvasWidth, canvasHeight, currentState, basePhotoS
         const baseLength = basePhotoShortSideForBlurPxIfPreview !== undefined
             ? basePhotoShortSideForBlurPxIfPreview
             : Math.min(currentState.photoDrawConfig.destWidth, currentState.photoDrawConfig.destHeight);
-        drawBlurredImageBackground(ctx, canvasWidth, canvasHeight, currentState.image, currentState.imageBlurBackgroundParams, baseLength);
+        // ぼかし背景は「クロップ後の写真」を元にする。photoDrawConfig.source* が
+        // クロップ矩形の元画像ピクセル座標（layoutCalculator が算出）。未算出時は画像全体にフォールバック。
+        const pdc = currentState.photoDrawConfig;
+        const sourceRect = (pdc && pdc.sourceWidth > 0 && pdc.sourceHeight > 0)
+            ? { x: pdc.sourceX, y: pdc.sourceY, w: pdc.sourceWidth, h: pdc.sourceHeight }
+            : { x: 0, y: 0, w: currentState.image.width, h: currentState.image.height };
+        drawBlurredImageBackground(ctx, canvasWidth, canvasHeight, currentState.image, currentState.imageBlurBackgroundParams, baseLength, sourceRect);
 
     }
 }
@@ -43,9 +49,15 @@ function drawColorBackground(ctx, canvasWidth, canvasHeight, color) {
  * @param {Object} img - 背景に使用するImageオブジェクト (currentState.image)
  * @param {Object} blurParams - ぼかしパラメータ (currentState.imageBlurBackgroundParams)
  * @param {number} basePhotoShortSideForBlurPx - ぼかし強度計算の基準となる写真の短辺の実際のピクセル長
+ * @param {{x:number,y:number,w:number,h:number}} [sourceRect] - 背景に使う元画像の範囲（クロップ後）。省略時は画像全体
  */
-function drawBlurredImageBackground(ctx, canvasWidth, canvasHeight, img, blurParams, basePhotoShortSideForBlurPx) {
+function drawBlurredImageBackground(ctx, canvasWidth, canvasHeight, img, blurParams, basePhotoShortSideForBlurPx, sourceRect) {
     if (!img || !blurParams || basePhotoShortSideForBlurPx <= 0) return;
+
+    // 背景に使う元画像の範囲（クロップ後の写真）。不正なら画像全体にフォールバック。
+    const src = (sourceRect && sourceRect.w > 0 && sourceRect.h > 0)
+        ? sourceRect
+        : { x: 0, y: 0, w: img.width, h: img.height };
 
     const blurPx = basePhotoShortSideForBlurPx * (blurParams.blurAmountPercent / 100);
 
@@ -60,26 +72,26 @@ function drawBlurredImageBackground(ctx, canvasWidth, canvasHeight, img, blurPar
         ctx.filter = filterString.trim();
     }
 
-    // 元画像のアスペクト比を保ちつつ、Canvas全体を覆うように拡大描画
-    const imgAspectRatio = img.width / img.height;
+    // クロップ後の写真のアスペクト比を保ちつつ、Canvas全体を覆うように拡大描画
+    const imgAspectRatio = src.w / src.h;
     // const canvasAspectRatio = canvasWidth / canvasHeight;
-    let sx = 0, sy = 0, sWidth = img.width, sHeight = img.height; // ★ 元画像の全体を使用
+    let sx = src.x, sy = src.y, sWidth = src.w, sHeight = src.h; // ★ クロップ後の範囲を使用
     let dx, dy, finalDrawWidth, finalDrawHeight;
 
-    // 1. 元画像がCanvasを「カバー」するように基本スケールを計算
+    // 1. クロップ後の写真がCanvasを「カバー」するように基本スケールを計算
     let coverScale;
     if (canvasWidth / canvasHeight > imgAspectRatio) {
-        // Canvasが画像より横長の場合、画像の幅をCanvasの幅に合わせるスケール
-        coverScale = canvasWidth / img.width;
+        // Canvasが写真より横長の場合、写真の幅をCanvasの幅に合わせるスケール
+        coverScale = canvasWidth / src.w;
     } else {
-        // Canvasが画像より縦長（または同じ比率）の場合、画像の高さをCanvasの高さに合わせるスケール
-        coverScale = canvasHeight / img.height;
+        // Canvasが写真より縦長（または同じ比率）の場合、写真の高さをCanvasの高さに合わせるスケール
+        coverScale = canvasHeight / src.h;
     }
 
     // 2. 基本スケールにユーザー指定の拡大率を適用
     const totalScale = coverScale * blurParams.scale;
-    finalDrawWidth = img.width * totalScale;
-    finalDrawHeight = img.height * totalScale;
+    finalDrawWidth = src.w * totalScale;
+    finalDrawHeight = src.h * totalScale;
 
     // 中心からのオフセットを計算 (dx, dy は描画開始位置)
     // まず中央に配置
@@ -93,7 +105,7 @@ function drawBlurredImageBackground(ctx, canvasWidth, canvasHeight, img, blurPar
     dx += pixelOffsetX;
     dy += pixelOffsetY;
 
-    // 元画像の全体 (sx, sy, sWidth, sHeight) を、計算された finalDrawWidth, finalDrawHeight で
+    // クロップ後の範囲 (sx, sy, sWidth, sHeight) を、計算された finalDrawWidth, finalDrawHeight で
     // dx, dy の位置に描画する
     ctx.drawImage(img, sx, sy, sWidth, sHeight, dx, dy, finalDrawWidth, finalDrawHeight);
     ctx.restore(); // フィルターをリセット

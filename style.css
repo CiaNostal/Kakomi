@@ -121,20 +121,37 @@ body {
     cursor: default;
 }
 
+/* 上部バー右のダウンロード（フェーズ4: 「出力」タブを廃止して移設）＋画質ポップオーバー */
+.dl-group {
+    position: relative;
+}
+
 #downloadButton {
-    display: block;
-    width: 100%;
-    padding: 0.6rem 1rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    height: 32px;
+    padding: 0 0.85rem;
     background-color: var(--accent);
     color: var(--accent-on);
     border: none;
     border-radius: var(--radius-sm);
     cursor: pointer;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 600;
     font-family: var(--font-ui);
     transition: background-color 0.2s;
-    margin-top: 0.25rem;
+}
+
+#downloadButton .dl-icon {
+    width: 15px;
+    height: 15px;
+}
+
+#downloadButton .dl-icon svg {
+    display: block;
+    width: 100%;
+    height: 100%;
 }
 
 #downloadButton:disabled {
@@ -144,6 +161,66 @@ body {
 
 #downloadButton:hover:not(:disabled) {
     background-color: var(--accent-strong);
+}
+
+.dl-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 230px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    padding: 0.85rem 0.9rem;
+    z-index: 40;
+}
+
+.dl-popover .dl-pop-row {
+    display: grid;
+    grid-template-columns: auto 1fr 2.4rem;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.dl-popover label {
+    font-size: 0.8rem;
+    color: var(--ink-dim);
+    white-space: nowrap;
+}
+
+.dl-popover input[type="range"] {
+    width: 100%;
+}
+
+.dl-popover .dl-pop-row span {
+    font-size: 0.78rem;
+    color: var(--ink-faint);
+    text-align: right;
+    font-family: var(--font-mono);
+}
+
+.dl-popover .dl-pop-note {
+    font-size: 0.72rem;
+    color: var(--ink-faint);
+    margin: 0.4rem 0 0.6rem;
+}
+
+.dl-popover .dl-pop-go {
+    width: 100%;
+    padding: 0.45rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    color: var(--accent-on);
+    font-family: var(--font-ui);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.dl-popover .dl-pop-go:hover {
+    background: var(--accent-strong);
 }
 
 /* ==========================================================================
@@ -229,14 +306,26 @@ body {
 
 /* ==========================================================================
    フライアウトパネル（選択中カテゴリの設定内容）
+   フェーズ4: アクティブなタブをもう一度押すと横幅 0 へ畳まれてキャンバスが広がる
+   （.app-shell.panel-collapsed）。
    ========================================================================== */
 .tab-content-area {
     width: 360px;
     flex-shrink: 0;
     background-color: var(--surface);
     border-right: 1px solid var(--border);
-    overflow-y: auto;
+    overflow: hidden auto;
     padding: 1rem;
+    transition: width 0.3s cubic-bezier(.4, 0, .2, 1),
+        padding 0.3s cubic-bezier(.4, 0, .2, 1),
+        border-right-color 0.3s;
+}
+
+.app-shell.panel-collapsed .tab-content-area {
+    width: 0;
+    padding-left: 0;
+    padding-right: 0;
+    border-right-color: transparent;
 }
 
 .tab-content-area .tab-pane {
@@ -260,20 +349,34 @@ body {
     }
 }
 
+/* フェーズ4(E-2): 枠囲みをやめ、線ベースのセクション区切りに。
+   fieldset = 枠なし・見出し＋（2つ目以降は）上罫線。legend = 小さめの見出し。 */
 fieldset {
-    border: 1px solid var(--border);
-    padding: 1rem;
-    border-radius: var(--radius-md);
-    margin-bottom: 1.2rem;
+    border: none;
+    padding: 0;
+    border-radius: 0;
+    margin: 0 0 1.1rem;
+}
+
+fieldset+fieldset,
+fieldset+.frame-card,
+.frame-card+fieldset {
+    margin-top: 1.1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
 }
 
 fieldset legend {
+    display: block;
+    width: 100%;
     font-family: var(--font-cond);
-    font-weight: 700;
-    color: var(--ink);
-    padding: 0 0.5rem;
-    font-size: 1rem;
-    margin-left: 0.2rem;
+    font-weight: 600;
+    color: var(--ink-dim);
+    padding: 0;
+    margin: 0 0 0.7rem;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
 .subsection-heading {
@@ -288,6 +391,13 @@ fieldset legend {
 
 .subsection-heading:first-child {
     margin-top: 0;
+}
+
+/* 上に区切り線を引く小見出し（セクションの切れ目を明示。背景タブの「色調」「位置」など） */
+.subsection-heading.with-rule {
+    border-top: 1px solid var(--border);
+    padding-top: 0.9rem;
+    margin-top: 1.1rem;
 }
 
 /* スライダーや3列構成の行のためのスタイル */
@@ -329,43 +439,46 @@ fieldset div.form-row-simple input[type="number"] {
     min-width: 80px;
 }
 
-/* カスタムアスペクト比入力フィールドのスタイル */
-#customAspectRatioContainer,
-#cropCustomAspectRatioContainer {
-    margin-top: 0.5rem;
+/* カスタムアスペクト比入力（比率ピッカーの「カスタム」タイル選択時に出る1行）。
+   折り返さないコンパクトな横並び（docs/roadmap.md A-7）。 */
+.ratio-custom-row {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: -0.1rem 0 0.9rem;
+    font-size: 0.8rem;
+    color: var(--ink-dim);
+    white-space: nowrap;
 }
 
-#customAspectRatioContainer label,
-#cropCustomAspectRatioContainer label {
-    flex-shrink: 0;
-    margin-right: 0.3rem;
+.ratio-custom-row label {
+    flex: 0 0 auto;
 }
 
-#customAspectRatioContainer input[type="number"],
-#cropCustomAspectRatioContainer input[type="number"] {
-    flex-grow: 1;
-    min-width: 60px;
-    max-width: 100px;
+.ratio-custom-row input[type="number"] {
+    flex: 0 0 auto;
+    width: 3.4rem;
+    min-width: 0;
+    padding: 0.3rem 0.4rem;
+    font-family: var(--font-mono);
 }
 
-/* 反転ボタンのスタイル */
-#swapAspectRatio,
-#cropSwapAspectRatio {
-    flex-shrink: 0;
-    padding: 0.4rem 0.8rem;
-    font-size: 1rem;
-    background-color: var(--accent);
-    color: var(--accent-on);
-    border: none;
+.ratio-custom-row button {
+    flex: 0 0 auto;
+    padding: 0.28rem 0.5rem;
+    font-size: 0.9rem;
+    line-height: 1;
+    background: var(--surface);
+    color: var(--ink-dim);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: background-color 0.2s;
-    margin-left: 0.5rem;
+    transition: border-color 0.15s, color 0.15s;
 }
 
-#swapAspectRatio:hover,
-#cropSwapAspectRatio:hover {
-    background-color: var(--accent-strong);
+.ratio-custom-row button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
 }
 
 fieldset div.form-row-simple span {
@@ -648,12 +761,13 @@ fieldset div span {
 
 .custom-text-empty-hint,
 .custom-text-drag-hint {
-    color: var(--ink-dim);
-    font-size: 0.85rem;
+    color: var(--ink-faint);
+    font-size: 0.78rem;
+    line-height: 1.45;
 }
 
 .custom-text-drag-hint {
-    margin-top: 0.4rem;
+    margin-top: 0.35rem;
 }
 
 #exifDataContainer p {
@@ -714,14 +828,6 @@ fieldset div span {
     .rail-item {
         padding: 0.5rem 0.2rem;
         font-size: 0.66rem;
-    }
-
-    fieldset {
-        padding: 0.8rem;
-    }
-
-    fieldset legend {
-        font-size: 0.9rem;
     }
 }
 
@@ -907,19 +1013,26 @@ fieldset div span {
    フレーム加工パネル（コンパクト・罫線区切り）
    角＝セグメントコントロール／影・縁取り＝トグルスイッチ＋滑らかなアコーディオン
    ========================================================================== */
+/* フェーズ4(E-2): カード枠をやめて線区切りに合わせる */
 .frame-card {
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background-color: var(--surface);
-    overflow: hidden;
-    margin-bottom: 1rem;
+    border: none;
+    border-radius: 0;
+    background-color: transparent;
+    overflow: visible;
+    margin-bottom: 0;
+}
+
+.frame-card+.frame-card {
+    margin-top: 0.9rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--border);
 }
 
 .frame-card-head {
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    padding: 0.6rem 0.8rem;
+    padding: 0 0 0.5rem;
 }
 
 .frame-card-head .frame-icon {
@@ -994,7 +1107,7 @@ fieldset div span {
 .corner-segmented {
     display: flex;
     gap: 0.4rem;
-    padding: 0 0.8rem 0.7rem;
+    padding: 0 0 0.5rem;
 }
 
 .corner-segmented .segment {
@@ -1063,7 +1176,7 @@ fieldset div span {
 }
 
 .accordion-body {
-    padding: 0.7rem 0.8rem 0.8rem;
+    padding: 0.7rem 0 0.5rem;
     border-top: 1px solid var(--border);
 }
 
@@ -1080,4 +1193,96 @@ fieldset div span {
 /* 非表示用クラス */
 .hidden {
     display: none !important;
+}
+
+/* --- 比率タイルピッカー（js/ui/ratioPicker.js。出力アスペクト比・切り抜き比率で共用） --- */
+.ratio-picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
+    gap: 0.4rem;
+    margin: 0.2rem 0 0.8rem;
+}
+
+.ratio-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.28rem;
+    padding: 0.5rem 0.2rem 0.4rem;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: var(--font-ui);
+    transition: border-color 0.15s, background-color 0.15s;
+}
+
+.ratio-tile:hover {
+    border-color: var(--accent);
+}
+
+.ratio-tile:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+.ratio-tile-shape {
+    width: 46px;
+    height: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ratio-tile-shape i {
+    display: block;
+    border: 1.5px solid var(--ink-dim);
+    border-radius: 2px;
+}
+
+.ratio-tile.is-free .ratio-tile-shape i {
+    border-style: dashed;
+}
+
+.ratio-tile-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.ratio-tile-sub {
+    font-size: 0.6rem;
+    color: var(--ink-faint);
+    line-height: 1;
+}
+
+.ratio-tile[aria-pressed="true"] {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.ratio-tile[aria-pressed="true"] .ratio-tile-shape i {
+    border-color: var(--accent);
+    background: var(--accent-soft-border);
+}
+
+/* --- 「配置をリセット」「位置をリセット」ボタン --- */
+.placement-reset-btn {
+    font-family: var(--font-ui);
+    font-size: 0.8rem;
+    padding: 0.4rem 0.9rem;
+    background: var(--surface);
+    color: var(--ink-dim);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+}
+
+.placement-reset-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
 }

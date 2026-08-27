@@ -27,6 +27,15 @@ window.addEventListener('resize', () => {
     cachedContainerSize = null;
 });
 
+/**
+ * プレビューコンテナサイズのキャッシュを破棄する。
+ * ウィンドウリサイズ以外の理由でキャンバス領域の寸法が変わったとき（フェーズ4: 設定パネルの
+ * 開閉でキャンバスが伸縮する）に、main.js から呼んで次の drawPreview で寸法を取り直させる。
+ */
+export function clearContainerSizeCache() {
+    cachedContainerSize = null;
+}
+
 // 直近のdrawPreview呼び出し時点でのプレビュー⇔出力解像度の変換情報。
 // canvasInteraction.jsがドラッグ量(プレビューpx)を出力解像度の単位系に変換するために参照する。
 let lastPreviewContext = { scale: 1, photoShortSidePx: 0 };

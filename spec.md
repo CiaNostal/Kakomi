@@ -84,20 +84,22 @@ UI表示用とテキストオーバーレイ描画用は別系統のフォント
 
 ### 3.1 UIシェル構成（アイコンレール + フライアウトパネル + キャンバスエリア）
 
-Canvaのエディタ画面を参考に、`index.html`の全体レイアウトを次の3カラム構成にしている（`.app-shell`、`style.css`）。データフロー・状態管理には影響しない、純粋なUI/DOM構成の話である。
+`index.html`の全体レイアウトは次の3カラム構成（`.app-shell`、`style.css`）。**2026年8月のフェーズ4で Adobe Lightroom Web を参照したシェル刷新を行った**（`docs/roadmap.md` E-1〜E-5・A-8、`docs/session-log-2026-08-29-3.md`）。データフロー・状態管理には影響しない、純粋なUI/DOM構成の話である。
 
 ```
-.app-header（薄いグラデーションの上部バー。ブランド表示・Undo/Redo）
-.app-shell（残り高さいっぱいに広がる横並び3カラム）
-  ├─ .tab-navigation（左の細いアイコンレール、幅84px。6カテゴリ + 下部に「情報」ボタン）
-  ├─ .tab-content-area（レール項目に対応するフライアウトパネル、幅360px。中身は7.節の各fieldset）
+.app-header（上部バー。ブランド表示・Undo/Redo・右端に「ダウンロード」ボタン＋画質ポップオーバー）
+.app-shell（残り高さいっぱいに広がる横並び3カラム。パネルを畳むと .panel-collapsed が付く）
+  ├─ .tab-navigation（左の細いアイコンレール、幅84px。5カテゴリ + 下部に「情報」ボタン）
+  ├─ .tab-content-area（レール項目に対応するフライアウトパネル、幅360px ⇔ 0。中身は7.節の各fieldset）
   └─ .canvas-area（残り全幅。画像読み込みUI・プレビューCanvas・Exifフローティングカード）
 ```
 
-- **タブ切り替えの仕組みは変更していない**: `tabManager.js`は従来通り`.tab-button`（`data-tab`属性を持つ）のクリックで`.tab-pane`の`active`クラスを付け替えるだけで、6カテゴリのレール項目には引き続き`.tab-button`クラスと`data-tab`属性が付いている。見た目（縦長のアイコン+ラベルのレール）はCSSのみで実現している。
-- **`.rail-item`と`.tab-button`の使い分け（重要）**: レール上のボタンの「見た目」用CSSクラスは`.rail-item`である。6カテゴリのボタンには視覚用の`.rail-item`と動作用の`.tab-button`の両方を付与するが、アイコンレール最下部の「情報」ボタン（`#exifToggleButton`）には**`.tab-button`を意図的に付与しない**。`tabManager.js`は`.tab-button`を全件取得して「クリックされたもの以外は非アクティブ化」する実装のため、もし「情報」ボタンに`.tab-button`を付けてしまうと、クリック時に他の6カテゴリのアクティブ状態・表示中パネルまで巻き込みで消えてしまう（実際に発生した設計上の注意点）。
-- **Exif情報表示の位置づけ**: Exif情報は「編集する設定」ではなく「参照するだけの読み取り専用情報」であるため、他の6カテゴリと同列のフライアウトパネルにはせず、独立したフローティングカード（`#exifFloatCard`、`.exif-float-card`）としている。開閉は`#exifToggleButton`のクリックで`.open`クラスをトグルするだけの単純な仕組みで、`main.js`内で`tabManager.js`とは完全に独立して配線している（`selectionStore`やeditStateの状態変更とは無関係）。中身（`#exifDataContainer`）への実際の描画は従来通り`exifHandler.js`の`displayExifInfo()`が担う。
-- **ダウンロードボタンの位置**: `#downloadButton`は「出力」タブ（`#tab-output`）内の`JPG画質設定` fieldsetの直下に置いている。2026年8月のUI刷新でいったん上部バーへ移設したが、上部バーに常設するほど頻繁に押すものではなく「出力」タブの中にあるほうが自然、というユーザー判断で戻した（`docs/roadmap.md` E）。id・イベント配線（`main.js`の`uiElements.downloadButton.addEventListener('click', handleDownload)`）は一度も変えていないため、`fileManager.js`側の実装への影響はない。スタイルはタブ内の横幅いっぱいのアクセントボタン（`#downloadButton`、`display:block; width:100%`）。
+- **タブ再クリックでパネルが出入りする（フェーズ4 E-1）**: `tabManager.js`は`.tab-button`（`data-tab`属性）のクリックで`.tab-pane`の`active`クラスを付け替える。加えて、**アクティブなタブをもう一度クリックすると`.app-shell`に`.panel-collapsed`を付けてパネル幅を 0 に畳む**（CSS トランジション。キャンバスが広がる）。別のタブを押すと`.panel-collapsed`を外して開き直す。畳まれている間は`.tab-button.active`が無いので`getActiveTab()`は`null`を返す（タブ別ドラッグは「開いているタブ」なしとして扱う＝写真ドラッグ＝枠内配置）。`onTabChange`コールバックは、畳むときは引数`null`で呼ばれる。初期表示はレイアウトのパネルが開いた状態。
+- **パネル開閉時のキャンバス再フィット**: パネルの畳み／展開でキャンバス領域の幅が変わるが window resize は発生しないため、`main.js`が`.canvas-container`に`ResizeObserver`を張り、**「幅」の変化（≥1px）を検知したときだけ**`canvasRenderer.clearContainerSizeCache()`＋`requestRedraw()`する（デバウンス 180ms）。キャンバス要素自体は`max-width:100%`でトランジション中も CSS スケールで追従する。**「幅のみ」に限定しているのは既知の不具合対策**: 縦長／正方形の出力比率ではプレビューキャンバスが「高さ基準」で決まり、その要素（1px の border 等）がコンテナ高さを数px押し上げ → `ResizeObserver`発火 → 再描画で更に高く …という正のフィードバックでキャンバスがじわじわ拡大し続ける（`docs/session-log-2026-08-29-3.md` §13）。パネル開閉で変わるのは幅なので、幅だけ見れば用は足りるうえ高さのループを断てる。根本原因（`.app-container { min-height:100vh }` でレイアウトが下へ伸びられる素地＋border 由来のオーバーシュート）は未解決で、§13.5 に対処候補を記載。
+- **枠囲みをやめ線ベースに（フェーズ4 E-2）**: 各パネルの`fieldset`は枠なし＋見出し＋（2つ目以降は）上罫線（`border-top`）だけで区切る。`legend`は小さめの大文字見出し。フレームタブの`.frame-card`も同様に枠を外して線区切りに寄せた。説明文（`.custom-text-drag-hint`）はアイコン＋数語まで削った（E-4）。
+- **`.rail-item`と`.tab-button`の使い分け（重要）**: レール上のボタンの見た目用クラスは`.rail-item`。5カテゴリ（レイアウト／背景／フレーム／文字／プリセット）には視覚用`.rail-item`と動作用`.tab-button`の両方を付与するが、最下部の「情報」ボタン（`#exifToggleButton`）には**`.tab-button`を意図的に付与しない**（`tabManager.js`が`.tab-button`を全件取得して非アクティブ化するため、付けると他タブを巻き込む）。「情報」を他タブと並列のタブにする案は E-3（フェーズ5）で対応予定。
+- **Exif情報表示の位置づけ（現状）**: Exif情報は独立フローティングカード（`#exifFloatCard`、`.exif-float-card`）。`#exifToggleButton`のクリックで`.open`をトグルするだけの仕組みで、`main.js`内で`tabManager.js`とは独立に配線。描画は`exifHandler.js`の`displayExifInfo()`。E-3（フェーズ5）で「他タブと並列の情報タブ＋アイコン主体表示」に作り替える予定。
+- **ダウンロードボタンの位置（フェーズ4 E-5）**: `#downloadButton`は**上部バー右端**（`.app-header .header-actions` 内の`.dl-group`）。押すと画質ポップオーバー（`#downloadPopover`。`#jpgQuality`スライダー＋「書き出す」＝`#downloadConfirmButton`）を開き、「書き出す」で`handleDownload()`を実行する。「出力」タブ（`#tab-output`）とそのレール項目は廃止した。`outputSettings.quality`のデータ・`fileManager.js`側は不変。以前は「出力タブに戻す」方針だったが、ユーザー判断で再度「上部バーへ」に転換（`docs/roadmap.md` E-5）。
 
 ## 4. ファイル構造
 
@@ -111,7 +113,7 @@ Kakomi/
     ├── stateManager.js     # 状態管理
     ├── uiController.js     # UI制御とイベントハンドリング
     ├── uiDefinitions.js    # UI設定値とフォント定義
-    ├── tabManager.js       # タブ切り替え機能＋現在アクティブなタブの取得（getActiveTab）＋タブ変更コールバック（onTabChange）
+    ├── tabManager.js       # タブ切り替え＋アクティブタブ再クリックでパネルを畳む（.panel-collapsed）＋getActiveTab／onTabChange
     ├── layoutCalculator.js # レイアウト計算
     ├── canvasRenderer.js   # キャンバス描画の統合
     ├── backgroundRenderer.js # 背景描画
@@ -135,7 +137,8 @@ Kakomi/
     │       └── shadowAdapter.js      # フレームの影オフセットの値変換（「フレーム」タブ表示中の本体ドラッグ用）
     ├── ui/
     │   ├── scrubInput.js   # ドラッグでスクラブ／クリックでタイプ入力できる数値入力コンポーネント
-    │   └── colorSwatches.js # カラーピッカーの直下にカラー履歴スウォッチ行を追加する機能拡張
+    │   ├── colorSwatches.js # カラーピッカーの直下にカラー履歴スウォッチ行を追加する機能拡張
+    │   └── ratioPicker.js  # 比率を「その比率のミニ長方形」の形で見せて選ぶタイル型ピッカー（出力アスペクト比・切り抜き比率で共用）
     ├── presets/
     │   ├── presetStore.js       # 編集設定のプリセット保存・一覧・削除・適用（localStorage）
     │   └── colorHistoryStore.js # カラーピッカーで選んだ色の履歴（localStorage、全ピッカー共通）
@@ -264,18 +267,30 @@ UI要素の制御とイベントハンドリングを担当します。
 - 状態変更リスナーとしての同期処理（`syncUIFromState(state)`をエクスポートし、`main.js`から`addStateChangeListener`で登録している）
 
 **イベント処理:**
-- レイアウト設定（アスペクト比、余白、写真位置）
-- 背景設定（タイプ、色、ぼかしパラメータ）
+- レイアウト設定（出力アスペクト比＝比率タイルピッカー、余白。写真位置・切り抜き位置のスライダーは撤去。下記「比率タイルピッカー」参照）
+- 背景設定（タイプ、色、ぼかしパラメータ。明るさ・彩度は折りたたみ、X/Yオフセットのスライダーは撤去。下記「背景タブの整理」参照）
 - フレーム設定（角スタイル、影、縁取り。値の読み書きロジックは変更していないが、開閉表現は下記の通りCSSアニメーションに変更）
 - テキスト設定（撮影日・Exif情報・自由テキストレイヤーの追加/削除/個別設定。下記「文字レイヤーの統一UI」参照）
 - 出力設定（JPEG品質）
+
+**比率タイルピッカー（出力アスペクト比・切り抜き比率。`docs/roadmap.md` A-1）:**
+以前はどちらも`<select>`（出力＝`#outputAspectRatio`、切り抜き＝`#cropAspectRatio`）だったが、比率の形が想像しづらいという要望で、比率そのものの形をミニ長方形で描いて選ぶタイル型 UI（`js/ui/ratioPicker.js`の`createRatioPicker()`）に置き換えた。
+- 選択肢と**並び順**は`js/ui/ratioPicker.js`の`RATIO_FAMILIES`（比率の「正準順序」＋各エントリの`pickers: ['output'|'crop']`）が唯一の情報源。`ratioOptionsFor('output')` / `ratioOptionsFor('crop')`でそのピッカー用の配列を得る。両ピッカーで同じ比率が同じ相対順序に並ぶ（フェーズ3で共通化。`docs/roadmap.md` A-7。以前は`uiController.js`に別々の並びで定義されていた）。出力＝1:1／4:5／3:4／16:9／1.91:1／L判(89:127)／カスタム、切り抜き＝フリー／1:1／3:4／4:3／16:9／9:16／カスタム。各タイルは`<button class="ratio-tile" data-value aria-pressed>`で、内側の`<i>`要素の幅・高さを比率どおりに（46px 内接で）設定して形を見せる。「フリー」タイルは破線。カスタム幅高さ入力欄は折り返さないコンパクトな1行（`.ratio-custom-row`。フェーズ3で`.form-row-simple`から変更）。
+- ピッカーは`ensureRatioPickers()`が一度だけ生成する（`initializeUIFromState()`が`setupEventListeners()`より先に走るため、両方から呼べるようにしてある）。`onSelect(value)`で、プリセット比率なら`updateState({ outputTargetAspectRatioString })`／`applyCropAspect(value)`を呼ぶ。**「カスタム」タイルはカスタム幅高さ入力欄（`#customAspectRatioContainer`／`#cropCustomAspectRatioContainer`）を表示するだけで、その時点では state を変えない**（反映は入力欄の編集時に`updateAspectRatioFromInputs()`／`updateCropAspectRatioFromInputs()`が行う）。カスタム欄は「カスタム」タイル選択中だけ表示（`updateOutputCustomVisibility()`／`updateCropCustomVisibility()`が`.hidden`をトグル）。
+- state → UI の同期は`syncOutputAspectUI(state)`／`syncCropAspectUI(state)`が担い、`picker.setValue(value)`で該当タイルを押下状態にする（一致するタイルが無ければ「カスタム」タイルにフォールバック）。
+
+**写真の配置スライダーの撤去（`docs/roadmap.md` A-1）:**
+「切り抜き位置（横／縦）」（`#cropOffsetX/Y`）・「枠内位置（横位置／縦位置）」（`#photoPosX/Y`）のスライダー計4本を UI から撤去した。`cropSettings.rect`のパンと`photoViewParams`は**データモデルとしては維持**し、プレビュー上のジェスチャー（本体ドラッグ、crop モードの本体ドラッグ、四隅ハンドル）からのみ操作する。パネルには「配置をリセット」ボタン（`#resetPhotoPlacement`）だけを置き、押すと`photoViewParams`を中央（0.5, 0.5）へ、かつクロップ矩形のパンを中央へ戻す（切り抜き範囲のサイズ・比率は変えない）。
+
+**背景タブの整理（`docs/roadmap.md` B-1、軽微版）:**
+`<fieldset>`構成は保ったまま、拡大ぼかし背景の「明るさ」「彩度」スライダーを既定で閉じたネイティブ`<details id="bgToneAccordion">`（見出し「色調（明るさ・彩度）」）に入れた。X/Yオフセットのスライダー（`#bgOffsetX/Y`）は撤去し、「位置をリセット」ボタン（`#resetBgOffset`。`imageBlurBackgroundParams.offsetX/YPercent`を0に戻す）に置き換えた。位置調整は「背景」タブでのプレビュードラッグ（`backgroundAdapter`、5.17節）で行う。`imageBlurBackgroundParams`のデータモデルは変更なし。
 
 **文字レイヤーの統一UI（撮影日・Exif情報・自由テキスト）:**
 以前は撮影日／Exif情報／自由テキストがそれぞれ独立した`<fieldset>`と専用のUI・イベント配線を持っていたが、これを1つのチップリスト＋1つの設定パネルに統合した。**データモデル（`stateManager.js`の`textSettings.date`/`.exif`/`.customTexts[]`という構造）自体は変更していない**。もともと`textRenderer.js`の描画（`drawSingleText()`）と`textAdapter.js`のドラッグ処理は3種類を共通の仕組みで扱っていたため、今回はUI層だけをそれに合わせて統合した形になる。
 
 - `FIXED_TEXT_LAYERS`（`uiController.js`内の定数）が撮影日(`'text-date'`)・Exif情報(`'text-exif'`)の固定チップを定義し、`resolveTextLayer(state, id)`がid（固定id、または`customTexts[]`内のuuid）から`{ settings, kind }`（`kind`は`'date'|'exif'|'custom'`）を解決する。値の書き戻しは`applyTextLayerChanges(id, kind, changes)`が`kind`に応じて`updateState()`（撮影日・Exif）または`updateCustomTextLayer()`（自由テキスト）に振り分ける（`textAdapter.js`の`resolveLayer()`/`applyChanges()`と同じ設計）
 - レイヤー一覧はチップ表示（`#textLayersList`）。先頭に撮影日・Exif情報の固定チップ（削除不可、有効/無効はチップの薄さで表現）、続けて自由テキストの動的チップ（クリックで選択、×ボタンで削除）が並ぶ。「+ テキストを追加」ボタン（`#addCustomTextButton`）は末尾
-- 選択中レイヤーの設定パネル（`#textLayerSettingsPanel`）は`renderTextLayerSettingsPanel()`が選択変更のたびにHTML文字列で丸ごと再構築する。共通フィールド（表示する/フォント/サイズ/文字色/透過度/オフセットX・Y/回転）は3種類共通で常に表示し、種類固有の部分だけを切り替える（撮影日=書式プリセット＋自由入力、Exif=表示項目の選択・並び替えUI、自由テキスト=テキストエリア）。撮影日には水平配置（textAlign）の概念がないため、その行は表示しない（7.5節参照）
+- 選択中レイヤーの設定パネル（`#textLayerSettingsPanel`）は`renderTextLayerSettingsPanel()`が選択変更のたびにHTML文字列で丸ごと再構築する。共通フィールド（表示する/フォント/サイズ/文字色/不透明度/オフセットX・Y/回転）は3種類共通で常に表示し、種類固有の部分だけを切り替える（不透明度スライダーのラベルはフェーズ3で「透過度」→「不透明度」に修正。値は`opacity`で 1=くっきり／0=透明。`docs/roadmap.md` D-4）（撮影日=書式プリセット＋自由入力、Exif=表示項目の選択・並び替えUI、自由テキスト=テキストエリア）。撮影日には水平配置（textAlign）の概念がないため、その行は表示しない（7.5節参照）
 - **表示位置アンカーはUIから撤去（データモデルは維持）**: 以前は9点（`top/middle/bottom` × `left/center/right`）の固定アンカーを`<select id="textLayerPosition">`で選ばせていたが、位置はプレビュー上のドラッグで決めるため固定アンカーの選択はほぼ使われておらず、UIから削除した（`docs/roadmap.md` D-2）。`textSettings.*.position`（既定は撮影日=`bottom-left`／Exif=`bottom-right`／自由テキスト=`middle-center`）は状態・プリセットに残り、`textRenderer.js`の`calculateTextPosition()`はこれをオフセットの基準アンカーとして引き続き使う。UIを消しただけなのでプリセットの移行は不要。将来アンカーを可変にしたくなった場合はセレクトを戻せばよい
 - Canvasドラッグ中の座標欄（横位置/縦位置）・拡大ハンドル/回転ハンドル操作中のサイズ・回転角の値だけは、`syncTextLayerLiveInputs(state)`が軽量に`.value`のみ更新し、パネル全体は再構築しない（入力中のフォーカスを奪わないため。`main.js`の状態変更リスナー経由で`syncUIFromState()`→`syncTextLayerLiveInputs()`と呼ばれる）
 - 横位置/縦位置/回転の数値欄は`js/ui/scrubInput.js`の`enhanceAsScrubInput()`で拡張されており、ドラッグでスクラブ、クリックでタイプ入力ができる
@@ -313,6 +328,7 @@ UI要素の制御とイベントハンドリングを担当します。
 - `drawPreview(currentState, previewCanvas, previewCtx)`: プレビュー描画
 - `renderFinal(currentState)`: 最終出力用の高解像度Canvasを生成
 - `getLastPreviewContext()`: 直近の`drawPreview`呼び出し時点でのプレビュー⇔出力解像度の変換情報（`{ scale, photoShortSidePx }`）を返す。`canvasInteraction.js`がドラッグ量の単位変換に使用する
+- `clearContainerSizeCache()`: プレビューコンテナ寸法のキャッシュ（`cachedContainerSize`。canvasサイズ変更でレイアウトが揺れる＝正のフィードバックを防ぐためのキャッシュ）を破棄する。従来は`window`の`resize`でのみクリアしていたが、フェーズ4で設定パネルの畳み／展開でもキャンバス幅が変わるようになったため、`main.js`が`ResizeObserver`経由でこれを呼んで次の`drawPreview`に寸法を取り直させる。**ただし「幅」の変化に限定**（高さ変化に反応させると縦長比率でキャンバスが際限なく拡大する既知の不具合。3.1節・`docs/session-log-2026-08-29-3.md` §13）
 
 **描画順序（`drawPreview`。`renderFinal`は8・9を除く1〜7のみ）:**
 1. 背景描画（拡大ぼかし背景の場合、当たり判定用に背景の矩形を`interactionRegistry`へ登録）
@@ -335,12 +351,13 @@ UI要素の制御とイベントハンドリングを担当します。
 背景描画を担当します。
 
 **主要関数:**
-- `drawBackground(ctx, canvasWidth, canvasHeight, currentState, basePhotoShortSideForBlurPxIfPreview)`: 背景を描画
+- `drawBackground(ctx, canvasWidth, canvasHeight, currentState, basePhotoShortSideForBlurPxIfPreview)`: 背景を描画。ぼかし背景時は `currentState.photoDrawConfig.sourceX/Y/Width/Height` から「クロップ後の写真範囲」`sourceRect` を作って渡す
 - `drawColorBackground(ctx, canvasWidth, canvasHeight, color)`: 単色背景を描画
-- `drawBlurredImageBackground(ctx, canvasWidth, canvasHeight, img, blurParams, basePhotoShortSideForBlurPx)`: 拡大ぼかし背景を描画
+- `drawBlurredImageBackground(ctx, canvasWidth, canvasHeight, img, blurParams, basePhotoShortSideForBlurPx, sourceRect)`: 拡大ぼかし背景を描画。`sourceRect`（省略時は画像全体）で指定した範囲だけを `drawImage` のソースに使う
 
 **ぼかし背景の処理:**
-- Canvas全体を覆うように画像を拡大
+- **元にするのはクロップ後の写真**（`sourceRect`。フェーズ3で修正。`docs/roadmap.md` B-3。7.3節参照）
+- そのクロップ範囲がCanvas全体を覆うように拡大（cover方式。アスペクト比も範囲基準）
 - ユーザー指定の拡大倍率を適用
 - ぼかし、明るさ、彩度のフィルターを適用
 - オフセット調整を適用
@@ -682,7 +699,7 @@ Blobをダウンロード
 
 **操作方法:**
 - **プレビュー上（オンキャンバス）**: 5.16〜5.17節・7.2節「オンキャンバス・トリミング」参照。写真を選択した状態でもう一度クリックすると「トリミングモード」に入り、四隅の L 字ハンドルで切り抜き範囲を指定、写真本体ドラッグで切り抜き範囲を平行移動、写真の外をクリックまたは Esc で確定する。
-- **「レイアウト」パネルの数値 UI**: 「切り抜き比率」select（`free` / 各比率 / カスタム幅高さ＋⇄）と、「切り抜き位置（横／縦）」スライダー。位置スライダーは 0–1（0.5＝中央）の値で、`rect.x = (1 - rect.w) * panX` のように矩形位置へ写像される（`uiController.js` の `cropRectWithPan` / `cropPanFromRect`）。
+- **「レイアウト」パネルの UI**: 「切り抜き比率」は比率タイルピッカー（`#cropAspectRatioPicker`。`フリー` / 各比率 / カスタム幅高さ＋⇄。2026年8月のフェーズ2で `<select id="cropAspectRatio">` から置き換え。5.3節「比率タイルピッカー」参照）。**「切り抜き位置（横／縦）」スライダーはフェーズ2で撤去**（`docs/roadmap.md` A-1）。`rect` のパンはプレビュー上のジェスチャー（crop モードの本体ドラッグ・矢印キー）と「配置をリセット」ボタン（`#resetPhotoPlacement`。`uiController.js` の `cropRectWithPan(rect, 0.5, 0.5)` で中央へ）からのみ動かす。
 
 **実装詳細:**
 - `layoutCalculator.js` の `calculateLayout()` が `utils/cropRect.js` の `resolveCropRect(cropSettings, originalW, originalH)` を呼んで矩形を得る。`resolveCropRect` は `cropSettings.rect` が有効ならそれを、旧 `zoom`/`offset` 形式ならその場で矩形へ変換、どちらでもなければ全体（`{0,0,1,1}`）を返すため、未移行の状態でも描画は壊れない。
@@ -691,21 +708,19 @@ Blobをダウンロード
 
 ### 7.2 レイアウト設定
 - **出力アスペクト比**: 最終的な出力画像の縦横比を指定
-  - プリセット選択肢（`<select id="outputAspectRatio">`）: 1:1（正方形）、4:5（Instagram縦）、1.91:1（Instagram横）、16:9（ワイド）、3:4、89:127（L判縦）、カスタム
-  - **カスタム比率の自由入力（実装済み）**: 「カスタム」を選択、または幅/高さの数値入力欄を直接編集すると、任意の `幅:高さ` 比率を指定できる。⇄ボタンで幅と高さを入れ替え可能。入力値は `outputTargetAspectRatioString`（例: `"3:2"`）として状態に保存される。
+  - **比率タイルピッカー（`#outputAspectRatioPicker`。2026年8月のフェーズ2で `<select id="outputAspectRatio">` から置き換え。`docs/roadmap.md` A-1）**: 1:1（正方形）、4:5（IG縦）、1.91:1（IG横）、16:9（ワイド）、3:4、L判(89:127)、カスタム。比率の形をミニ長方形で描いたタイルをクリックして選ぶ（`js/ui/ratioPicker.js`。5.3節「比率タイルピッカー」参照）
+  - **カスタム比率の自由入力（実装済み）**: 「カスタム」タイルを選ぶと幅/高さの数値入力欄（`#customAspectRatioContainer`）が現れ、任意の `幅:高さ` 比率を指定できる。⇄ボタンで幅と高さを入れ替え可能。入力値は `outputTargetAspectRatioString`（例: `"3:2"`）として状態に保存される。カスタムタイルを押した時点では state は変わらず、入力欄を編集した時点で反映される。
     - 内部的には `outputTargetAspectRatioString` に `"custom:"` プレフィックスを付けた古い形式の後方互換処理（プレフィックス除去）が残っているが、現在のUIはプレフィックスなしの `"幅:高さ"` 形式で保存する。
-  - `layoutCalculator.js` は特別な値 `"original_photo"`（入力写真の比率をそのまま使う）にも対応しているが、現在のプリセット選択肢にはこの項目がなく、UIから選択する手段はない。
+  - `layoutCalculator.js` は特別な値 `"original_photo"`（入力写真の比率をそのまま使う）にも対応しているが、現在のタイルにはこの項目がなく、UIから選択する手段はない。
   - これが最終的なJPEGのアスペクト比となる
-- **基準余白**: 構図調整後の写真の短辺に対する%で指定（0-300%）
+- **基準余白**: 構図調整後の写真の短辺に対する%で指定（0-300%）。スライダー（`#baseMarginPercent`）は据え置き。
   - この値は「最小限の余白量」の目安
   - 実際の余白は、出力画像の目標アスペクト比を維持するために、この基準値よりも一部が自動的に広がる場合がある
-- **写真位置調整**: 出力画像のフレーム内で、写真をどこに配置するか
-  - X方向: 0.0-1.0の範囲で調整（0.0=左端、0.5=中央、1.0=右端）
-  - Y方向: 0.0-1.0の範囲で調整（0.0=上端、0.5=中央、1.0=下端）
-  - スライダーでの調整に加え、**プレビュー上で写真を直接ドラッグしても位置を調整できる**（`interaction/adapters/photoAdapter.js`）。ドラッグ中はキャンバス中央線・端・他オブジェクトへのスナップも働く
-  - **注意:** 仕様書v1では「9点から選択」とあるが、現在の実装では連続的な位置調整（スライダー・ドラッグの両方）となっている
+- **写真位置調整**: 出力画像のフレーム内で、写真をどこに配置するか（`photoViewParams`、X/Y とも 0.0=端〜0.5=中央〜1.0=端）
+  - **数値スライダー（`#photoPosX/Y`）は 2026年8月のフェーズ2で撤去（`docs/roadmap.md` A-1）**。`photoViewParams` はデータとしては維持し、**プレビュー上で写真を直接ドラッグして調整する**（`interaction/adapters/photoAdapter.js`。ドラッグ中はキャンバス中央線・端・他オブジェクトへのスナップも働く）。パネルには「配置をリセット」ボタン（`#resetPhotoPlacement`）があり、`photoViewParams` を中央へ、かつクロップ矩形のパンを中央へ戻す（切り抜き範囲のサイズ・比率は変えない）。
+  - **注意:** 仕様書v1では「9点から選択」とあるが、現在の実装ではプレビュードラッグによる連続的な位置調整となっている
 
-**UI上のグルーピング（2026年8月のUI刷新で変更）:** 「出力フォーマット」（アスペクト比＋余白）を「レイアウト」フライアウトパネルの先頭に配置し、その下に「写真の配置」fieldsetとして「トリミング（切り抜き範囲）」（7.1節＝切り抜き比率・切り抜き位置）と「枠内での配置」（本節の写真位置調整）をサブセクション見出し付きでまとめている。これは「まず出力の枠を決め、その中で写真を配置する」という操作順序をUI上でも表すためのグルーピングであり、`cropSettings`と`photoViewParams`という2つの状態・計算ロジック自体は独立している（統合していない）。
+**UI上のグルーピング（フェーズ4 A-8 で並べ替え）:** 「レイアウト」パネルを **① 出力アスペクト比 → ② トリミング → ③ 余白と配置** の3セクション（線区切り、`fieldset`＋`legend`）に分ける。ユーザーから見た自然な決定順（枠の形を決める → 元写真のどこを使うか決める → 余白と配置を決める）に合わせたもの。**「余白」（`baseMarginPercent`）は「出力アスペクト比」から切り離して ③ に置く**——余白は出力キャンバスの形の決定ではなく構図の決定であり、かつ ② トリミングで写真の実効短辺（＝余白 % の基準）が変わるため、使う範囲を先に確定してから余白を決めるほうが値がぶれない。①②の比率タイル、③の余白スライダー・「配置をリセット」ボタンはそれぞれ独立で、`cropSettings`と`photoViewParams`の状態・計算ロジックは統合していない。切り抜き位置・枠内位置の数値スライダーはフェーズ2で撤去済みで、これらの調整はすべてプレビュー上のジェスチャーに寄せている。
 
 **オンキャンバス・トリミング（2026年8月28日に再設計。旧「オンキャンバス直接トリミング」＝中央固定ズーム方式を置き換え）:**
 
@@ -734,18 +749,17 @@ Blobをダウンロード
   - **注意:** 仕様書v1では1x-4xとあるが、現在の実装では1-8倍となっている
 - **ぼかし強度**: 0-50%（写真短辺基準、デフォルト3%）
   - **注意:** 仕様書v1では0-15%とあるが、現在の実装では0-50%となっている
-- **明るさ**: 0-150%（デフォルト100%、変化なし）
-- **彩度**: 0-150%（デフォルト100%、変化なし）
-- **X方向オフセット**: -500%〜500%（写真短辺基準、デフォルト0%）
-  - 背景として使用する元画像の表示位置を左右に調整
-  - **注意:** 仕様書v1では-50%～50%とあるが、現在の実装では-500%～500%となっている
-- **Y方向オフセット**: -500%〜500%（写真短辺基準、デフォルト0%）
-  - 背景として使用する元画像の表示位置を上下に調整
-  - **注意:** 仕様書v1では-50%～50%とあるが、現在の実装では-500%～500%となっている
-- 拡大ぼかし背景が有効な場合、スライダーでの調整に加え、**「背景」タブを開いている間、プレビュー上のドラッグ（写真の上を含むキャンバス全面）で位置を調整できる**（`interaction/adapters/backgroundAdapter.js`、5.16節「タブ別ドラッグ」）。オフセットが 0 に近づくと 0 にスナップし赤い中央ガイドが出る。**「背景」タブ以外では余白をドラッグしても背景は動かない**（以前は他タブでも余白ドラッグで背景がパンしていた。不具合として修正）。単色背景の場合は位置の概念がないためドラッグ対象にならない
+- **UIのグルーピング（フェーズ3 で整理。`docs/roadmap.md` B-4）**: 拡大ぼかし背景設定を「見え方」（拡大倍率・ぼかし強度）／「色調」（明るさ・彩度）／「位置」の3小見出しに分ける。「色調」「位置」の見出しは上に区切り線を引く（`.subsection-heading.with-rule`）。フェーズ2で「色調」を閉じたアコーディオン（`#bgToneAccordion`）に入れていたが、開くのにワンアクション要るのが煩わしいとのユーザー判断で撤回し、常時表示＋区切り線に戻した。
+- **明るさ**: 0-150%（デフォルト100%、変化なし）。「色調」小見出しの下に常時表示
+- **彩度**: 0-150%（デフォルト100%、変化なし）。同上
+- **X/Y方向オフセット**: `imageBlurBackgroundParams.offsetX/YPercent`（写真短辺基準、デフォルト0%、内部クランプ -500%〜500%）
+  - 背景として使用する（クロップ後の）写真の表示位置を上下左右に調整
+  - **数値スライダー（`#bgOffsetX/Y`）は 2026年8月のフェーズ2で撤去（`docs/roadmap.md` B-1）**。データモデルは維持し、下記のプレビュードラッグと「位置をリセット」ボタン（`#resetBgOffset`。両オフセットを 0 に戻す）で操作する
+- 拡大ぼかし背景が有効な場合、**「背景」タブを開いている間、プレビュー上のドラッグ（写真の上を含むキャンバス全面）で位置を調整できる**（`interaction/adapters/backgroundAdapter.js`、5.16節「タブ別ドラッグ」）。オフセットが 0 に近づくと 0 にスナップし赤い中央ガイドが出る。**「背景」タブ以外では余白をドラッグしても背景は動かない**（以前は他タブでも余白ドラッグで背景がパンしていた。不具合として修正）。単色背景の場合は位置の概念がないためドラッグ対象にならない
 
 **実装詳細:**
-- Canvas全体を覆うように画像を拡大（cover方式）
+- **ぼかしの元は「クロップ後の写真」**（2026年8月のフェーズ3で修正。`docs/roadmap.md` B-3）。`backgroundRenderer.js` の `drawBlurredImageBackground()` は以前 `sx=0, sy=0, sWidth=img.width, sHeight=img.height` と元画像全体を使っていたため、写真をクロップで小さくしてもぼかし背景が変わらなかった。`drawBackground()` が `currentState.photoDrawConfig.sourceX/Y/Width/Height`（＝クロップ矩形の元画像ピクセル座標。前景の写真描画と同じ値）から `sourceRect` を作って渡し、`drawBlurredImageBackground()` はその範囲だけを `drawImage` のソース矩形に使う。アスペクト比・cover スケールもこの範囲基準。プレビュー・出力（`renderFinal`）の両経路が同じ関数を通る。
+- クロップ後の写真がCanvas全体を覆うように拡大（cover方式）
 - 基本スケールにユーザー指定の拡大率を適用
 - ぼかし、明るさ、彩度のフィルターを適用
 - オフセット調整を適用
@@ -808,8 +822,8 @@ Blobをダウンロード
 - **拡大・回転（`rotation`、度数）**: 選択中はプレビュー上に拡大ハンドル（右下角の四角）と回転ハンドル（上端中央から少し離れた丸）が表示され、ドラッグで直接操作できる（5.16・5.22節参照）。回転ハンドルはShiftキー併用で15度刻みにスナップする。設定パネルには数値入力欄もあり、ハンドルドラッグ中はこの数値欄・サイズスライダーもリアルタイムに追従する
 
 ### 7.6 出力設定
-- **JPEG品質**: 1-100（スライダー、`jpgQuality`。「出力」フライアウトパネル内）
-- **ダウンロードボタン**（`#downloadButton`）: 「出力」タブ（`#tab-output`）内、`JPG画質設定` fieldsetの直下に横幅いっぱいのアクセントボタンとして置いている。2026年8月のUI刷新でいったん上部バーへ移設したが、そこまで頻繁に押すものではなく「出力」タブ内にあるほうが自然というユーザー判断で戻した（`docs/roadmap.md` E、3.1節参照）。id・イベント配線（`main.js`の`handleDownload`配線）は一度も変えていない。
+- **JPEG品質**: 1-100（スライダー、`jpgQuality`）。2026年8月のフェーズ4で「出力」タブを廃止し、**ダウンロードボタンの画質ポップオーバー（`#downloadPopover`）内**に移動した。同期先の id は不変なので `uiController.js` 側の配線（`initializeUIFromState` / `updateSliderValueDisplays` / `addNumericInputListener`）は変えていない。
+- **ダウンロードボタン**（`#downloadButton`）: **上部バー右端**（`.app-header .header-actions` の `.dl-group`）。押すと `#downloadPopover`（画質スライダー＋「書き出す」＝`#downloadConfirmButton`）を開き、「書き出す」で `handleDownload()` を実行。外側クリック／Esc で閉じる。画像未ロード時は `disabled`（`fileManager.js` が読み込み時に解除）。「出力」タブ（`#tab-output`）とレール項目は廃止（`docs/roadmap.md` E-5、3.1節参照）。id は不変で `fileManager.js` 側への影響なし。
 - **Exif保持**: `outputSettings.preserveExif` は状態として存在し（初期値 `true`）、`fileManager.js`の`handleDownload()`がこの値を見てExif埋め込みの要否を判定する。ただし、この設定値を切り替えるUIチェックボックス自体が存在せず、常に「保持する」設定のままダウンロードが行われる。
 
 ### 7.7 Exif情報表示
@@ -988,7 +1002,25 @@ Blobをダウンロード
 - ✅ **矢印キーで背景／影の微調整**: 「背景」タブ・「フレーム」タブ（影が有効）で、矢印キーを背景／影のオフセット nudge に割り当て（5.16節）
 - ダブルクリックでオフセットをリセットする案は「他の操作が暴発しそう」としてユーザー判断で見送り
 
-未着手のロードマップ項目（方向性の相談から）: A-1（出力フォーマットUIのグラフィカル化・位置スライダー撤去）、A-3〜A-5（crop/確定まわりの拡張）、B-1（背景タブのスライダー整理）、C-1（超楕円スライダーの体感等間隔化）、D-1/D-3（テキスト追加フロー再設計・設定共通化＝データモデル統合の是非）、F（プリセットの置き場所）。
+フェーズ2（UI のスライダー羅列・プルダウン整理、`docs/session-log-2026-08-29-2.md`）:
+- ✅ **A-1**: 出力アスペクト比・切り抜き比率を比率タイルピッカー（`js/ui/ratioPicker.js`）に置き換え。「切り抜き位置（横／縦）」「枠内位置（横位置／縦位置）」のスライダー計4本を撤去し、`cropSettings.rect` のパンと `photoViewParams` はプレビュー操作＋「配置をリセット」ボタンのみで動かす（5.3節・7.1節・7.2節）
+- ✅ **B-1**（軽微版）: 拡大ぼかし背景の「明るさ・彩度」を既定で閉じたアコーディオンに移動、X/Yオフセットのスライダーを撤去し「位置をリセット」ボタンに置き換え（5.3節・7.3節）。背景タイプのセグメント化やカード化は「後で画面レイアウトを一新する」ユーザー方針のため見送り
+
+フェーズ3（小改修・バグ、`docs/session-log-2026-08-29-3.md`）:
+- ✅ **B-3**（バグ）: 拡大ぼかし背景を「クロップ後の写真」から生成する（`backgroundRenderer.js`。`photoDrawConfig.source*` を `sourceRect` として使う。5.6節・7.3節）
+- ✅ **D-4**（バグ）: テキストの不透明度スライダーのラベルを「透過度」→「不透明度」に（`uiController.js` の `renderTextLayerSettingsPanel()`。5.3節・7.5節）
+- ✅ **A-7**: 出力／切り抜きの比率タイルの選択肢順を共通化（`ratioPicker.js` の `RATIO_FAMILIES` が唯一の並び）。カスタム幅高さ入力欄を折り返さない1行（`.ratio-custom-row`）に（5.3節）
+- ✅ **B-4**: 背景の「明るさ・彩度」をアコーディオンから常時表示に戻し、「見え方／色調／位置」の区切り線付き小見出しで分離（B-1 のアコーディオンを撤回。5.3節・7.3節）
+
+フェーズ4（Lightroom Web 風のシェル刷新。`artifact-design` モックアップで方向性合意後に実装。`docs/session-log-2026-08-29-3.md` §9–11）:
+- ✅ **E-1**: `tabManager.js` にアクティブタブ再クリックでパネルを畳む処理（`.app-shell.panel-collapsed`）。初期表示はレイアウト開。パネル開閉で `main.js` の `ResizeObserver` が `clearContainerSizeCache()`＋再描画（3.1節・5.5節）
+- ✅ **E-2**: `fieldset`／`legend`／`.frame-card` を枠なし＋見出し＋上罫線の線ベースに（`style.css`）（3.1節）
+- ✅ **E-4**: `.custom-text-drag-hint` の長文をアイコン＋数語に削減
+- ✅ **E-5**: 「出力」タブ（`#tab-output`）とレール項目を廃止。ダウンロードを上部バー右＋画質ポップオーバー（`#downloadPopover`）に（3.1節・7.6節）
+- ✅ **A-8**: 「レイアウト」パネルを ① 出力アスペクト比 → ② トリミング → ③ 余白と配置 の順に。余白を①から③へ分離（7.2節）
+- ✅ **F**: プリセットはレール下部の一項目のまま（「情報」の隣）。レイアウトの中に畳み込むのは見送り
+
+未着手のロードマップ項目: **フェーズ5** = E-3（「情報」を他タブと並列のタブに＝同じパネル枠で切り替わる。`#exifFloatCard` 廃止、Exif 表示をアイコン主体に）、**フェーズ6** = C-1 / A-5 / D-1・D-3 / A-4 / A-3。詳細は `docs/roadmap.md`。
 
 ## 12. 仕様書v1との対応状況
 

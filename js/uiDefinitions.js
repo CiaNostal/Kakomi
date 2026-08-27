@@ -101,17 +101,13 @@ export const exifTagDefinitions = [
  */
 export const controlsConfig = {
     // レイアウト設定タブ - 構図調整（クロップ）
-    cropAspectRatio: { defaultValue: 'free' }, // select要素のデフォルト選択値（'free' = 自由比率）
-    // クロップ位置スライダー。値は 0–1（0.5 = 中央）で、cropSettings.rect のパンに写像される
-    // （uiController.js の cropRectWithPan / cropPanFromRect）。
-    cropOffsetX: { defaultValue: 0.5, min: 0, max: 1, step: 0.01 }, // range input（パン）
-    cropOffsetY: { defaultValue: 0.5, min: 0, max: 1, step: 0.01 }, // range input（パン）
+    // アスペクト比はタイル型ピッカー（js/ui/ratioPicker.js）。選択肢と並び順は
+    // ratioPicker.js の RATIO_FAMILIES（正準順序）が唯一の情報源。
+    // 「切り抜き位置」「枠内位置」のスライダーは撤去済み（docs/roadmap.md A-1）。
+    // cropSettings.rect のパンと photoViewParams はデータとして保持し、プレビュー操作からのみ動かす。
 
     // レイアウト設定タブ
-    outputAspectRatio: { defaultValue: '1:1' }, // select要素のデフォルト選択値
     baseMarginPercent: { defaultValue: 5, min: 0, max: 300, step: 0.5 }, // number input（写真短辺に対する%。大きめの余白も置けるよう上限300%）
-    photoPosX: { defaultValue: 0.5, min: 0, max: 1, step: 0.01 }, // range input
-    photoPosY: { defaultValue: 0.5, min: 0, max: 1, step: 0.01 }, // range input
     // 背景編集タブ
     backgroundType: { defaultValue: 'color' }, // radio button のデフォルト選択値
     backgroundColor: { defaultValue: '#ffffff' }, // color input
@@ -119,8 +115,8 @@ export const controlsConfig = {
     bgBlur: { defaultValue: 3, min: 0, max: 50, step: 0.5 },  // range input
     bgBrightness: { defaultValue: 100, min: 0, max: 150, step: 1 }, // range input
     bgSaturation: { defaultValue: 100, min: 0, max: 150, step: 1 }, // range input
-    bgOffsetX: { defaultValue: 0, min: -500, max: 500, step: 2 }, // 背景Xオフセット%
-    bgOffsetY: { defaultValue: 0, min: -500, max: 500, step: 2 }, // 背景Yオフセット%
+    // 背景 X/Y オフセットのスライダーは撤去済み（docs/roadmap.md B-1）。
+    // 「背景」タブのプレビュードラッグ（backgroundAdapter）と「位置をリセット」ボタンで操作する。
 
     // 出力タブ
     jpgQuality: { defaultValue: 100, min: 1, max: 100, step: 1 }, // range input (UI表示用1-100)
@@ -149,7 +145,7 @@ export const controlsConfig = {
     textFreeOffsetX: { defaultValue: 0, min: -100, max: 100, step: 0.5 },
     textFreeOffsetY: { defaultValue: 0, min: -100, max: 100, step: 0.5 },
 
-    // テキスト共通の透過度設定
+    // テキスト共通の不透明度設定（1=くっきり／0=透明。UIラベルは「不透明度」）
     textOpacity: { defaultValue: 1, min: 0, max: 1, step: 0.01 },
 
     // フレーム加工タブ

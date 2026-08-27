@@ -7,6 +7,7 @@ import { parseAspectRatio, fitRectToAspect, resolveCropRect } from './utils/crop
 import * as selectionStore from './interaction/selectionStore.js';
 import { enhanceAsScrubInput } from './ui/scrubInput.js';
 import { attachColorHistory } from './ui/colorSwatches.js';
+import { createRatioPicker, ratioOptionsFor } from './ui/ratioPicker.js';
 import { getPresets, savePreset, deletePreset, applyPreset } from './presets/presetStore.js';
 import { decodeExifString } from './exifHandler.js';
 
@@ -15,33 +16,32 @@ export const uiElements = {
     previewCanvas: document.getElementById('previewCanvas'),
     previewCtx: null,
     downloadButton: document.getElementById('downloadButton'),
+    downloadPopover: document.getElementById('downloadPopover'),
+    downloadConfirmButton: document.getElementById('downloadConfirmButton'),
     canvasContainer: document.querySelector('.canvas-container'),
     undoButton: document.getElementById('undoButton'),
     redoButton: document.getElementById('redoButton'),
 
     // レイアウト設定タブ - 構図調整（クロップ）
-    cropAspectRatioSelect: document.getElementById('cropAspectRatio'),
+    // 切り抜き比率はタイル型ピッカー（js/ui/ratioPicker.js）。以前は <select id="cropAspectRatio">。
+    cropAspectRatioPicker: document.getElementById('cropAspectRatioPicker'),
     cropCustomAspectRatioContainer: document.getElementById('cropCustomAspectRatioContainer'),
     cropCustomAspectRatioWidthInput: document.getElementById('cropCustomAspectRatioWidth'),
     cropCustomAspectRatioHeightInput: document.getElementById('cropCustomAspectRatioHeight'),
     cropSwapAspectRatioButton: document.getElementById('cropSwapAspectRatio'),
-    cropOffsetXSlider: document.getElementById('cropOffsetX'),
-    cropOffsetXValueSpan: document.getElementById('cropOffsetXValue'),
-    cropOffsetYSlider: document.getElementById('cropOffsetY'),
-    cropOffsetYValueSpan: document.getElementById('cropOffsetYValue'),
+    // 「切り抜き位置」「枠内位置」のスライダーは撤去（docs/roadmap.md A-1）。
+    // cropSettings.rect のパンと photoViewParams はデータとして保持し、プレビュー操作からのみ動かす。
+    resetPhotoPlacementButton: document.getElementById('resetPhotoPlacement'),
 
     // レイアウト設定タブ
-    outputAspectRatioSelect: document.getElementById('outputAspectRatio'),
+    // 出力アスペクト比もタイル型ピッカー。以前は <select id="outputAspectRatio">。
+    outputAspectRatioPicker: document.getElementById('outputAspectRatioPicker'),
     customAspectRatioContainer: document.getElementById('customAspectRatioContainer'),
     customAspectRatioWidthInput: document.getElementById('customAspectRatioWidth'),
     customAspectRatioHeightInput: document.getElementById('customAspectRatioHeight'),
     swapAspectRatioButton: document.getElementById('swapAspectRatio'),
     baseMarginPercentInput: document.getElementById('baseMarginPercent'),
     baseMarginPercentValueSpan: document.getElementById('baseMarginPercentValue'),
-    photoPosXSlider: document.getElementById('photoPosX'),
-    photoPosYSlider: document.getElementById('photoPosY'),
-    photoPosXValueSpan: document.getElementById('photoPosXValue'),
-    photoPosYValueSpan: document.getElementById('photoPosYValue'),
 
     // 背景編集タブ
     bgTypeColorRadio: document.getElementById('bgTypeColor'),
@@ -57,10 +57,9 @@ export const uiElements = {
     bgBlurValueSpan: document.getElementById('bgBlurValue'),
     bgBrightnessValueSpan: document.getElementById('bgBrightnessValue'),
     bgSaturationValueSpan: document.getElementById('bgSaturationValue'),
-    bgOffsetXSlider: document.getElementById('bgOffsetX'),
-    bgOffsetXValueSpan: document.getElementById('bgOffsetXValue'),
-    bgOffsetYSlider: document.getElementById('bgOffsetY'),
-    bgOffsetYValueSpan: document.getElementById('bgOffsetYValue'),
+    // 背景 X/Y オフセットのスライダーは撤去（docs/roadmap.md B-1）。
+    // 「背景」タブでのプレビュードラッグ（backgroundAdapter）とこのリセットボタンで操作する。
+    resetBgOffsetButton: document.getElementById('resetBgOffset'),
 
     // 出力タブ
     jpgQualitySlider: document.getElementById('jpgQuality'),
@@ -115,6 +114,17 @@ export const uiElements = {
 
 let redrawDebounced = null; // ★追加: デバウンスされた再描画関数を保持する変数
 
+// 比率タイルピッカー（js/ui/ratioPicker.js）のインスタンス。
+// initializeUIFromState は setupEventListeners より先に走るため、両方から呼べる
+// ensureRatioPickers() で一度だけ生成する。onSelect から使う再描画関数は
+// setupEventListeners が受け取った redrawCallback を moduleRedraw に控えておく。
+let outputRatioPicker = null;
+let cropRatioPicker = null;
+let moduleRedraw = null;
+
+// 出力／切り抜きの比率タイルの選択肢は js/ui/ratioPicker.js の RATIO_FAMILIES（正準順序）を
+// フィルタして得る。両ピッカーで同じ比率が同じ相対順序に並ぶ（docs/roadmap.md A-7）。
+
 function populateFontSelect(selectElement, selectedFontDisplayName) {
     if (!selectElement) return;
     selectElement.innerHTML = ''; // Clear existing options
@@ -133,15 +143,8 @@ function populateFontSelect(selectElement, selectedFontDisplayName) {
 
 // --- クロップ設定（cropSettings.rect / aspectRatio）まわりの UI ヘルパー ---
 
-// クロップ位置スライダー（0–1, 0.5=中央）↔ cropSettings.rect の相互変換。
-// rect.x が取りうる範囲は [0, 1-rect.w] のため、pan=0.5 を「中央」として写像する。
-function cropPanFromRect(rect) {
-    return {
-        x: rect.w < 1 ? rect.x / (1 - rect.w) : 0.5,
-        y: rect.h < 1 ? rect.y / (1 - rect.h) : 0.5
-    };
-}
-
+// クロップ矩形のパンを「元画像割合矩形」に反映する。rect.x の可動範囲は [0, 1-rect.w]、
+// panX=0.5 が中央。「配置をリセット」ボタンから中央（0.5, 0.5）へ戻すのに使う。
 function cropRectWithPan(rect, panX, panY) {
     return { x: (1 - rect.w) * panX, y: (1 - rect.h) * panY, w: rect.w, h: rect.h };
 }
@@ -158,16 +161,101 @@ function applyCropAspect(aspectRatioString) {
     updateState({ cropSettings: { aspectRatio: aspectRatioString, rect: newRect } });
 }
 
-// パン用スライダーから cropSettings.rect を更新する。
-function commitCropPan(panX, panY) {
-    const state = getState();
-    const rect = resolveCropRect(state.cropSettings, state.originalWidth, state.originalHeight);
-    updateState({ cropSettings: { rect: cropRectWithPan(rect, panX, panY) } });
+// 比率タイルピッカーを一度だけ生成する。initializeUIFromState / setupEventListeners の
+// どちらから呼ばれても安全（生成済みなら何もしない）。
+function ensureRatioPickers() {
+    if (!outputRatioPicker && uiElements.outputAspectRatioPicker) {
+        outputRatioPicker = createRatioPicker(uiElements.outputAspectRatioPicker, {
+            options: ratioOptionsFor('output'),
+            onSelect: (value) => {
+                if (value === 'custom') {
+                    // 「カスタム」タイルは幅高さ入力欄を出すだけ（この時点では state を変えない）。
+                    // 実際の反映は入力欄の編集時に updateAspectRatioFromInputs が行う。
+                    updateOutputCustomVisibility();
+                    return;
+                }
+                const parts = value.split(':');
+                if (parts.length === 2 && uiElements.customAspectRatioWidthInput
+                    && uiElements.customAspectRatioHeightInput) {
+                    uiElements.customAspectRatioWidthInput.value = parts[0];
+                    uiElements.customAspectRatioHeightInput.value = parts[1];
+                }
+                updateState({ outputTargetAspectRatioString: value });
+                updateOutputCustomVisibility();
+                if (moduleRedraw) moduleRedraw();
+            }
+        });
+    }
+    if (!cropRatioPicker && uiElements.cropAspectRatioPicker) {
+        cropRatioPicker = createRatioPicker(uiElements.cropAspectRatioPicker, {
+            options: ratioOptionsFor('crop'),
+            onSelect: (value) => {
+                if (value === 'custom') {
+                    // 「カスタム」タイルは幅高さ入力欄を出すだけ。反映は入力欄の編集時。
+                    updateCropCustomVisibility();
+                    return;
+                }
+                if (value !== 'free') {
+                    const parts = value.split(':');
+                    if (parts.length === 2 && uiElements.cropCustomAspectRatioWidthInput
+                        && uiElements.cropCustomAspectRatioHeightInput) {
+                        uiElements.cropCustomAspectRatioWidthInput.value = parts[0];
+                        uiElements.cropCustomAspectRatioHeightInput.value = parts[1];
+                    }
+                }
+                applyCropAspect(value);
+                updateCropCustomVisibility();
+                if (moduleRedraw) moduleRedraw();
+            }
+        });
+    }
 }
 
-// 出力アスペクト比 select ＋ カスタム幅高さ入力欄を state に同期する（initializeUIFromState から使用）。
+// カスタム幅高さ入力欄は「カスタム」タイル選択中だけ表示する。
+function updateOutputCustomVisibility() {
+    if (!uiElements.customAspectRatioContainer) return;
+    const isCustom = outputRatioPicker && outputRatioPicker.getValue() === 'custom';
+    uiElements.customAspectRatioContainer.classList.toggle('hidden', !isCustom);
+}
+
+function updateCropCustomVisibility() {
+    if (!uiElements.cropCustomAspectRatioContainer) return;
+    const isCustom = cropRatioPicker && cropRatioPicker.getValue() === 'custom';
+    uiElements.cropCustomAspectRatioContainer.classList.toggle('hidden', !isCustom);
+}
+
+// カスタム幅高さ入力欄 → 出力アスペクト比 state（＋タイルの押下状態）を更新する。
+// 「カスタム」タイルの onSelect からも、幅高さ入力欄の input からも呼ばれる。
+function updateAspectRatioFromInputs() {
+    if (!uiElements.customAspectRatioWidthInput || !uiElements.customAspectRatioHeightInput) return;
+    const width = parseFloat(uiElements.customAspectRatioWidthInput.value);
+    const height = parseFloat(uiElements.customAspectRatioHeightInput.value);
+    if (!isNaN(width) && !isNaN(height) && width > 0 && height > 0) {
+        const aspectRatioString = `${width}:${height}`;
+        updateState({ outputTargetAspectRatioString: aspectRatioString });
+        if (outputRatioPicker) outputRatioPicker.setValue(aspectRatioString); // 一致が無ければ custom へ
+        updateOutputCustomVisibility();
+        if (moduleRedraw) moduleRedraw();
+    }
+}
+
+// カスタム幅高さ入力欄 → 切り抜き比率（applyCropAspect が中心維持で rect を再フィット）を更新する。
+function updateCropAspectRatioFromInputs() {
+    if (!uiElements.cropCustomAspectRatioWidthInput || !uiElements.cropCustomAspectRatioHeightInput) return;
+    const width = parseFloat(uiElements.cropCustomAspectRatioWidthInput.value);
+    const height = parseFloat(uiElements.cropCustomAspectRatioHeightInput.value);
+    if (!isNaN(width) && !isNaN(height) && width > 0 && height > 0) {
+        const aspectRatioString = `${width}:${height}`;
+        applyCropAspect(aspectRatioString);
+        if (cropRatioPicker) cropRatioPicker.setValue(aspectRatioString);
+        updateCropCustomVisibility();
+        if (moduleRedraw) moduleRedraw();
+    }
+}
+
+// 出力アスペクト比タイル ＋ カスタム幅高さ入力欄を state に同期する（initializeUIFromState から使用）。
 function syncOutputAspectUI(state) {
-    if (!uiElements.outputAspectRatioSelect) return;
+    ensureRatioPickers();
     const cleanAspectRatio = stripCustomPrefix(state.outputTargetAspectRatioString);
     if (cleanAspectRatio && cleanAspectRatio !== 'original_photo') {
         const parts = cleanAspectRatio.split(':');
@@ -183,15 +271,34 @@ function syncOutputAspectUI(state) {
                 uiElements.customAspectRatioHeightInput.value = String(height);
             }
         }
-        const optionExists = Array.from(uiElements.outputAspectRatioSelect.options).some(
-            opt => opt.value === cleanAspectRatio
-        );
-        if (document.activeElement !== uiElements.outputAspectRatioSelect) {
-            uiElements.outputAspectRatioSelect.value = optionExists ? cleanAspectRatio : 'custom';
-        }
-    } else if (document.activeElement !== uiElements.outputAspectRatioSelect) {
-        uiElements.outputAspectRatioSelect.selectedIndex = -1;
+        if (outputRatioPicker) outputRatioPicker.setValue(cleanAspectRatio);
+    } else if (outputRatioPicker) {
+        outputRatioPicker.setValue(null);
     }
+    updateOutputCustomVisibility();
+}
+
+// 切り抜き比率タイル ＋ カスタム幅高さ入力欄を state に同期する（initializeUIFromState から使用）。
+function syncCropAspectUI(state) {
+    ensureRatioPickers();
+    const cropAspect = state.cropSettings.aspectRatio;
+    if (cropAspect && cropAspect !== 'free' && cropAspect !== 'original') {
+        const parts = cropAspect.split(':');
+        if (parts.length === 2) {
+            const width = parseFloat(parts[0]);
+            const height = parseFloat(parts[1]);
+            if (!isNaN(width) && width > 0 && uiElements.cropCustomAspectRatioWidthInput) {
+                uiElements.cropCustomAspectRatioWidthInput.value = String(width);
+            }
+            if (!isNaN(height) && height > 0 && uiElements.cropCustomAspectRatioHeightInput) {
+                uiElements.cropCustomAspectRatioHeightInput.value = String(height);
+            }
+        }
+        if (cropRatioPicker) cropRatioPicker.setValue(cropAspect);
+    } else if (cropRatioPicker) {
+        cropRatioPicker.setValue('free');
+    }
+    updateCropCustomVisibility();
 }
 
 
@@ -223,38 +330,12 @@ export function initializeUIFromState() {
         }
     };
 
-    // 構図調整（クロップ）設定
-    if (uiElements.cropAspectRatioSelect) {
-        const cropAspect = state.cropSettings.aspectRatio;
-        if (cropAspect && cropAspect !== 'free' && cropAspect !== 'original') {
-            const parts = cropAspect.split(':');
-            if (parts.length === 2) {
-                const width = parseFloat(parts[0]);
-                const height = parseFloat(parts[1]);
-                if (!isNaN(width) && width > 0 && uiElements.cropCustomAspectRatioWidthInput) {
-                    uiElements.cropCustomAspectRatioWidthInput.value = String(width);
-                }
-                if (!isNaN(height) && height > 0 && uiElements.cropCustomAspectRatioHeightInput) {
-                    uiElements.cropCustomAspectRatioHeightInput.value = String(height);
-                }
-            }
-            const optionExists = Array.from(uiElements.cropAspectRatioSelect.options).some(opt => opt.value === cropAspect);
-            uiElements.cropAspectRatioSelect.value = optionExists ? cropAspect : 'custom';
-        } else {
-            uiElements.cropAspectRatioSelect.value = 'free';
-        }
-    }
-    // クロップ位置スライダー: cropSettings.rect からパン値（0–1, 0.5=中央）を逆算して表示
-    const initCropRect = resolveCropRect(state.cropSettings, state.originalWidth, state.originalHeight);
-    const initPan = cropPanFromRect(initCropRect);
-    setupInputAttributesAndValue(uiElements.cropOffsetXSlider, 'cropOffsetX', initPan.x);
-    setupInputAttributesAndValue(uiElements.cropOffsetYSlider, 'cropOffsetY', initPan.y);
+    // 構図調整（クロップ）設定: 切り抜き比率タイル ＋ カスタム幅高さ入力欄を同期
+    syncCropAspectUI(state);
 
     // レイアウト設定
     syncOutputAspectUI(state);
     setupInputAttributesAndValue(uiElements.baseMarginPercentInput, 'baseMarginPercent', state.baseMarginPercent);
-    setupInputAttributesAndValue(uiElements.photoPosXSlider, 'photoPosX', state.photoViewParams.offsetX);
-    setupInputAttributesAndValue(uiElements.photoPosYSlider, 'photoPosY', state.photoViewParams.offsetY);
 
     // 背景設定
     if (uiElements.bgTypeColorRadio) uiElements.bgTypeColorRadio.checked = (state.backgroundType === 'color');
@@ -264,8 +345,6 @@ export function initializeUIFromState() {
     setupInputAttributesAndValue(uiElements.bgBlurSlider, 'bgBlur', state.imageBlurBackgroundParams.blurAmountPercent);
     setupInputAttributesAndValue(uiElements.bgBrightnessSlider, 'bgBrightness', state.imageBlurBackgroundParams.brightness);
     setupInputAttributesAndValue(uiElements.bgSaturationSlider, 'bgSaturation', state.imageBlurBackgroundParams.saturation);
-    setupInputAttributesAndValue(uiElements.bgOffsetXSlider, 'bgOffsetX', state.imageBlurBackgroundParams.offsetXPercent);
-    setupInputAttributesAndValue(uiElements.bgOffsetYSlider, 'bgOffsetY', state.imageBlurBackgroundParams.offsetYPercent);
 
 
     // 出力設定
@@ -310,47 +389,12 @@ export function initializeUIFromState() {
 
 export function updateSliderValueDisplays() {
     const state = getState();
-    // クロップ位置スライダー: cropSettings.rect からパン値（0–1, 0.5=中央）を逆算。
-    // キャンバス上のクロップ操作でも rect は変わるため、つまみ位置もあわせて同期する
-    // （photoPosX/Y スライダーと同じ理由）。
-    const cropRect = resolveCropRect(state.cropSettings, state.originalWidth, state.originalHeight);
-    const pan = cropPanFromRect(cropRect);
-    if (uiElements.cropOffsetXValueSpan && uiElements.cropOffsetXSlider) {
-        const displayVal = Math.round((pan.x - 0.5) * 2 * 100);
-        uiElements.cropOffsetXValueSpan.textContent = displayVal === 0 ? '中央' : `${displayVal}%`;
-        if (document.activeElement !== uiElements.cropOffsetXSlider) {
-            uiElements.cropOffsetXSlider.value = pan.x;
-        }
-    }
-    if (uiElements.cropOffsetYValueSpan && uiElements.cropOffsetYSlider) {
-        const displayVal = Math.round((pan.y - 0.5) * 2 * 100);
-        uiElements.cropOffsetYValueSpan.textContent = displayVal === 0 ? '中央' : `${displayVal}%`;
-        if (document.activeElement !== uiElements.cropOffsetYSlider) {
-            uiElements.cropOffsetYSlider.value = pan.y;
-        }
-    }
-    if (uiElements.photoPosXValueSpan && uiElements.photoPosXSlider) {
-        const val = parseFloat(state.photoViewParams.offsetX);
-        const displayVal = Math.round((val - 0.5) * 2 * 100);
-        uiElements.photoPosXValueSpan.textContent = displayVal === 0 ? '中央' : `${displayVal}%`;
-        // Canvas上のドラッグ操作でも変化しうる値なので、つまみの位置もあわせて同期する
-        // （フォーカス中でも range input は矢印キー入力以外で編集中になることはないため、無条件で同期して問題ない）
-        if (document.activeElement !== uiElements.photoPosXSlider) {
-            uiElements.photoPosXSlider.value = val;
-        }
-    }
-    if (uiElements.photoPosYValueSpan && uiElements.photoPosYSlider) {
-        const val = parseFloat(state.photoViewParams.offsetY);
-        const displayVal = Math.round((val - 0.5) * 2 * 100);
-        uiElements.photoPosYValueSpan.textContent = displayVal === 0 ? '中央' : `${displayVal}%`;
-        if (document.activeElement !== uiElements.photoPosYSlider) {
-            uiElements.photoPosYSlider.value = val;
-        }
-    }
+    // 「切り抜き位置」「枠内位置」のスライダーは撤去済み（docs/roadmap.md A-1）。
+    // cropSettings.rect のパンと photoViewParams はプレビュー操作からのみ動かし、
+    // 数値表示は持たない。
     if (uiElements.baseMarginPercentValueSpan && uiElements.baseMarginPercentInput) {
         uiElements.baseMarginPercentValueSpan.textContent = `${state.baseMarginPercent}%`;
-        // 写真上でのホイール操作でもこの値は変わりうるため、入力欄の値もあわせて同期する
-        // （photoPosX/Yスライダーと同じ理由）。
+        // select モードの四隅■ハンドルのドラッグでもこの値は変わりうるため、入力欄の値もあわせて同期する。
         if (document.activeElement !== uiElements.baseMarginPercentInput) {
             uiElements.baseMarginPercentInput.value = state.baseMarginPercent;
         }
@@ -367,18 +411,8 @@ export function updateSliderValueDisplays() {
     if (uiElements.bgSaturationValueSpan && uiElements.bgSaturationSlider) {
         uiElements.bgSaturationValueSpan.textContent = `${state.imageBlurBackgroundParams.saturation}%`;
     }
-    if (uiElements.bgOffsetXValueSpan && uiElements.bgOffsetXSlider) {
-        uiElements.bgOffsetXValueSpan.textContent = `${parseFloat(state.imageBlurBackgroundParams.offsetXPercent).toFixed(1)}%`;
-        if (document.activeElement !== uiElements.bgOffsetXSlider) {
-            uiElements.bgOffsetXSlider.value = state.imageBlurBackgroundParams.offsetXPercent;
-        }
-    }
-    if (uiElements.bgOffsetYValueSpan && uiElements.bgOffsetYSlider) {
-        uiElements.bgOffsetYValueSpan.textContent = `${parseFloat(state.imageBlurBackgroundParams.offsetYPercent).toFixed(1)}%`;
-        if (document.activeElement !== uiElements.bgOffsetYSlider) {
-            uiElements.bgOffsetYSlider.value = state.imageBlurBackgroundParams.offsetYPercent;
-        }
-    }
+    // 背景 X/Y オフセットのスライダーは撤去済み（docs/roadmap.md B-1）。
+    // 「背景」タブでのプレビュードラッグと「位置をリセット」ボタンで操作する。
     if (uiElements.jpgQualityValueSpan && uiElements.jpgQualitySlider) {
         uiElements.jpgQualityValueSpan.textContent = `${state.outputSettings.quality}`;
     }
@@ -602,7 +636,7 @@ function renderTextLayerSettingsPanel() {
             <input type="color" id="textLayerColor">
         </div>
         <div class="form-row-slider">
-            <label for="textLayerOpacity">透過度:</label>
+            <label for="textLayerOpacity">不透明度:</label>
             <input type="range" id="textLayerOpacity">
             <span id="textLayerOpacityValue"></span>
         </div>
@@ -997,6 +1031,10 @@ const debounce = (func, delay) => {
 };
 
 export function setupEventListeners(redrawCallback) {
+    // 比率タイルピッカーの onSelect などから使う再描画関数を控えておく（モジュールスコープ）。
+    moduleRedraw = redrawCallback;
+    ensureRatioPickers();
+
     const addNumericInputListener = (element, configKey, stateKey, nestedKey = '', subNestedKey = '') => {
         if (!element) return;
         element.addEventListener('input', (e) => {
@@ -1091,51 +1129,8 @@ export function setupEventListeners(redrawCallback) {
     };
 
     // --- 構図調整（クロップ）タブ ---
-    // クロップのアスペクト比入力フィールドのイベントリスナー（出力アスペクト比と同じパターン）。
-    // 比率を変えると applyCropAspect が cropSettings.rect を中心維持でその比率へ再フィットする。
-    const updateCropAspectRatioFromInputs = () => {
-        if (!uiElements.cropCustomAspectRatioWidthInput || !uiElements.cropCustomAspectRatioHeightInput) return;
-        const width = parseFloat(uiElements.cropCustomAspectRatioWidthInput.value);
-        const height = parseFloat(uiElements.cropCustomAspectRatioHeightInput.value);
-        if (!isNaN(width) && !isNaN(height) && width > 0 && height > 0) {
-            const aspectRatioString = `${width}:${height}`;
-            applyCropAspect(aspectRatioString);
-            if (uiElements.cropAspectRatioSelect) {
-                const optionExists = Array.from(uiElements.cropAspectRatioSelect.options).some(
-                    opt => opt.value === aspectRatioString
-                );
-                uiElements.cropAspectRatioSelect.value = optionExists ? aspectRatioString : 'custom';
-            }
-            redrawCallback();
-        }
-    };
-
-    if (uiElements.cropAspectRatioSelect) {
-        uiElements.cropAspectRatioSelect.addEventListener('change', (e) => {
-            const selectedValue = e.target.value;
-            if (!selectedValue) return;
-            if (selectedValue === 'custom') {
-                updateCropAspectRatioFromInputs();
-            } else if (selectedValue === 'free') {
-                applyCropAspect('free');
-                redrawCallback();
-            } else {
-                const parts = selectedValue.split(':');
-                if (parts.length === 2) {
-                    const width = parseFloat(parts[0]);
-                    const height = parseFloat(parts[1]);
-                    if (!isNaN(width) && width > 0 && uiElements.cropCustomAspectRatioWidthInput) {
-                        uiElements.cropCustomAspectRatioWidthInput.value = String(width);
-                    }
-                    if (!isNaN(height) && height > 0 && uiElements.cropCustomAspectRatioHeightInput) {
-                        uiElements.cropCustomAspectRatioHeightInput.value = String(height);
-                    }
-                    applyCropAspect(selectedValue);
-                    redrawCallback();
-                }
-            }
-        });
-    }
+    // 切り抜き比率はタイルピッカー（ensureRatioPickers 内で onSelect を配線済み）。
+    // ここではカスタム幅高さ入力欄と⇄ボタンだけを配線する。
     if (uiElements.cropCustomAspectRatioWidthInput) {
         uiElements.cropCustomAspectRatioWidthInput.addEventListener('input', updateCropAspectRatioFromInputs);
     }
@@ -1154,70 +1149,9 @@ export function setupEventListeners(redrawCallback) {
             }
         });
     }
-    // クロップ位置スライダー（0–1, 0.5=中央）→ cropSettings.rect のパン。
-    const onCropPanInput = () => {
-        const px = parseFloat(uiElements.cropOffsetXSlider ? uiElements.cropOffsetXSlider.value : '0.5');
-        const py = parseFloat(uiElements.cropOffsetYSlider ? uiElements.cropOffsetYSlider.value : '0.5');
-        commitCropPan(isNaN(px) ? 0.5 : px, isNaN(py) ? 0.5 : py);
-        redrawCallback();
-    };
-    if (uiElements.cropOffsetXSlider) uiElements.cropOffsetXSlider.addEventListener('input', onCropPanInput);
-    if (uiElements.cropOffsetYSlider) uiElements.cropOffsetYSlider.addEventListener('input', onCropPanInput);
 
-    // --- 各種イベントリスナーの設定 (大部分は変更なし) ---
-    // アスペクト比セレクトのイベントリスナー
-    if (uiElements.outputAspectRatioSelect) {
-        uiElements.outputAspectRatioSelect.addEventListener('change', (e) => {
-            const selectedValue = e.target.value;
-            if (selectedValue) {
-                if (selectedValue === 'custom') {
-                    // カスタムが選択された場合は、現在の入力値をそのまま使用
-                    updateAspectRatioFromInputs();
-                } else {
-                    // セレクトボックスから選択した値を解析して入力フィールドに設定
-                    const parts = selectedValue.split(':');
-                    if (parts.length === 2) {
-                        const width = parseFloat(parts[0]);
-                        const height = parseFloat(parts[1]);
-                        if (!isNaN(width) && width > 0 && uiElements.customAspectRatioWidthInput) {
-                            uiElements.customAspectRatioWidthInput.value = String(width);
-                        }
-                        if (!isNaN(height) && height > 0 && uiElements.customAspectRatioHeightInput) {
-                            uiElements.customAspectRatioHeightInput.value = String(height);
-                        }
-                        // 状態を更新
-                        updateState({ outputTargetAspectRatioString: selectedValue });
-                        redrawCallback();
-                    }
-                }
-            }
-        });
-    }
-
-    // アスペクト比入力フィールドのイベントリスナー
-    const updateAspectRatioFromInputs = () => {
-        if (!uiElements.customAspectRatioWidthInput || !uiElements.customAspectRatioHeightInput) return;
-        const width = parseFloat(uiElements.customAspectRatioWidthInput.value);
-        const height = parseFloat(uiElements.customAspectRatioHeightInput.value);
-        if (!isNaN(width) && !isNaN(height) && width > 0 && height > 0) {
-            const aspectRatioString = `${width}:${height}`;
-            updateState({ outputTargetAspectRatioString: aspectRatioString });
-            // セレクトボックスの選択状態を更新（マッチする選択肢があれば選択、なければカスタムを選択）
-            if (uiElements.outputAspectRatioSelect) {
-                const optionExists = Array.from(uiElements.outputAspectRatioSelect.options).some(
-                    opt => opt.value === aspectRatioString
-                );
-                if (optionExists) {
-                    uiElements.outputAspectRatioSelect.value = aspectRatioString;
-                } else {
-                    // マッチしない場合は「カスタム」を選択
-                    uiElements.outputAspectRatioSelect.value = 'custom';
-                }
-            }
-            redrawCallback();
-        }
-    };
-
+    // --- 出力アスペクト比（タイルピッカー） ---
+    // タイルの onSelect は ensureRatioPickers で配線済み。カスタム幅高さ入力欄と⇄ボタンのみ配線する。
     if (uiElements.customAspectRatioWidthInput) {
         uiElements.customAspectRatioWidthInput.addEventListener('input', updateAspectRatioFromInputs);
     }
@@ -1243,8 +1177,19 @@ export function setupEventListeners(redrawCallback) {
 
     addNumericInputListener(uiElements.baseMarginPercentInput, 'baseMarginPercent', 'baseMarginPercent');
     // ... (その他すべての addNumericInputListener と addColorInputListener の呼び出し) ...
-    addNumericInputListener(uiElements.photoPosXSlider, 'photoPosX', 'photoViewParams', 'offsetX');
-    addNumericInputListener(uiElements.photoPosYSlider, 'photoPosY', 'photoViewParams', 'offsetY');
+    // 「配置をリセット」: 枠内位置（photoViewParams）を中央へ、かつクロップ矩形のパンを中央へ戻す。
+    // 切り抜き範囲のサイズ・比率は変えない（docs/roadmap.md A-1）。
+    if (uiElements.resetPhotoPlacementButton) {
+        uiElements.resetPhotoPlacementButton.addEventListener('click', () => {
+            const state = getState();
+            const rect = resolveCropRect(state.cropSettings, state.originalWidth, state.originalHeight);
+            updateState({
+                photoViewParams: { offsetX: 0.5, offsetY: 0.5 },
+                cropSettings: { rect: cropRectWithPan(rect, 0.5, 0.5) }
+            });
+            redrawCallback();
+        });
+    }
     addOptionChangeListener(uiElements.bgTypeColorRadio, 'backgroundType', 'color');
     addOptionChangeListener(uiElements.bgTypeImageBlurRadio, 'backgroundType', 'imageBlur');
     addColorInputListener(uiElements.backgroundColorInput, 'backgroundColor');
@@ -1252,8 +1197,13 @@ export function setupEventListeners(redrawCallback) {
     addNumericInputListener(uiElements.bgBlurSlider, 'bgBlur', 'imageBlurBackgroundParams', 'blurAmountPercent');
     addNumericInputListener(uiElements.bgBrightnessSlider, 'bgBrightness', 'imageBlurBackgroundParams', 'brightness');
     addNumericInputListener(uiElements.bgSaturationSlider, 'bgSaturation', 'imageBlurBackgroundParams', 'saturation');
-    addNumericInputListener(uiElements.bgOffsetXSlider, 'bgOffsetX', 'imageBlurBackgroundParams', 'offsetXPercent');
-    addNumericInputListener(uiElements.bgOffsetYSlider, 'bgOffsetY', 'imageBlurBackgroundParams', 'offsetYPercent');
+    // 「位置をリセット」: 拡大ぼかし背景の X/Y オフセットを 0 へ戻す（docs/roadmap.md B-1）。
+    if (uiElements.resetBgOffsetButton) {
+        uiElements.resetBgOffsetButton.addEventListener('click', () => {
+            updateState({ imageBlurBackgroundParams: { offsetXPercent: 0, offsetYPercent: 0 } });
+            redrawCallback();
+        });
+    }
     addNumericInputListener(uiElements.jpgQualitySlider, 'jpgQuality', 'outputSettings', 'quality');
     addOptionChangeListener(uiElements.frameCornerStyleNoneRadio, 'frameSettings', 'none', 'cornerStyle');
     addOptionChangeListener(uiElements.frameCornerStyleRoundedRadio, 'frameSettings', 'rounded', 'cornerStyle');

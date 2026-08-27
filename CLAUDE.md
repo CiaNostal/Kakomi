@@ -11,8 +11,12 @@ Kakomiは、写真にフレーム加工とテキストオーバーレイを追�
 ## 現在のブランチとステータス（2026-08-29時点）
 
 - 作業ブランチ: `feature/interactive-editing`（開発版の最新はここ。`main`ではない）。
-- **直近の状態**: `docs/roadmap.md` のフェーズ0（小改修: E / A-2 / A-6 / D-2）と、フェーズ1（「開いているタブでプレビュー上のドラッグ／矢印キーの意味を切り替える」共通基盤 `tabManager.getActiveTab()`＋`onTabChange`。C-2＝フレームタブで影オフセットのドラッグ、背景タブでキャンバス全面が背景パン面、軸ロック／原点スナップ／タップ判定の厳格化 等）まで完了・ユーザー確認済み。全部 `docs/session-log-2026-08-29.md`。
-- **次セッションはフェーズ2から**: A-1（出力フォーマット UI のグラフィカル化＋位置スライダー撤去）＋ B-1（背景タブのスライダー整理）を `artifact-design` でモックアップ → 実装。F（プリセットの置き場所）も同じ流れ。詳細と残りの項目は `docs/roadmap.md`。
+- **直近の状態**: `docs/roadmap.md` のフェーズ0（小改修: E / A-2 / A-6 / D-2）・フェーズ1（タブ別ドラッグの共通基盤 `tabManager.getActiveTab()`＋`onTabChange`、C-2 等。`docs/session-log-2026-08-29.md`）に続き、**フェーズ2** ＝ A-1（出力アスペクト比・切り抜き比率を比率タイルピッカー `js/ui/ratioPicker.js` に、切り抜き位置／枠内位置スライダー計4本を撤去し「配置をリセット」ボタンのみに）＋ B-1（軽微版: 背景の明るさ・彩度を折りたたみへ、X/Yオフセットスライダーを撤去し「位置をリセット」ボタンに）まで実装・Playwright スモーク検証済み。ユーザーのブラウザ目視確認は次回。詳細は `docs/session-log-2026-08-29-2.md`。
+- **2026-08-29 その3セッションで実装計画を練り直し、フェーズ3＋フェーズ4 を実装した**（`docs/session-log-2026-08-29-3.md`、`docs/roadmap.md`「実装計画（その3 練り直し版）」）。追加フィードバックで新規項目 A-7 / A-8 / B-3 / B-4 / D-4 / E-1〜E-5 を追加。
+- **フェーズ3 完了・Playwright スモーク 13/13**（ユーザーのブラウザ目視は次回）: **B-3** ぼかし背景をクロップ後の写真から生成（`backgroundRenderer.js`、バグ修正）／**D-4** テキストの不透明度ラベルを「透過度」→「不透明度」（バグ修正）／**A-7** 比率ピッカーの選択肢順を `ratioPicker.js` の `RATIO_FAMILIES` に一本化＋カスタム欄を1行に／**B-4** 背景の明るさ・彩度を常時表示に戻し「見え方／色調／位置」の区切り線付き小見出しで分離（B-1 のアコーディオン撤回）。
+- **フェーズ4＝Lightroom Web 風のシェル刷新も実装済み・Playwright スモーク phase4 20/20 ＋ 回帰 OK**（`docs/session-log-2026-08-29-3.md` §11）: E-1 タブ再クリックでパネルを畳む（`.app-shell.panel-collapsed`、初期＝レイアウト開、`ResizeObserver` でキャンバス再フィット）／E-2 `fieldset`・`.frame-card` を枠なし＋見出し＋上罫線の線ベースに（レールの色は現状のまま）／E-4 説明文をアイコン＋数語に削減／E-5 「出力」タブ廃止・DLボタンを上部バー右＋画質ポップオーバー（`#downloadPopover`）／A-8 レイアウトを ①出力アスペクト比→②トリミング→③余白と配置 に並べ替え・余白を①から③へ分離／F プリセットはレール下部の一項目のまま。`editState`・各レンダラ・`presetStore` は無変更。
+- **【既知の不具合 G-1】** フェーズ4 で判明: 出力比率が縦長／正方形（4:5・L判・1:1 等）のとき、プレビューキャンバスと `.canvas-container` が 1px ずつ際限なく拡大し続ける正のフィードバック。原因＝縦長時はキャンバスが「高さ基準」で決まり、その要素（`#previewCanvas` の 1px border 等）がコンテナ高さを押し上げ → フェーズ4 で足した `ResizeObserver` が発火 → 再描画で更に拡大…。`.app-container { min-height:100vh }` でレイアウトが下へ伸びられるのが素地。**暫定対処済み**: `ResizeObserver` を「幅の変化にだけ反応」に限定（`js/main.js`。回帰は `kakomi-devtools/creep-repro.js` で安定確認）。**根本原因は未解決**（`docs/session-log-2026-08-29-3.md` §13.5、`docs/roadmap.md` G-1）。次セッション冒頭で根本対処するか判断する。ユーザーは過去に「CSS 固定 → レイアウト崩れ」を経験しているので `@media` 目視確認とセットで。
+- **次はフェーズ5＝E-3**（G-1 の判断後）: 「情報」を他タブと並列のタブに（`#exifFloatCard` 廃止 → `.tab-button`＋`.tab-pane`、レール最下部。E-1 の再クリック収納が自動で効く）。Exif 表示を SVG アイコン＋値だけのミニマルなレイアウトに（`displayExifInfo` の作り替え）。**他パネルの上に重ねる独立オーバーレイにはしない**（モック初版の誤りをユーザーが指摘）。その後 フェーズ6＝積み残し（C-1 / A-5 / D-1・D-3 / A-4 / A-3）。
 - **履歴**: `docs/session-log-*.md` を日付順に。トリミング再設計＝`-2026-08-28.md`（残タスクは 8 節）、UI 大幅刷新＝`-2026-08-26-3.md`、UI 刷新の積み残し＝`spec.md` 11.5 節。
 
 ## 開発環境について
@@ -22,7 +26,7 @@ Kakomiは、写真にフレーム加工とテキストオーバーレイを追�
 
 ### この端末の構成（確認済み）
 
-- **常設フォルダ**: `C:\Users\yello\kakomi-devtools\`（WSL からは `/mnt/c/Users/yello/kakomi-devtools/`）。`node_modules/`（`playwright` 1.62.x）、テストスクリプト（`crop-test.js` / `smoke.js` / `crop-shots.js`）、スクリーンショットが入っている。セッションをまたいで残す（毎回インストール・削除はしない）。
+- **常設フォルダ**: `C:\Users\yello\kakomi-devtools\`（WSL からは `/mnt/c/Users/yello/kakomi-devtools/`）。`node_modules/`（`playwright` 1.62.x）、テストスクリプト（`phase2-test.js` ほか。各セッションでその回の変更を叩くスモークを足していく運用）、スクリーンショットが入っている。セッションをまたいで残す（毎回インストール・削除はしない）。**端末が変わって無ければ「他の端末で作業する場合」の手順で同じパスに作り直す**（2026-08-29 その2 セッションで実際に作り直した実績あり）。
 - **Node**: Windows システムインストール（`C:\Program Files\nodejs\node.exe`）。
 - **ブラウザキャッシュ**: `C:\Users\yello\AppData\Local\ms-playwright\`（`playwright` の版に対応した Chromium ビルド）。
 - **実行方法**: WSL から `cmd.exe /c "cd /d C:\Users\yello\kakomi-devtools && node <script>.js"`。ローカルサーバーは `python3 -m http.server 8420` をリポジトリルートで起動し、Windows 側からは `http://localhost:8420/`（localhost フォワード）で到達する。

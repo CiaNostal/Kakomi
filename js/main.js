@@ -4,7 +4,7 @@
 import { getState, updateState, addStateChangeListener } from './stateManager.js';
 import { uiElements, initializeUIFromState, setupEventListeners, syncUIFromState } from './uiController.js'; // updateFrameSettingsVisibility を追加
 import { calculateLayout } from './layoutCalculator.js'; // 正しいレイアウト計算モジュール
-import { drawPreview } from './canvasRenderer.js';     // 現在の描画モジュール
+import { drawPreview, clearContainerSizeCache } from './canvasRenderer.js';     // 現在の描画モジュール
 import { processImageFile, handleDownload } from './fileManager.js';
 import { displayExifInfo } from './exifHandler.js';   // Exif表示用
 import { initializeTabs, onTabChange } from './tabManager.js';
@@ -144,8 +144,55 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    if (uiElements.downloadButton) {
+    // フェーズ4(E-5): ダウンロードは上部バー右。押すと画質ポップオーバーを開き、「書き出す」で実行。
+    if (uiElements.downloadButton && uiElements.downloadPopover) {
+        uiElements.downloadButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            uiElements.downloadPopover.classList.toggle('hidden');
+        });
+        if (uiElements.downloadConfirmButton) {
+            uiElements.downloadConfirmButton.addEventListener('click', () => {
+                uiElements.downloadPopover.classList.add('hidden');
+                handleDownload();
+            });
+        }
+        document.addEventListener('click', (e) => {
+            if (!uiElements.downloadPopover.classList.contains('hidden')
+                && !e.target.closest('.dl-group')) {
+                uiElements.downloadPopover.classList.add('hidden');
+            }
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') uiElements.downloadPopover.classList.add('hidden');
+        });
+    } else if (uiElements.downloadButton) {
         uiElements.downloadButton.addEventListener('click', handleDownload);
+    }
+
+    // フェーズ4(E-1): 設定パネルの開閉でキャンバス「幅」が変わったときだけ、
+    // コンテナ寸法キャッシュを破棄して再描画する。
+    //
+    // 【重要・既知の不具合対策】高さ変化には反応しない。縦長/正方形の出力比率のとき
+    // プレビューキャンバスは「高さ基準」で決まり、その要素（1pxのborder等）がコンテナ高さを
+    // わずかに押し上げる → ResizeObserver が発火 → キャッシュ破棄 → 再描画で更に高くなる …
+    // という正のフィードバックでキャンバスがじわじわ拡大し続ける（`docs/session-log-2026-08-29-3.md`
+    // §13 参照）。パネル開閉で変わるのは「幅」なので、幅の変化だけを見れば用は足りるうえ、
+    // 高さのフィードバックループを断てる。閾値 1px 未満は無視。
+    if (typeof ResizeObserver !== 'undefined' && uiElements.canvasContainer) {
+        let roTimer = null;
+        let lastWidth = uiElements.canvasContainer.clientWidth;
+        const ro = new ResizeObserver(() => {
+            const w = uiElements.canvasContainer.clientWidth;
+            if (Math.abs(w - lastWidth) < 1) return;
+            lastWidth = w;
+            clearTimeout(roTimer);
+            roTimer = setTimeout(() => {
+                clearContainerSizeCache();
+                requestRedraw();
+                lastWidth = uiElements.canvasContainer.clientWidth;
+            }, 180);
+        });
+        ro.observe(uiElements.canvasContainer);
     }
 
     if (uiElements.canvasContainer) {
