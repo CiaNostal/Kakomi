@@ -122,17 +122,19 @@ body {
 }
 
 #downloadButton {
-    padding: 0.5rem 1rem;
+    display: block;
+    width: 100%;
+    padding: 0.6rem 1rem;
     background-color: var(--accent);
     color: var(--accent-on);
     border: none;
     border-radius: var(--radius-sm);
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     font-weight: 600;
     font-family: var(--font-ui);
     transition: background-color 0.2s;
-    margin-left: 0.3rem;
+    margin-top: 0.25rem;
 }
 
 #downloadButton:disabled {
@@ -653,8 +655,6 @@ fieldset div span {
 .custom-text-drag-hint {
     margin-top: 0.4rem;
 }
-
-/* #downloadButton は上部バー用のスタイルに統一（本ファイル前半、.app-header セクション参照） */
 
 #exifDataContainer p {
     font-size: 0.875rem;

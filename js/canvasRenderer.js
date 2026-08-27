@@ -172,6 +172,34 @@ function drawCropModeOverlay(ctx, img, currentState, frozenFrame) {
     drawImageWithPrecision(ctx, img, 0, 0, imgW, imgH, whole.x, whole.y, whole.width, whole.height);
     ctx.restore();
 
+    // 3.5 三分割グリッド（rule of thirds）。クロップ窓の内側だけに構図補助線を引く。
+    //     枠線と同じく黒→白の順で重ね、明暗どちらの写真の上でも見えるようにする。
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(cropScreen.x, cropScreen.y, cropScreen.width, cropScreen.height);
+    ctx.clip();
+    ctx.setLineDash([]);
+    const thirdsPath = () => {
+        ctx.beginPath();
+        for (let i = 1; i <= 2; i++) {
+            const gx = cropScreen.x + (cropScreen.width * i) / 3;
+            const gy = cropScreen.y + (cropScreen.height * i) / 3;
+            ctx.moveTo(gx, cropScreen.y);
+            ctx.lineTo(gx, cropScreen.y + cropScreen.height);
+            ctx.moveTo(cropScreen.x, gy);
+            ctx.lineTo(cropScreen.x + cropScreen.width, gy);
+        }
+    };
+    ctx.strokeStyle = 'rgba(0,0,0,0.30)';
+    ctx.lineWidth = 2;
+    thirdsPath();
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+    ctx.lineWidth = 1;
+    thirdsPath();
+    ctx.stroke();
+    ctx.restore();
+
     // 4. クロップ矩形の枠（黒フチの上に白。明暗どちらの背景でも見えるように）
     ctx.save();
     ctx.setLineDash([]);

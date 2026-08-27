@@ -466,12 +466,6 @@ function sizeConfigKeyForKind(kind) {
     return 'textFreeSize';
 }
 
-const TEXT_POSITION_OPTIONS = [
-    ['top-left', '左上'], ['top-center', '中央上'], ['top-right', '右上'],
-    ['middle-left', '左中央'], ['middle-center', '中央'], ['middle-right', '右中央'],
-    ['bottom-left', '左下'], ['bottom-center', '中央下'], ['bottom-right', '右下']
-];
-
 /** レイヤー一覧（チップ）を再描画する。撮影日・Exifは常設チップとして先頭に表示する。 */
 function renderTextLayersList() {
     const container = uiElements.textLayersListContainer;
@@ -537,9 +531,6 @@ function renderTextLayerSettingsPanel() {
     }
     const { settings, kind } = resolved;
     const id = selectedId;
-
-    const positionOptionsHtml = TEXT_POSITION_OPTIONS
-        .map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
 
     const alignRadiosHtml = `
         <div class="form-row-simple" style="justify-content: space-around;">
@@ -616,10 +607,6 @@ function renderTextLayerSettingsPanel() {
             <span id="textLayerOpacityValue"></span>
         </div>
         <div class="form-row-simple">
-            <label for="textLayerPosition">表示位置:</label>
-            <select id="textLayerPosition">${positionOptionsHtml}</select>
-        </div>
-        <div class="form-row-simple">
             <label for="textLayerOffsetX">横位置 (%):</label>
             <input type="number" id="textLayerOffsetX" step="0.5">
         </div>
@@ -654,7 +641,6 @@ function renderTextLayerSettingsPanel() {
     opacitySlider.value = settings.opacity;
     el('textLayerOpacityValue').textContent = settings.opacity.toFixed(2);
 
-    el('textLayerPosition').value = settings.position;
     el('textLayerOffsetX').value = settings.offsetX;
     el('textLayerOffsetY').value = settings.offsetY;
     el('textLayerRotation').value = settings.rotation || 0;
@@ -691,9 +677,6 @@ function renderTextLayerSettingsPanel() {
         const value = parseFloat(e.target.value);
         el('textLayerOpacityValue').textContent = value.toFixed(2);
         applyTextLayerChanges(id, kind, { opacity: value });
-    });
-    el('textLayerPosition').addEventListener('change', (e) => {
-        applyTextLayerChanges(id, kind, { position: e.target.value });
     });
     enhanceAsScrubInput(el('textLayerOffsetX'), { sensitivity: 0.2, onChange: (v) => applyTextLayerChanges(id, kind, { offsetX: v }) });
     enhanceAsScrubInput(el('textLayerOffsetY'), { sensitivity: 0.2, onChange: (v) => applyTextLayerChanges(id, kind, { offsetY: v }) });

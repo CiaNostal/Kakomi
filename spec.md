@@ -20,7 +20,7 @@ Kakomiは、写真にフレーム加工とテキストオーバーレイを追�
 **UI刷新について（2026年8月）:**
 初期実装は「Facebook風」の配色・レイアウト（青系アクセント、上部に太いヘッダー＋その下に6タブ横並び＋固定幅サイドバー）でしたが、視認性とモダンさの改善要望を受けて以下の刷新を行いました。詳細は3.1節・5.3節・7.2節・7.5節を参照。
 - 配色をスレートブルー系アクセントに変更し、UI用フォントをIBM Plex Sans/Sans Condensed/Monoに統一（2.のフォント節参照）
-- 上部ヘッダーを、白→アクセントの淡いグラデーションの薄いバーに変更し、Undo/Redo・ダウンロードボタンをここに集約
+- 上部ヘッダーを、白→アクセントの淡いグラデーションの薄いバーに変更し、Undo/Redoボタンを配置（ダウンロードボタンは当初ここへ集約したが、後に「出力」タブ内へ戻した。7.6節・`docs/roadmap.md` E）
 - 左サイドバーを「タブ横並び＋コンテンツ」から、Canvaを参考にした「細いアイコンレール＋選択時に開くフライアウトパネル＋広いキャンバスエリア」の3カラム構成に変更（3.1節）
 - フレーム加工パネルを、素のラジオボタン/チェックボックスによる即時表示切り替えから、セグメントコントロール＋トグルスイッチ＋CSSアニメーションによる滑らかなアコーディオン開閉に変更
 - 撮影日・Exif情報・自由テキストの3つに分かれていた文字入力UIを、1つのチップリスト＋1つの設定パネルに統合（5.3節「文字レイヤーの統一UI」参照。データモデル自体は変更していない）
@@ -87,7 +87,7 @@ UI表示用とテキストオーバーレイ描画用は別系統のフォント
 Canvaのエディタ画面を参考に、`index.html`の全体レイアウトを次の3カラム構成にしている（`.app-shell`、`style.css`）。データフロー・状態管理には影響しない、純粋なUI/DOM構成の話である。
 
 ```
-.app-header（薄いグラデーションの上部バー。ブランド表示・Undo/Redo・ダウンロードボタン）
+.app-header（薄いグラデーションの上部バー。ブランド表示・Undo/Redo）
 .app-shell（残り高さいっぱいに広がる横並び3カラム）
   ├─ .tab-navigation（左の細いアイコンレール、幅84px。6カテゴリ + 下部に「情報」ボタン）
   ├─ .tab-content-area（レール項目に対応するフライアウトパネル、幅360px。中身は7.節の各fieldset）
@@ -97,7 +97,7 @@ Canvaのエディタ画面を参考に、`index.html`の全体レイアウトを
 - **タブ切り替えの仕組みは変更していない**: `tabManager.js`は従来通り`.tab-button`（`data-tab`属性を持つ）のクリックで`.tab-pane`の`active`クラスを付け替えるだけで、6カテゴリのレール項目には引き続き`.tab-button`クラスと`data-tab`属性が付いている。見た目（縦長のアイコン+ラベルのレール）はCSSのみで実現している。
 - **`.rail-item`と`.tab-button`の使い分け（重要）**: レール上のボタンの「見た目」用CSSクラスは`.rail-item`である。6カテゴリのボタンには視覚用の`.rail-item`と動作用の`.tab-button`の両方を付与するが、アイコンレール最下部の「情報」ボタン（`#exifToggleButton`）には**`.tab-button`を意図的に付与しない**。`tabManager.js`は`.tab-button`を全件取得して「クリックされたもの以外は非アクティブ化」する実装のため、もし「情報」ボタンに`.tab-button`を付けてしまうと、クリック時に他の6カテゴリのアクティブ状態・表示中パネルまで巻き込みで消えてしまう（実際に発生した設計上の注意点）。
 - **Exif情報表示の位置づけ**: Exif情報は「編集する設定」ではなく「参照するだけの読み取り専用情報」であるため、他の6カテゴリと同列のフライアウトパネルにはせず、独立したフローティングカード（`#exifFloatCard`、`.exif-float-card`）としている。開閉は`#exifToggleButton`のクリックで`.open`クラスをトグルするだけの単純な仕組みで、`main.js`内で`tabManager.js`とは完全に独立して配線している（`selectionStore`やeditStateの状態変更とは無関係）。中身（`#exifDataContainer`）への実際の描画は従来通り`exifHandler.js`の`displayExifInfo()`が担う。
-- **ダウンロードボタンの移設**: 以前は「出力」タブ内にあった`#downloadButton`を上部バーへ移設した（Canvaの「共有/ダウンロード」ボタンのように、書き出しをタブに埋もれさせず常時アクセス可能にする意図）。id・イベント配線（`main.js`の`uiElements.downloadButton.addEventListener('click', handleDownload)`）は変更していないため、`fileManager.js`側の実装への影響はない。
+- **ダウンロードボタンの位置**: `#downloadButton`は「出力」タブ（`#tab-output`）内の`JPG画質設定` fieldsetの直下に置いている。2026年8月のUI刷新でいったん上部バーへ移設したが、上部バーに常設するほど頻繁に押すものではなく「出力」タブの中にあるほうが自然、というユーザー判断で戻した（`docs/roadmap.md` E）。id・イベント配線（`main.js`の`uiElements.downloadButton.addEventListener('click', handleDownload)`）は一度も変えていないため、`fileManager.js`側の実装への影響はない。スタイルはタブ内の横幅いっぱいのアクセントボタン（`#downloadButton`、`display:block; width:100%`）。
 
 ## 4. ファイル構造
 
@@ -125,7 +125,7 @@ Kakomi/
     │   ├── guideStore.js           # ドラッグ中に表示するスナップガイド線の一時状態
     │   ├── textHandleStore.js      # 選択中テキストの拡大・回転ハンドルの画面上座標の一時状態
     │   ├── snapEngine.js           # スナップ（吸着）位置の計算
-    │   ├── canvasInteraction.js    # pointerイベント処理・ドラッグ状態機械・矢印キーnudge・拡大回転ハンドル操作・写真の選択/トリミングモード操作・ホイール操作
+    │   ├── canvasInteraction.js    # pointerイベント処理・ドラッグ状態機械・矢印キーnudge・拡大回転ハンドル操作・写真の選択/トリミングモード操作
     │   ├── photoCropStore.js       # 選択中の写真の四隅ハンドル座標（select=■/crop=L字）と、cropモード時のクロップ窓・元画像全体の画面矩形（一時的なUI状態）
     │   ├── photoEditModeStore.js   # 写真選択中の編集サブモード（select / crop）と、cropモード開始時の座標スナップショット（frozenFrame）
     │   └── adapters/
@@ -274,8 +274,8 @@ UI要素の制御とイベントハンドリングを担当します。
 
 - `FIXED_TEXT_LAYERS`（`uiController.js`内の定数）が撮影日(`'text-date'`)・Exif情報(`'text-exif'`)の固定チップを定義し、`resolveTextLayer(state, id)`がid（固定id、または`customTexts[]`内のuuid）から`{ settings, kind }`（`kind`は`'date'|'exif'|'custom'`）を解決する。値の書き戻しは`applyTextLayerChanges(id, kind, changes)`が`kind`に応じて`updateState()`（撮影日・Exif）または`updateCustomTextLayer()`（自由テキスト）に振り分ける（`textAdapter.js`の`resolveLayer()`/`applyChanges()`と同じ設計）
 - レイヤー一覧はチップ表示（`#textLayersList`）。先頭に撮影日・Exif情報の固定チップ（削除不可、有効/無効はチップの薄さで表現）、続けて自由テキストの動的チップ（クリックで選択、×ボタンで削除）が並ぶ。「+ テキストを追加」ボタン（`#addCustomTextButton`）は末尾
-- 選択中レイヤーの設定パネル（`#textLayerSettingsPanel`）は`renderTextLayerSettingsPanel()`が選択変更のたびにHTML文字列で丸ごと再構築する。共通フィールド（表示する/フォント/サイズ/文字色/透過度/表示位置アンカー＋オフセットX・Y/回転）は3種類共通で常に表示し、種類固有の部分だけを切り替える（撮影日=書式プリセット＋自由入力、Exif=表示項目の選択・並び替えUI、自由テキスト=テキストエリア）。撮影日には水平配置（textAlign）の概念がないため、その行は表示しない（7.5節参照）
-- **表示位置アンカーの拡張**: 統合前は撮影日・Exifが上下×左右の6点、自由テキストには表示位置アンカーのUI自体が存在しなかった（オフセットのみで擬似的に表現）。統合にあたり3種類とも中央行を含む9点（`top/middle/bottom` × `left/center/right`）から選べるように揃えた。`textRenderer.js`の`calculateTextPosition()`はもともと9点すべてに対応済みだったため、レンダラー側の変更は不要だった
+- 選択中レイヤーの設定パネル（`#textLayerSettingsPanel`）は`renderTextLayerSettingsPanel()`が選択変更のたびにHTML文字列で丸ごと再構築する。共通フィールド（表示する/フォント/サイズ/文字色/透過度/オフセットX・Y/回転）は3種類共通で常に表示し、種類固有の部分だけを切り替える（撮影日=書式プリセット＋自由入力、Exif=表示項目の選択・並び替えUI、自由テキスト=テキストエリア）。撮影日には水平配置（textAlign）の概念がないため、その行は表示しない（7.5節参照）
+- **表示位置アンカーはUIから撤去（データモデルは維持）**: 以前は9点（`top/middle/bottom` × `left/center/right`）の固定アンカーを`<select id="textLayerPosition">`で選ばせていたが、位置はプレビュー上のドラッグで決めるため固定アンカーの選択はほぼ使われておらず、UIから削除した（`docs/roadmap.md` D-2）。`textSettings.*.position`（既定は撮影日=`bottom-left`／Exif=`bottom-right`／自由テキスト=`middle-center`）は状態・プリセットに残り、`textRenderer.js`の`calculateTextPosition()`はこれをオフセットの基準アンカーとして引き続き使う。UIを消しただけなのでプリセットの移行は不要。将来アンカーを可変にしたくなった場合はセレクトを戻せばよい
 - Canvasドラッグ中の座標欄（横位置/縦位置）・拡大ハンドル/回転ハンドル操作中のサイズ・回転角の値だけは、`syncTextLayerLiveInputs(state)`が軽量に`.value`のみ更新し、パネル全体は再構築しない（入力中のフォーカスを奪わないため。`main.js`の状態変更リスナー経由で`syncUIFromState()`→`syncTextLayerLiveInputs()`と呼ばれる）
 - 横位置/縦位置/回転の数値欄は`js/ui/scrubInput.js`の`enhanceAsScrubInput()`で拡張されており、ドラッグでスクラブ、クリックでタイプ入力ができる
 - Exif表示項目の「利用可能な項目」「使用する項目」リスト（`renderExifItemsUI()`）は、選択中レイヤーがExifのときだけ`renderTextLayerSettingsPanel()`が生成するコンテナ（`#textLayerExifAvailableList`/`#textLayerExifUsedList`/`#textLayerExifPreview`）に対して動的に`document.getElementById()`で対象を取得する（`uiElements`オブジェクトには含めない。パネルごと再構築されるため、モジュール読み込み時に一度だけ取得する`uiElements`の設計とは相容れないため）
@@ -328,7 +328,7 @@ UI要素の制御とイベントハンドリングを担当します。
 
 **拡大・回転ハンドルの描画（`drawTextHandles`）:** 選択中オブジェクトが`type === 'text'`の場合のみ、ボックス右下角に拡大ハンドル（四角）、ボックス上端中央から少し離れた位置に回転ハンドル（丸、接続線付き）を描画する。回転時はハンドルもボックスと一緒に回転させて描く。同時に、その画面上の座標（回転適用後）を`interaction/textHandleStore.js`に記録し、`canvasInteraction.js`がポインタ操作時の当たり判定に使う。詳細は5.22節参照。
 
-**写真選択中の四隅ハンドル／トリミングオーバーレイ描画（5.24節・5.25節・7.2節参照）:** 選択中オブジェクトが写真（`getSelectedId() === 'photo'`）の場合、`photoEditModeStore`のモードで分岐する。**crop モード**かつ`frozenFrame`があれば`drawCropModeOverlay()`を呼ぶ（`frozenFrame`から「元画像全体の画面矩形」を逆算し、暗くマスクした上で現在のクロップ矩形の内側だけ明るく再描画、四隅にL字ハンドル）。**それ以外**は通常のフレーム装飾（角丸・影・縁取り）込みで写真を描き、select モードで選択中なら`drawPhotoResizeHandles()`で四隅に■ハンドルを重ねる。
+**写真選択中の四隅ハンドル／トリミングオーバーレイ描画（5.24節・5.25節・7.2節参照）:** 選択中オブジェクトが写真（`getSelectedId() === 'photo'`）の場合、`photoEditModeStore`のモードで分岐する。**crop モード**かつ`frozenFrame`があれば`drawCropModeOverlay()`を呼ぶ（`frozenFrame`から「元画像全体の画面矩形」を逆算し、暗くマスクした上で現在のクロップ矩形の内側だけ明るく再描画、クロップ窓の内側に三分割グリッド（rule of thirds。黒→白の順に重ねた細線）、四隅にL字ハンドル）。**それ以外**は通常のフレーム装飾（角丸・影・縁取り）込みで写真を描き、select モードで選択中なら`drawPhotoResizeHandles()`で四隅に■ハンドルを重ねる。
 
 ### 5.6 backgroundRenderer.js
 背景描画を担当します。
@@ -482,7 +482,7 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
   - `pointerup`で、pointerdown からの移動量が`CLICK_MOVE_THRESHOLD`(4px)未満なら「クリック」とみなす: select モードで選択済みの写真本体クリック → `photoEditModeStore.enterCrop()`（現在のプレビュー座標を`frozenFrame`にスナップショット）。crop モードでクロップ窓の外のクリック → `photoEditModeStore.exitCrop()`（出力枠は変えない）。
   - `Escape`キーでも crop モードを抜ける。crop モード中は矢印キーがクロップ矩形のパンになる。
   - 写真本体（ハンドル以外）の select モードでのドラッグは従来どおり`photoAdapter`の`move`処理（`photoViewParams`更新）。
-- **写真上でのホイール操作（余白調整。select モードのみ）**: `previewCanvas`に`wheel`イベントリスナーを追加。crop モード中、および写真以外の上では`preventDefault()`せずページの通常スクロールに委ねる。select モードで写真上なら`preventDefault()`して`photoAdapter.commitMarginDelta()`を呼び、`baseMarginPercent`を1刻み（`MARGIN_WHEEL_STEP`）で増減する（上スクロールで写真を大きく＝余白を減らす）
+- **プレビュー上のホイール操作**: 現在は未使用（`previewCanvas`に`wheel`リスナーを付けていない）。以前は select モードで写真上のホイールが`baseMarginPercent`（余白）を増減していたが、四隅■ハンドルのドラッグで余白を直接いじれるようになったため冗長・誤操作の元として削除した（`docs/roadmap.md` A-6。`photoAdapter.commitMarginDelta()`と定数`MARGIN_WHEEL_STEP`も撤去）。今後「開いているタブに応じてホイールの用途を切り替える」設計（背景タブ＝背景拡大倍率など、`docs/roadmap.md` B-2）でリスナーを復活させる想定
 - **選択変更と再描画（設計上の注記）:** `selectionStore`の選択状態変更（`setSelectedId()`）自体は`editState`の変更ではないため、`stateManager.js`の通常の状態変更リスナー（`requestRedraw`等）を経由しない。ドラッグを伴わない純粋なクリック選択（`pointerdown`直後に一度も`pointermove`が発火しないケース）でも選択ハイライトやハンドルが即座に表示されるよう、`main.js`が`selectionStore.onSelectionChange(() => requestRedraw())`を明示的に登録している。
   - 拡大: ボックス中心からハンドルまでの距離の比（現在距離÷ドラッグ開始時距離）をドラッグ開始時点の`size`に掛ける。回転角に関わらず「ハンドルを中心から遠ざける/近づける」動作になる
   - 回転: ボックス中心から見たポインタの角度（`Math.atan2`）の変化量をドラッグ開始時点の`rotation`に加算する。**Shiftキーを押しながらドラッグすると15度刻みにスナップ**する
@@ -493,7 +493,7 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 | アダプタ | 対象 | 値の単位系 | 備考 |
 |---|---|---|---|
 | `textAdapter.js` | `customTexts[]`の各レイヤー、および撮影日・Exifブロック（固定id `'text-date'`/`'text-exif'`） | 写真短辺基準の% | `customTexts[]`は`updateCustomTextLayer()`、撮影日・Exifは`updateState({ textSettings: { date/exif: changes } })`と、idに応じて内部で経路を振り分ける（`resolveLayer()`ヘルパー） |
-| `photoAdapter.js` | 写真の枠内配置（`photoViewParams`） | 可動範囲(movable width/height)に対する0.0〜1.0の割合 | `layoutCalculator.js`の可動範囲計算と対応させる必要があり、`getLastPreviewContext().scale`を使った変換が必要。加えてトリミング用に、`getCropRect()`（`resolveCropRect`で現在の割合矩形を返す）・`commitCropRect(rect)`（`cropSettings.rect`を更新）・`getCropConstraint()`（比率制約の取得）・`commitMarginResizeByDrag(startMargin, projPx, startShortSidePx)`（select モードの四隅ハンドル→`baseMarginPercent`、符号付き投影量ベース）・`commitMarginDelta()`（ホイール→`baseMarginPercent`）を持つ（5.16節参照。`textAdapter`の`getTransform`系と同種の拡張） |
+| `photoAdapter.js` | 写真の枠内配置（`photoViewParams`） | 可動範囲(movable width/height)に対する0.0〜1.0の割合 | `layoutCalculator.js`の可動範囲計算と対応させる必要があり、`getLastPreviewContext().scale`を使った変換が必要。加えてトリミング用に、`getCropRect()`（`resolveCropRect`で現在の割合矩形を返す）・`commitCropRect(rect)`（`cropSettings.rect`を更新）・`getCropConstraint()`（比率制約の取得）・`commitMarginResizeByDrag(startMargin, projPx, startShortSidePx)`（select モードの四隅ハンドル→`baseMarginPercent`、符号付き投影量ベース）を持つ（5.16節参照。`textAdapter`の`getTransform`系と同種の拡張） |
 | `backgroundAdapter.js` | 拡大ぼかし背景の位置（`imageBlurBackgroundParams`） | 写真短辺基準の%（textAdapterと同じ単位系） | 単色背景（`backgroundType === 'color'`）の場合はそもそも`interactionRegistry`に登録されないため、ドラッグ対象にならない |
 
 **単位変換上の注意（重要）:** `getLastPreviewContext()`が返す`photoShortSidePx`は、写真の実解像度ではなく**プレビュー描画時に縮小された後の短辺px**を指す。ドラッグのポインタ移動量（`dxPx`/`dyPx`）も同じプレビューcanvasのpx空間の値であるため、`textAdapter`や`backgroundAdapter`ではscaleによる再変換は不要で、単純な比率計算（`dxPx / photoShortSidePx * 100`）だけで正しく変換できる。過去にここへ誤って`/ scale`を追加してしまい、プレビューの縮小率次第でドラッグ量が数倍に増幅される不具合が発生したことがあるため、新しいアダプタを追加する際は注意すること。
@@ -700,8 +700,8 @@ Blobをダウンロード
 |---|---|---|
 | 四隅ハンドル | ■（白塗り・黒フチ）。ドラッグ＝**余白 `baseMarginPercent` の増減**（外へ引く＝余白減＝写真が枠いっぱいへ。写真のピクセル数・写る範囲は不変）。「中心→掴んだ隅」方向への符号付き移動量で余白を動かす（`photoAdapter.commitMarginResizeByDrag`。中心を通り越しても反転せず、移動量に比例。感度は `MARGIN_RESIZE_FACTOR`） | L 字（白塗り・黒フチ）。ドラッグ＝**クロップ矩形 `cropSettings.rect` の変更**（掴んだ隅だけ動く。比率制約時は連動。`resizeCropRect`→`photoAdapter.commitCropRect`） |
 | 写真本体ドラッグ | 出力枠内での写真位置（`photoViewParams`）。従来どおり | クロップ矩形の平行移動（`rect.x/y`。ドラッグ方向にクロップ窓が動く） |
-| 表示 | フレーム装飾（角丸・影・縁取り）込みで写真を描画＋■ハンドル | クロップ矩形の内側だけ明るく、外側を暗くマスクした周辺減光オーバーレイ＋L字ハンドル。枠線・ハンドルは黒フチ＋白で明暗どちらの背景でも視認できる |
-| ホイール／矢印キー | ホイール＝余白、矢印＝`photoViewParams` の nudge | ホイール無効、矢印＝クロップ矩形のパン（本体ドラッグと同じ向き） |
+| 表示 | フレーム装飾（角丸・影・縁取り）込みで写真を描画＋■ハンドル | クロップ矩形の内側だけ明るく、外側を暗くマスクした周辺減光オーバーレイ＋三分割グリッド（rule of thirds）＋L字ハンドル。枠線・グリッド・ハンドルは黒フチ＋白で明暗どちらの背景でも視認できる |
+| ホイール／矢印キー | ホイールは未使用、矢印＝`photoViewParams` の nudge | ホイール無効、矢印＝クロップ矩形のパン（本体ドラッグと同じ向き） |
 | 抜け方 | 選択済みの写真をもう一度クリック → crop へ | 写真の外をクリック／Esc → select へ戻る。**出力枠（`outputTargetAspectRatioString`）は変えない**。枠は固定のまま、切り抜かれた写真がそのクロップ比率の形で枠の中に配置される（横長にクロップすれば写真が横長の帯になり、上下に余白がつく） |
 
 **設計上の要点（フリーズフレーム）:** Kakomi は「出力枠＝写真＋余白、余白は写真短辺に対する％」というモデルのため、クロップ矩形を変えても画面上の写真ボックスの大きさはほぼ変わらない（余白が比例して縮むだけ。`session-log-2026-08-27.md` 2.2節）。このままライブに再レイアウトすると「内側へドラッグしているのに枠が縮まない」体験になる。そこで crop モードに入った瞬間のプレビュースケールと写真ボックス矩形・クロップ矩形を `photoEditModeStore.frozenFrame` にスナップショットし、crop モード中の描画・当たり判定はこれを基準に固定する（`canvasRenderer.js` の `drawCropModeOverlay`）。モード終了時に通常描画へ戻り、`calculateLayout` が最終 `rect` で一度だけリフローして収束する（PowerPoint の「確定」に相当）。
@@ -763,8 +763,8 @@ Blobをダウンロード
 - **サイズ**: 写真短辺に対する%（0.1-10%または0.1-50%）
 - **色**: HEXカラーコード
 - **不透明度**: 0-1
-- **位置**: 上/中央/下 × 左/中央/右の9点から選択（アンカー）＋オフセットX/Y（%指定、アンカーからのさらなる微調整）
-  - **注意（2026年8月のUI刷新で変更）:** 統合前は撮影日・Exifが6点（中央行なし）、自由テキストにはアンカー選択UI自体が存在しなかった（`position`の初期値`'middle-center'`をオフセットのみで擬似的にずらす形）。UI統合にあたり3種類とも9点から選べるよう揃えた。`textRenderer.js`の位置計算ロジックはもともと9点全てに対応済みだったため、レンダラー側の変更は不要だった。
+- **位置**: 基準アンカー（`position`。上/中央/下 × 左/中央/右の9点。既定は撮影日=`bottom-left`／Exif=`bottom-right`／自由テキスト=`middle-center`）＋オフセットX/Y（%指定、アンカーからのさらなる微調整）。オフセットはプレビュー上のドラッグ・数値欄・矢印キーで動かす
+  - **注意（2026年8月のUI刷新で変更）:** 統合前は撮影日・Exifが6点（中央行なし）、自由テキストにはアンカー選択UI自体が存在しなかった。UI統合時にいったん3種類とも9点セレクトに揃えたが、その後**アンカー選択セレクト（`#textLayerPosition`）はUIから撤去した**（位置はドラッグで決めるため9点の選択はほぼ使われない。`docs/roadmap.md` D-2）。`position`はデータモデル・プリセットには残り、`calculateTextPosition()`がオフセットの基準として使い続ける。`textRenderer.js`はもともと9点全てに対応済み。
 - **水平方向の配置（textAlign）**: 左寄せ、中央、右寄せ
   - Exif情報、自由テキストにはこの配置ラジオボタンが存在する。
   - **撮影日表示にはこの配置コントロールが存在しない**（`textRenderer.js`側でも撮影日設定オブジェクトに`textAlign`が定義されていないため、位置指定文字列から自動的に左/中央/右寄せが決まる）。
@@ -794,7 +794,7 @@ Blobをダウンロード
 
 ### 7.6 出力設定
 - **JPEG品質**: 1-100（スライダー、`jpgQuality`。「出力」フライアウトパネル内）
-- **ダウンロードボタン**（`#downloadButton`）: **2026年8月のUI刷新で上部バーへ移設**。以前は「出力」タブ内にあったが、常時アクセスできるよう上部バーの右端（Undo/Redoの隣）に配置している（3.1節参照）。id・イベント配線は変更していない。
+- **ダウンロードボタン**（`#downloadButton`）: 「出力」タブ（`#tab-output`）内、`JPG画質設定` fieldsetの直下に横幅いっぱいのアクセントボタンとして置いている。2026年8月のUI刷新でいったん上部バーへ移設したが、そこまで頻繁に押すものではなく「出力」タブ内にあるほうが自然というユーザー判断で戻した（`docs/roadmap.md` E、3.1節参照）。id・イベント配線（`main.js`の`handleDownload`配線）は一度も変えていない。
 - **Exif保持**: `outputSettings.preserveExif` は状態として存在し（初期値 `true`）、`fileManager.js`の`handleDownload()`がこの値を見てExif埋め込みの要否を判定する。ただし、この設定値を切り替えるUIチェックボックス自体が存在せず、常に「保持する」設定のままダウンロードが行われる。
 
 ### 7.7 Exif情報表示
@@ -950,6 +950,16 @@ Blobをダウンロード
 - **Exif情報フローティングカードの配置見直し**: 現状はアイコンレール下部の独立トグルボタンでの開閉（7.7節）。使用頻度が高いようであれば、キャンバス下部への常設化などへの格上げを検討の余地あり。
 - **`frameBorderStyle`（破線）の扱い**: 7.4節で述べた通り、UIコントロール自体が無効化されたまま。今回のフレーム加工パネル刷新のタイミングで復活させるか完全に削除するかは未決定。
 - **レスポンシブ（`@media max-width:1024px`以下）の実機確認未実施**: アイコンレールを横並びに戻すフォールバックは実装したが、タッチデバイス・狭幅ブラウザでの実機検証はまだ行っていない。
+
+### 11.6 ロードマップ（`docs/roadmap.md`）対応状況
+
+2026-08-28にユーザーからの要望を`docs/roadmap.md`（A〜Fの各タブ）に整理した。フェーズ0（設計不要の小改修）として以下を実施済み（`docs/session-log-2026-08-29.md`）:
+- ✅ **E**: ダウンロードボタンを上部バー →「出力」タブ内へ戻した（7.6節）
+- ✅ **A-2**: crop モードのオーバーレイに三分割グリッド（rule of thirds）を追加（7.2節、`canvasRenderer.js` `drawCropModeOverlay`）
+- ✅ **A-6**: select モードのプレビュー上ホイールによる余白変更を削除（5.16節、`photoAdapter.commitMarginDelta`・`MARGIN_WHEEL_STEP`撤去）
+- ✅ **D-2**: テキストの固定表示位置アンカー選択（`#textLayerPosition`）をUIから撤去（`position`データモデルは維持。5.3節・7.5節）
+
+未着手のロードマップ項目（方向性の相談から）: A-1（出力フォーマットUIのグラフィカル化・位置スライダー撤去）、A-3〜A-5（crop/確定まわりの拡張）、B（背景タブのスライダー整理・ホイールで背景拡大）、C（超楕円スライダーの体感等間隔化・影オフセットのドラッグ）、D-1/D-3（テキスト追加フロー再設計・設定共通化＝データモデル統合の是非）、F（プリセットの置き場所）。B-2／C-2／A-6は「開いているタブでプレビュー上のホイール・本体ドラッグの意味を切り替える」共通設計にまとめられる見込み。
 
 ## 12. 仕様書v1との対応状況
 

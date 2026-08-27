@@ -109,19 +109,6 @@ const photoAdapter = {
      */
     commitCropRect(rect) {
         updateState({ cropSettings: { rect: { x: rect.x, y: rect.y, w: rect.w, h: rect.h } } });
-    },
-
-    /**
-     * 写真上でのホイール操作によるbaseMarginPercent（余白）の調整。
-     * クロップズームと異なり、余白は写真の見た目のボックスサイズに直接効くため
-     * （5.4節参照）、「写真の大きさを変える」という操作感にはこちらが対応する。
-     * @param {number} deltaPercent - 1ホイール刻みあたりの増減量（%）
-     */
-    commitMarginDelta(deltaPercent) {
-        const { min, max } = controlsConfig.baseMarginPercent;
-        const current = getState().baseMarginPercent;
-        const newMargin = Math.round(Math.min(max, Math.max(min, current + deltaPercent)) * 10) / 10;
-        updateState({ baseMarginPercent: newMargin });
     }
 };
 

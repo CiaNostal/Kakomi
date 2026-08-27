@@ -21,9 +21,6 @@ import textAdapter from './adapters/textAdapter.js';
 import photoAdapter from './adapters/photoAdapter.js';
 import backgroundAdapter from './adapters/backgroundAdapter.js';
 
-// ホイール1刻みあたりのbaseMarginPercentの増減量(%)。写真上でのホイール操作用。
-const MARGIN_WHEEL_STEP = 1;
-
 // pointerdown→pointerup の移動量がこの px 未満なら「ドラッグではなくクリック」とみなす。
 // 選択モード↔クロップモードの切り替えはこのクリック判定で行う。
 const CLICK_MOVE_THRESHOLD = 4;
@@ -305,21 +302,6 @@ export function initCanvasInteraction(canvas) {
         }
     });
     canvas.addEventListener('pointercancel', () => { pointerDownCtx = null; endDrag(); });
-
-    // 写真上でのホイール操作でbaseMarginPercent（余白）を調整する。
-    // 写真以外の上ではpreventDefaultしないため、ページの通常スクロールは妨げない。
-    canvas.addEventListener('wheel', (e) => {
-        if (dragState) return;
-        if (photoEditModeStore.isCropMode()) return; // crop モード中はホイールで余白を動かさない
-        const { x, y } = toCanvasCoords(canvas, e.clientX, e.clientY);
-        const hit = interactionRegistry.hitTest(x, y);
-        if (!hit || hit.type !== 'photo') return;
-
-        e.preventDefault();
-        // 上スクロール(deltaY < 0)で写真を大きく＝余白を減らす、下スクロールで余白を増やす
-        const delta = e.deltaY < 0 ? -MARGIN_WHEEL_STEP : MARGIN_WHEEL_STEP;
-        photoAdapter.commitMarginDelta(delta);
-    }, { passive: false });
 
     // 矢印キーによる微調整（Shiftで10px相当、通常は1px相当。ドラッグと同じ「プレビュー上のpx」単位で扱う）
     document.addEventListener('keydown', (e) => {
