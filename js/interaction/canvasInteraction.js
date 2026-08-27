@@ -22,7 +22,10 @@ import photoAdapter from './adapters/photoAdapter.js';
 import backgroundAdapter from './adapters/backgroundAdapter.js';
 import shadowAdapter from './adapters/shadowAdapter.js';
 import { getActiveTab } from '../tabManager.js';
-import { getState } from '../stateManager.js';
+import { getState, removeCustomTextLayer } from '../stateManager.js';
+
+// 固定テキストレイヤー（撮影日・Exif）の選択 id。自由テキストは randomUUID なのでこの2つ以外。
+const FIXED_TEXT_LAYER_IDS = ['text-date', 'text-exif'];
 
 // pointerdown→pointerup が「ドラッグではなく短いタップ」とみなされる条件。
 // 選択モード↔クロップモードの切り替えはこのタップ判定で行う。移動量がこの px 未満で、
@@ -375,6 +378,21 @@ export function initCanvasInteraction(canvas) {
             e.preventDefault();
             photoEditModeStore.exitCrop();
             return;
+        }
+
+        // D-5: 「文字」タブがアクティブで自由テキストを選択中のとき、Delete / Backspace で削除する。
+        // 固定レイヤー（撮影日・Exif）は削除不可。× ボタン（uiController）と同じく、削除 → 選択解除の順で
+        // 呼ぶと onSelectionChange 経由でチップ一覧・設定パネルが再描画される。
+        if ((e.key === 'Delete' || e.key === 'Backspace') && getActiveTab() === 'tab-text') {
+            const sel = selectionStore.getSelectedId();
+            const isCustomText = sel && !FIXED_TEXT_LAYER_IDS.includes(sel)
+                && (getState().textSettings.customTexts || []).some(t => t.id === sel);
+            if (isCustomText) {
+                e.preventDefault();
+                removeCustomTextLayer(sel);
+                selectionStore.setSelectedId(null);
+                return;
+            }
         }
 
         let dxPx = 0, dyPx = 0;

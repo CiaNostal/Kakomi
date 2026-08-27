@@ -6,6 +6,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kakomi</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -105,12 +106,25 @@
                 <path d="M3.5 10h17M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="1.6"
                     stroke-linecap="round" />
             </symbol>
+            <!-- 背景タイプ（B-5）: 単色＝塗りつぶし / 拡大ぼかし＝破線円 -->
+            <symbol id="i-fill" viewBox="0 0 24 24">
+                <rect x="4" y="4" width="16" height="16" rx="3" fill="currentColor" stroke="none" />
+            </symbol>
+            <symbol id="i-blur" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"
+                    stroke-dasharray="1.5 3" />
+                <circle cx="12" cy="12" r="3.5" fill="none" stroke="currentColor" stroke-width="1.6" />
+            </symbol>
         </defs>
     </svg>
     <div class="app-container">
         <header class="app-header">
             <div class="app-brand"><span class="brand-mark"></span>Kakomi</div>
             <div class="header-actions">
+                <button type="button" id="openImageButton" class="icon-btn" title="画像を開く"><span
+                        class="hdr-icon"><svg>
+                            <use href="#i-bg"></use>
+                        </svg></span></button>
                 <button type="button" id="undoButton" class="icon-btn" title="元に戻す (Ctrl+Z)" disabled>↶</button>
                 <button type="button" id="redoButton" class="icon-btn" title="やり直す (Ctrl+Shift+Z)" disabled>↷</button>
                 <div class="dl-group">
@@ -194,13 +208,22 @@
                     <div id="tab-background" class="tab-pane">
                         <fieldset>
                             <legend>背景タイプ</legend>
-                            <div class="radio-group">
-                                <input type="radio" id="bgTypeColor" name="backgroundType" value="color">
-                                <label for="bgTypeColor">単色背景</label>
-                            </div>
-                            <div class="radio-group">
-                                <input type="radio" id="bgTypeImageBlur" name="backgroundType" value="imageBlur">
-                                <label for="bgTypeImageBlur">拡大ぼかし背景 (元画像を使用)</label>
+                            <div class="corner-segmented">
+                                <label class="segment">
+                                    <input type="radio" id="bgTypeColor" name="backgroundType" value="color">
+                                    <span class="segment-icon"><svg>
+                                            <use href="#i-fill"></use>
+                                        </svg></span>
+                                    単色
+                                </label>
+                                <label class="segment">
+                                    <input type="radio" id="bgTypeImageBlur" name="backgroundType"
+                                        value="imageBlur">
+                                    <span class="segment-icon"><svg>
+                                            <use href="#i-blur"></use>
+                                        </svg></span>
+                                    ぼかし
+                                </label>
                             </div>
                         </fieldset>
 
@@ -415,11 +438,18 @@
                     <div id="tab-preset" class="tab-pane">
                         <fieldset>
                             <legend>プリセットを保存</legend>
+                            <div class="preset-section-checks" id="presetSectionChecks">
+                                <label><input type="checkbox" data-section="output" checked>出力フォーマット</label>
+                                <label><input type="checkbox" data-section="crop" checked>トリミング</label>
+                                <label><input type="checkbox" data-section="background" checked>背景</label>
+                                <label><input type="checkbox" data-section="frame" checked>フレーム</label>
+                                <label><input type="checkbox" data-section="text" checked>テキスト</label>
+                            </div>
                             <div class="form-row-simple">
                                 <input type="text" id="presetNameInput" placeholder="プリセット名" style="flex: 1;">
                                 <button type="button" id="savePresetButton">保存</button>
                             </div>
-                            <p class="custom-text-drag-hint">レイアウト・背景・フレーム・文字の設定をまとめて保存します（写真自体は含まれません）。</p>
+                            <p class="custom-text-drag-hint">チェックした項目だけを保存します（写真自体は含まれません）。</p>
                         </fieldset>
                         <fieldset>
                             <legend>保存済み</legend>
@@ -439,12 +469,18 @@
                 </div>
 
             <section class="canvas-area">
-                <div class="image-loader-container">
-                    <label for="imageLoader">画像ファイルを選択 または ドラッグ＆ドロップ:</label>
-                    <input type="file" id="imageLoader" accept="image/*">
-                </div>
                 <div class="canvas-container">
                     <canvas id="previewCanvas"></canvas>
+                    <!-- E-7: 画像未読込時はキャンバス中央にこのドロップダイアログ。読み込むと消えてキャンバスが出る。
+                         ドロップは .canvas-area 全体で受け付ける（main.js）。 -->
+                    <div class="image-loader-container" id="imageDropDialog">
+                        <span class="drop-icon"><svg>
+                                <use href="#i-bg"></use>
+                            </svg></span>
+                        <p class="drop-title">画像をドラッグ＆ドロップ</p>
+                        <label class="drop-pick" for="imageLoader">またはクリックして選択</label>
+                        <input type="file" id="imageLoader" accept="image/*">
+                    </div>
                 </div>
             </section>
         </main>

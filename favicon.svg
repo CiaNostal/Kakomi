@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- 左上ブランドアイコン（.app-brand .brand-mark）と同じ意匠：角丸四角の線＋内側の小さな角丸四角の線。 -->
+  <style>
+    .mark { stroke: #1B211E; }
+    @media (prefers-color-scheme: dark) { .mark { stroke: #EAEDE8; } }
+  </style>
+  <g class="mark" fill="none" stroke="#1B211E" stroke-linejoin="round">
+    <rect x="3.5" y="3.5" width="25" height="25" rx="6.5" stroke-width="3" />
+    <rect x="11.4" y="11.4" width="9.2" height="9.2" rx="2.6" stroke-width="2.2" />
+  </g>
+</svg>

@@ -39,6 +39,12 @@
 | F | プリセットはレール下部の一項目のまま（「情報」の隣）。レイアウトの中に畳み込むのは見送り | 同 |
 | G-1 | 縦長／正方形の出力比率でプレビューキャンバスがじわじわ拡大し続ける不具合。根本原因＝`#previewCanvas` の `border: 1px` が要素のレイアウトボックスに乗っていたこと。枠線を `outline`（`outline-offset: -1px`）へ置換して解消。フェーズ4 の「幅のみ反応 `ResizeObserver`」は多重防御として維持 | `session-log-2026-08-29-4.md` |
 | E-3 | 「情報」を他タブと並列のタブ（`data-tab="tab-info"` ＋ `#tab-info` ペイン、レール下部）に。同じフライアウトパネル枠で切り替わり、再クリックで収納。`#exifToggleButton` / `#exifFloatCard` 廃止。`displayExifInfo()` を作り替えてアイコン＋値だけの `.exif-dl` 表示に（項目名は `<dt>` の title）。撮影日時整形バグも修正 | `session-log-2026-08-29-4.md` |
+| E-6 | Favicon。`.brand-mark` と同意匠の `favicon.svg`（`prefers-color-scheme` 対応）＋ `<link rel="icon" type="image/svg+xml">` | `session-log-2026-08-29-5.md` |
+| B-5 | 背景タイプ（単色／ぼかし）をラジオからアイコンセグメント（`.corner-segmented`、`#i-fill` / `#i-blur`）に。id/name/value 据え置きで JS 配線は無変更 | 同 |
+| D-5 | 「文字」タブがアクティブで自由テキスト選択中、Delete/Backspace で削除（`canvasInteraction.js` keydown）。固定レイヤーは対象外 | 同 |
+| G-2 | 別画像への差し替え時は `cropSettings.rect`→全体・`photoViewParams`→中央にリセット（比率制約は維持して再フィット）。他パラメータは引き継ぐ。初回ロードでは初期化しない（`setImage`） | 同 |
+| E-7 | ファイル選択の小枠を廃し `.canvas-area` 全体をドロップ受付に。未読込時は中央にドロップダイアログ、読み込み後はキャンバス。上部バーに「画像を開く」ボタン（`#openImageButton`） | 同 |
+| F-2 | プリセット保存時にタブ単位5セクション（`PRESET_SECTIONS`）のチェックで保存項目を選択。`savePreset(name, sections)` がサブセット保存、`applyPreset` は含まれるキーだけ上書き | 同 |
 
 ダブルクリックでオフセットをリセットする案は「他の操作が暴発しそう」としてユーザー判断で見送り。
 
@@ -82,30 +88,16 @@
     同じフライアウトパネル枠で切り替わり、再クリックで収納（E-1 が自動で効く）。`#exifToggleButton` / `#exifFloatCard` 廃止。
     `displayExifInfo()` を作り替え、カメラ／レンズ名を小さく上に＋撮影設定はアイコン＋値だけの `.exif-dl`（項目名は `<dt>` の title）。
 
-### フェーズ6 — 追加の小〜中改修（2026-08-27 その2セッションのフィードバック）
+### フェーズ6 — 追加の小〜中改修 ✅ 完了（`docs/session-log-2026-08-29-5.md`、Playwright スモーク phase6 33/33 ＋ 回帰）
 
-方向性は下記で合意済み（`docs/session-log-2026-08-29-5.md` §1）。安いものから: E-6 → B-5 → D-5 → G-2 → E-7 → F-2。
+2026-08-27 その2セッションのフィードバック。方向性を相談で確定し、安い順に実装した: E-6 → B-5 → D-5 → G-2 → E-7 → F-2。
 
-12. **E-6** Favicon。現在の左上アイコン（`.brand-mark` の CSS 図形＝角丸四角＋内側の小四角）を SVG に起こし、
-    `favicon.svg` ＋ `<link rel="icon" type="image/svg+xml">` を追加。単色・ダーク/ライト両対応。
-13. **B-5** 背景タイプ（単色／拡大ぼかし）を、フレームタブ「角のスタイル」と同じ `.corner-segmented` の
-    アイコンセグメントに置き換える。ラジオの `name`/`value`/`id` は据え置き（`uiController.js` の配線は無変更）。
-    スプライトにアイコンを2つ追加（塗り／ぼかし）。
-14. **D-5** 文字タブがアクティブで**自由テキスト**を選択中のとき、Delete/Backspace で削除
-    （`canvasInteraction.js` の keydown に追加。`removeCustomTextLayer` ＋ 選択解除 ＋ 再描画）。
-    固定レイヤー（撮影日・Exif）は削除不可のため Delete では何もしない。
-15. **G-2** 別画像を読み込んだときの引き継ぎ: **トリミングだけ初期化**（`cropSettings.rect` を全体へ、
-    `photoViewParams` を中央へ）。比率制約（`cropSettings.aspectRatio`）は維持し、`setImage` の既存
-    「全体 rect ＋ 比率制約 → `fitRectToAspect` で再フィット」経路に自動で乗る。背景・フレーム・出力比率・
-    余白・テキストはそのまま引き継ぐ。初回ロード（`editState.image` がまだ無い）では初期化しない。
-16. **E-7** 画像ドロップ領域をキャンバス中央に統合。`.image-loader-container` を `.canvas-area` 中央の
-    ダイアログとして配置し、`state.image` があれば隠す／無ければキャンバス枠側を隠す。`.canvas-area` 全体を
-    ドロップ対象に広げる。読み込み後の差し替え手段として、上部バーに小さな「画像を開く」ボタンを1つ追加
-    （＋ D&D）。
-17. **F-2** プリセット保存時に、保存する項目を**タブ単位の5チェック**（出力フォーマット＝アスペクト比＋余白／
-    トリミング／背景／フレーム／テキスト）で選べるようにする。`savePreset(name, sections)` が選択された
-    `EDITABLE_SETTINGS_KEYS` のサブセットだけ保存し、`applyPreset` は含まれるキーだけ `updateState`（＝
-    含まれない項目は今の値のまま。deep-merge の既存挙動でそのまま成立）。旧プリセットは全キー入りなので移行不要。
+12. ✅ **E-6** Favicon。`.brand-mark` と同意匠の `favicon.svg`（`prefers-color-scheme` 対応）＋ `<link rel="icon" type="image/svg+xml">`。
+13. ✅ **B-5** 背景タイプ（単色／ぼかし）を `.corner-segmented` のアイコンセグメントに（`#i-fill` / `#i-blur`）。id/name/value 据え置きで JS 配線は無変更。
+14. ✅ **D-5** 文字タブがアクティブで自由テキスト選択中、Delete/Backspace で削除（`canvasInteraction.js` keydown）。固定レイヤーは対象外。
+15. ✅ **G-2** 別画像への差し替え時は `cropSettings.rect`→全体・`photoViewParams`→中央（比率制約は維持して再フィット）。他パラメータは引き継ぐ。初回ロードでは初期化しない（`setImage`）。
+16. ✅ **E-7** ファイル選択の小枠を廃し `.canvas-area` 全体をドロップ受付に。未読込時は中央にドロップダイアログ、読み込み後はキャンバス。上部バーに「画像を開く」ボタン（`#openImageButton`）。
+17. ✅ **F-2** プリセット保存時にタブ単位5セクション（`PRESET_SECTIONS`）のチェックで保存項目を選択。`savePreset(name, sections)` がサブセット保存、`applyPreset` は含まれるキーだけ上書き。
 
 ### フェーズ7 — 編集機能の拡張（既存の積み残し）
 
@@ -183,17 +175,11 @@ A-3（切り出し元の回転）と A-4（出力枠内の回転）はレイヤ�
 区切り線付き小見出し（`.subsection-heading.with-rule`）で分離。B-1 のアコーディオンを撤回。
 詳細は「完了済み」表と `docs/session-log-2026-08-29-3.md`。
 
-### B-5. 背景タイプをアイコンセグメントに ← フェーズ6
+### B-5.（完了）
 
-**要望:** 背景タブの「単色／拡大ぼかし」をラジオボタンではなく、フレームタブのようにアイコンで選べるように。
-
-**現状:** `#tab-background` 先頭の `.radio-group` ×2（`#bgTypeColor` / `#bgTypeImageBlur`、`name="backgroundType"`）。
-フレームタブ「角のスタイル」は `.corner-segmented` ＋ `.segment` ＋ `.segment-icon`（`style.css:1124-`）で再利用可能。
-
-**方針:** 2ラジオを `.corner-segmented` 構造に置き換える（`id` / `name` / `value` は据え置き ⇒ `uiController.js`
-`addOptionChangeListener(bgTypeColorRadio, …)` / `toggleBackgroundSettingsVisibility()` は無変更）。
-スプライトにアイコンを2つ追加（塗りつぶし＝単色、ぼかし＝拡大ぼかし）。長いラベル「拡大ぼかし背景 (元画像を使用)」は
-セグメント下では「ぼかし」等に短縮。
+背景タイプ（単色／ぼかし）を `.corner-segmented` のアイコンセグメント（`#i-fill` / `#i-blur`）に。ラジオの
+`id` / `name` / `value` は据え置きで `uiController.js` の配線は無変更。詳細は「完了済み」表と
+`docs/session-log-2026-08-29-5.md`。
 
 ---
 
@@ -235,17 +221,10 @@ A-3（切り出し元の回転）と A-4（出力枠内の回転）はレイヤ�
 （`spec.md` 11.5 節）。D-3 を素直にやるとデータモデル統合（`kind` 付き単一配列化）が視野に入り、既存 localStorage プリセットの移行が要る
 （`migrateCropSettings` と同じ考え方で移行関数を用意する手はある）。
 
-### D-5. 文字タブで Delete キー削除 ← フェーズ6
+### D-5.（完了）
 
-**要望:** 文字ボタン（タブ）がアクティブなときに Delete キーで選択中のテキストを消せるように。
-
-**現状:** キーボード処理は `canvasInteraction.js` の `keydown`（矢印 nudge と Esc のみ）。自由テキストの削除は
-`removeCustomTextLayer(id)`（`stateManager.js`）＋ `selectionStore.clearSelectionIfMatches` ＋ チップ/パネル再描画
-（`uiController.js` の × ボタン内でやっている）。テキストの選択 id は自由テキスト＝`layer.id`、固定＝`text-date` / `text-exif`。
-
-**方針:** `keydown` に「`getActiveTab() === 'tab-text'` かつ `selectionStore.getSelectedId()` が
-`text-date` / `text-exif` 以外（＝自由テキスト）かつ `e.key === 'Delete' || e.key === 'Backspace'`」で削除。
-入力欄フォーカス中（`isEditableElement`）は無視。固定レイヤー選択中の Delete は何もしない。
+「文字」タブがアクティブで自由テキスト選択中、`Delete` / `Backspace` で削除（`canvasInteraction.js` の keydown）。
+固定レイヤー（撮影日・Exif）は対象外。詳細は「完了済み」表と `docs/session-log-2026-08-29-5.md`。
 
 ---
 
@@ -290,32 +269,17 @@ A-3（切り出し元の回転）と A-4（出力枠内の回転）はレイヤ�
 `#jpgQuality`＋「書き出す」）に。`outputSettings` データ・`fileManager.js` は不変。
 詳細は「完了済み」表と `docs/session-log-2026-08-29-3.md` §11、`spec.md` 7.6 節・3.1 節。
 
-### E-6. Favicon ← フェーズ6
+### E-6.（完了）
 
-**要望:** 現在の Kakomi アイコン（左上のもの）と同じ意匠の favicon。
+`.brand-mark` と同意匠の `favicon.svg`（`prefers-color-scheme` 対応）＋ `<link rel="icon" type="image/svg+xml">`。
+詳細は「完了済み」表と `docs/session-log-2026-08-29-5.md`。
 
-**現状:** favicon 未設定（`<link rel="icon">` なし）。左上アイコンは画像ではなく `.app-brand .brand-mark`
-（`style.css:76-93`）の CSS 図形＝`2px` ボーダーの角丸四角＋`::after` の内側の小四角。
+### E-7.（完了）
 
-**方針:** 同じ形の SVG（外＝角丸四角の線、内＝小四角の線、単色 `currentColor` 相当）を `favicon.svg` として作り、
-`<link rel="icon" type="image/svg+xml" href="favicon.svg">` を `index.html` の `<head>` に追加。色はライト/ダーク
-どちらでも視認できる中間色にするか、`prefers-color-scheme` を SVG 内で分岐。
-
-### E-7. 画像ドロップ領域をキャンバス中央に統合 ← フェーズ6
-
-**要望:** 「画像ファイル…を選択」の小さい枠と D&D 受付領域を一緒にしたい。編集中に新しい画像を D&D することは
-基本ないので、最初はキャンバス中央に D&D ダイアログ枠、画像を読んだらそれが消えて出力フォーマットの
-キャンバスが現れる、という挙動が自然。
-
-**現状:** 小枠 `.image-loader-container` は `.canvas-container` の上に常時表示。D&D 受付は既に `.canvas-container`
-（`main.js:195-` の `dragover`/`dragleave`/`drop`）。
-
-**方針:**
-- `.image-loader-container` を `.canvas-area` 中央のダイアログとして配置。`state.image` があれば `hidden`、
-  無ければ `.canvas-container`（キャンバス枠・枠線）側を隠す。
-- D&D 受付を `.canvas-area` 全体へ広げる（未読込時にキャンバス枠が無くてもドロップできるように）。
-- 読み込み後の差し替え手段: 上部バー `.header-actions` に小さな「画像を開く」ボタンを1つ追加し、
-  `#imageLoader`（`type=file`、画面外に隠す）を click させる。D&D も引き続き有効。
+ファイル選択の小枠を廃し、`.canvas-area` 全体をドロップ受付に。未読込時は `.canvas-area.no-image` で中央に
+ドロップダイアログ（`#imageDropDialog`）、読み込み後は `.has-image` でキャンバス（切り替えは `updateImagePresenceUI()`）。
+`#imageLoader` は視覚的に隠し、上部バーの「画像を開く」ボタン（`#openImageButton`）とダイアログのラベルから開く。
+詳細は「完了済み」表と `docs/session-log-2026-08-29-5.md`。
 
 ---
 
@@ -327,23 +291,13 @@ A-3（切り出し元の回転）と A-4（出力枠内の回転）はレイヤ�
 プリセットも他タブと同じ扱いで足りる。レイアウトの中に畳み込むのは見送り。
 詳細は `docs/session-log-2026-08-29-3.md` §9・§11。
 
-### F-2. 保存する項目をチェックボックスで選ぶ ← フェーズ6
+### F-2.（完了）
 
-**要望:** プリセットが何をどこまで保存するのか分かりにくい。保存時にチェックボックス一覧を出し、
-チェックしたものだけ保存できるように。
-
-**現状:** `presetStore.savePreset(name)` が `EDITABLE_SETTINGS_KEYS` を全部保存。`applyPreset` は
-`updateState(settings)` の deep-merge なので、保存を部分集合にすれば適用も自然に部分適用になる。
-
-**方針（タブ単位の5チェック、適用は含まれる項目だけ上書き）:**
-- 保存フォームにチェックボックス5つ: 出力フォーマット（`outputTargetAspectRatioString` ＋ `baseMarginPercent`）／
-  トリミング（`cropSettings` ＋ `photoViewParams`）／背景（`backgroundColor` ＋ `backgroundType` ＋
-  `imageBlurBackgroundParams`）／フレーム（`frameSettings`）／テキスト（`textSettings`）。既定は全チェック。
-  `outputSettings`（JPEG 品質等）は出力フォーマットに含めるか単独にするか実装時に確定。
-- `savePreset(name, sections)` が選択セクション → キー群 のマッピングでサブセットだけ保存。
-  プリセットに「どのセクションを含むか」も記録（一覧での表示に使える）。
-- `applyPreset` は既存どおり含まれるキーだけ `updateState`（含まれないものは今の値のまま）。
-- 旧プリセットは全キー入り＝全セクション扱いで従来どおり動く（移行不要）。
+プリセット保存フォームにタブ単位5セクション（`presetStore.js` の `PRESET_SECTIONS`＝出力フォーマット／
+トリミング／背景／フレーム／テキスト。`outputSettings` は出力フォーマットに含めた）のチェックボックス
+（`#presetSectionChecks`、既定は全チェック）。`savePreset(name, sections)` が選択セクションのキーだけ保存し
+`sections` も記録。`applyPreset` は `updateState` の deep-merge で含まれるキーだけ上書き。旧プリセットは移行不要。
+詳細は「完了済み」表と `docs/session-log-2026-08-29-5.md`。
 
 ---
 
@@ -354,21 +308,14 @@ A-3（切り出し元の回転）と A-4（出力枠内の回転）はレイヤ�
 縦長／正方形の出力比率でプレビューキャンバスがじわじわ拡大し続ける不具合。`#previewCanvas` の枠線を
 `border` → `outline` にして解消。詳細は上の「既知の不具合（G-1）」節と `docs/session-log-2026-08-29-4.md`。
 
-### G-2. 別画像を読み込むとトリミングが崩れる ← フェーズ6
+### G-2.（解消）
 
-**症状:** 写真を編集中に別の写真を読み込むと現在のパラメータを引き継ぐが、**アスペクト比が異なる画像だと
-トリミングがずれる**（元画像で 1:1 に切っていたのに、別アスペクト比の画像を取り込むとクロップが 1:1 でなくなる等）。
-ユーザーが体感する自然な値と内部値がずれているため、生のまま引き継ぐと違和感が出る。
-
-**原因:** `cropSettings.rect` は元画像に対する正規化 `{x,y,w,h}`（0–1）。別画像を読むと同じ `rect` が
-違う形の領域になる（画像のピクセル比が変わるため）。`setImage`（`stateManager.js:287`）は `rect` が
-「全体」のときだけ比率制約へ再フィットするので、部分クロップは生の数値がそのまま残る。
-
-**方針（合意済み: トリミングだけ初期化）:** `setImage` で、**すでに画像がある状態で別画像に差し替えるとき**
-（`editState.image` が truthy）は `cropSettings.rect` を全体（`FULL_RECT`）へ、`photoViewParams` を中央
-（`{offsetX:0.5, offsetY:0.5}`）へリセットする。`cropSettings.aspectRatio`（比率制約）は維持 ⇒ 既存の
-「全体 rect ＋ 比率制約 → `fitRectToAspect`」経路で新画像のアスペクトに合った矩形へ自動で作り直される。
-背景・フレーム・出力比率・余白・テキストはそのまま引き継ぐ。初回ロードでは何も初期化しない。
+「別画像を読み込むとトリミングが崩れる（1:1 で切ったのに別アスペクト比の画像でずれる）」不具合。原因は
+`cropSettings.rect` が元画像に対する正規化座標で、アスペクト比の違う画像へ同じ rect を引き継ぐと形状が変わること。
+対処: `setImage` で **すでに画像がある状態での差し替え時**（`editState.image` が truthy）だけ `cropSettings.rect`
+→ 全体、`photoViewParams` → 中央にリセット。比率制約（`aspectRatio`）は維持し、既存の再フィット経路で新画像の
+アスペクトに合わせて作り直す。他パラメータは引き継ぐ。初回ロードでは初期化しない。詳細は「完了済み」表と
+`docs/session-log-2026-08-29-5.md`。
 
 ---
 
@@ -378,10 +325,8 @@ A-3（切り出し元の回転）と A-4（出力枠内の回転）はレイヤ�
 - **セッションクローズ（2026-08-29 その3）**: フェーズ4 で「縦長比率でキャンバスがじわじわ拡大し続ける」不具合が判明（§13）。
   幅のみに反応する `ResizeObserver` で回帰は封じ込めたが根本原因は残る（G-1）。ここでコミット／プッシュし、次セッションへ引き継ぐ。
 - **G-1・フェーズ5（E-3）は解消／完了済み**（`docs/session-log-2026-08-29-4.md`。Playwright スモーク g1 13/13・phase5 25/25、phase2/3/4 回帰 OK、**ユーザーのブラウザ目視も確認済み**）。
-- **次は フェーズ6 ＝ 追加の小〜中改修**（`docs/session-log-2026-08-29-5.md`）: E-6 Favicon／B-5 背景タイプのアイコンセグメント／
-  D-5 文字タブで Delete 削除／G-2 別画像ロード時はトリミングだけ初期化／E-7 ドロップ領域をキャンバス中央に統合／
-  F-2 プリセット保存項目のチェックボックス。方向性は 2026-08-27 その2セッションで合意済み。安いものから着手。
-- その後 **フェーズ7 ＝ 編集機能の拡張**（積み残し）: C-1 / A-5 / D-1・D-3 / A-4 / A-3。
+- **フェーズ6（E-6 / B-5 / D-5 / G-2 / E-7 / F-2）は完了済み**（`docs/session-log-2026-08-29-5.md`。Playwright スモーク phase6 33/33、phase2/3/4/5・g1 回帰 OK）。ユーザーのブラウザ目視は次回。
+- **次は フェーズ7 ＝ 編集機能の拡張**（積み残し）: C-1 / A-5 / D-1・D-3 / A-4 / A-3。各項目まず方向性の相談から。
 - 比率タイルピッカー（`js/ui/ratioPicker.js`）は「形で見せて選ぶ」の再利用ネタ（C-1 の丸さパラメーター等）。
 - 「タブでプレビュー操作の意味を変える」系は、`tabManager.getActiveTab()` ＋ `canvasInteraction.js` の分岐に足していける。
   フェーズ4 で「パネルを畳んだ（`getActiveTab()`＝`null`）」状態が加わった＝写真ドラッグは枠内配置にフォールバックする。

@@ -285,6 +285,11 @@ function getState() {
  * @param {string | null} fileName - 元のファイル名 (オプション)
  */
 function setImage(img, exifData = null, fileName = null) { // ADDED: fileName パラメータ
+    // G-2: すでに画像がある状態で「別の画像に差し替える」ケースを、初回ロードと区別する。
+    // 差し替え時はトリミングだけ初期化する（下記）。他のパラメータ（背景・フレーム・出力比率・
+    // 余白・テキスト）は引き継ぐ。
+    const isReplacingImage = !!editState.image;
+
     // 基本的な画像情報を更新
     editState.image = img;
     editState.originalWidth = img.width;
@@ -294,10 +299,18 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
 
     // クロップ矩形の後追い整形。
     // ・rect が壊れている場合は全体に戻す。
+    // ・G-2: 別画像への差し替え時は rect を全体へ、枠内位置を中央へリセットする。
+    //   cropSettings.rect は「元画像に対する正規化座標」なので、アスペクト比の違う画像に
+    //   同じ rect をそのまま引き継ぐと切り抜き形状が崩れる（1:1 で切ったのに 1:1 でなくなる等）。
+    //   aspectRatio（比率制約）は維持し、下の「固定比率 ＋ 全体 rect → 再フィット」で
+    //   新しい画像のアスペクトに合った最大内接矩形へ作り直させる。
     // ・aspectRatio が固定比率なのに rect が既定の全体のまま（画像ロード前にプリセットを
-    //   適用したケースなど、比率に合った矩形をまだ計算できていない状態）の場合は、
-    //   ここで初めて分かる元画像の比率を使ってその比率の最大内接矩形へ再フィットする。
+    //   適用したケースなど、比率に合った矩形をまだ計算できていない状態）の場合も同じ再フィット。
     const crop = editState.cropSettings;
+    if (isReplacingImage) {
+        crop.rect = { ...FULL_RECT };
+        editState.photoViewParams = { offsetX: 0.5, offsetY: 0.5 };
+    }
     if (!isValidRect(crop.rect)) {
         crop.rect = { ...FULL_RECT };
     }

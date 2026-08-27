@@ -8,16 +8,18 @@ import * as selectionStore from './interaction/selectionStore.js';
 import { enhanceAsScrubInput } from './ui/scrubInput.js';
 import { attachColorHistory } from './ui/colorSwatches.js';
 import { createRatioPicker, ratioOptionsFor } from './ui/ratioPicker.js';
-import { getPresets, savePreset, deletePreset, applyPreset } from './presets/presetStore.js';
+import { getPresets, savePreset, deletePreset, applyPreset, PRESET_SECTIONS, getPresetSections } from './presets/presetStore.js';
 import { decodeExifString } from './exifHandler.js';
 
 export const uiElements = {
     imageLoader: document.getElementById('imageLoader'),
+    openImageButton: document.getElementById('openImageButton'),
     previewCanvas: document.getElementById('previewCanvas'),
     previewCtx: null,
     downloadButton: document.getElementById('downloadButton'),
     downloadPopover: document.getElementById('downloadPopover'),
     downloadConfirmButton: document.getElementById('downloadConfirmButton'),
+    canvasArea: document.querySelector('.canvas-area'),
     canvasContainer: document.querySelector('.canvas-container'),
     undoButton: document.getElementById('undoButton'),
     redoButton: document.getElementById('redoButton'),
@@ -108,6 +110,7 @@ export const uiElements = {
 
     // プリセットタブ
     presetNameInput: document.getElementById('presetNameInput'),
+    presetSectionChecks: document.getElementById('presetSectionChecks'),
     savePresetButton: document.getElementById('savePresetButton'),
     presetsListContainer: document.getElementById('presetsList'),
 };
@@ -811,10 +814,25 @@ function renderPresetsList() {
         const row = document.createElement('div');
         row.className = 'preset-row';
 
+        const nameWrap = document.createElement('span');
+        nameWrap.className = 'preset-row-name';
+
         const label = document.createElement('span');
-        label.className = 'preset-row-name';
+        label.className = 'preset-row-title';
         label.textContent = preset.name;
-        row.appendChild(label);
+        nameWrap.appendChild(label);
+
+        // F-2: このプリセットが含むセクションを小さく表示する。
+        const sectionLabels = getPresetSections(preset).map(s => PRESET_SECTIONS[s].label);
+        const meta = document.createElement('span');
+        meta.className = 'preset-row-meta';
+        meta.textContent = sectionLabels.length === Object.keys(PRESET_SECTIONS).length
+            ? 'すべて'
+            : sectionLabels.join('・');
+        meta.title = sectionLabels.join('・');
+        nameWrap.appendChild(meta);
+
+        row.appendChild(nameWrap);
 
         const applyBtn = document.createElement('button');
         applyBtn.type = 'button';
@@ -1244,7 +1262,16 @@ export function setupEventListeners(redrawCallback) {
     if (uiElements.savePresetButton) {
         uiElements.savePresetButton.addEventListener('click', () => {
             const name = uiElements.presetNameInput ? uiElements.presetNameInput.value : '';
-            const preset = savePreset(name);
+            // F-2: チェックされたセクションだけ保存する。
+            const sections = uiElements.presetSectionChecks
+                ? Array.from(uiElements.presetSectionChecks.querySelectorAll('input[type="checkbox"]:checked'))
+                    .map(cb => cb.dataset.section)
+                : Object.keys(PRESET_SECTIONS);
+            if (sections.length === 0) {
+                alert('保存する項目を1つ以上選択してください。');
+                return;
+            }
+            const preset = savePreset(name, sections);
             if (preset) {
                 if (uiElements.presetNameInput) uiElements.presetNameInput.value = '';
                 renderPresetsList();

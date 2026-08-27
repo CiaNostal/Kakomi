@@ -17,8 +17,21 @@ import { initHistory, recordStateChange, undo, redo, onHistoryChange, onSnapshot
  * プレビューの再描画を要求します。
  * editStateが更新された後や、UIの変更がプレビューに影響する場合に呼び出されます。
  */
+/**
+ * E-7: 画像の有無で、キャンバスエリアに `.has-image` / `.no-image` を付け替える。
+ * CSS 側でキャンバスとドロップダイアログを出し分ける。
+ */
+export function updateImagePresenceUI() {
+    const area = uiElements.canvasArea;
+    if (!area) return;
+    const hasImage = !!getState().image;
+    area.classList.toggle('has-image', hasImage);
+    area.classList.toggle('no-image', !hasImage);
+}
+
 export async function requestRedraw() {
     const currentState = getState(); // 状態を一度だけ取得
+    updateImagePresenceUI();
 
     if (!currentState.image) {
         if (uiElements.previewCtx && uiElements.previewCanvas) {
@@ -55,6 +68,12 @@ export async function requestRedraw() {
     if (uiElements.exifDataContainer) {
         displayExifInfo(freshStateForDraw.exifData, uiElements.exifDataContainer);
     }
+}
+
+// テスト用フック: `?debug` 付きで開いたときだけ、現在の editState を読めるようにする。
+// 本番の挙動には一切影響しない（Playwright スモークが cropSettings 等を検査するのに使う）。
+if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug')) {
+    window.__kakomiGetState = getState;
 }
 
 // DOMContentLoadedイベントでアプリケーションを初期化
@@ -139,6 +158,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // E-7: 上部バーの「画像を開く」ボタン ／ ドロップダイアログの「クリックして選択」ラベルから
+    // 隠しファイル入力を開く（ラベルの for="imageLoader" でも開くが、ボタンは明示的に click する）。
+    if (uiElements.openImageButton && uiElements.imageLoader) {
+        uiElements.openImageButton.addEventListener('click', () => uiElements.imageLoader.click());
+    }
+
     // フェーズ4(E-5): ダウンロードは上部バー右。押すと画質ポップオーバーを開き、「書き出す」で実行。
     if (uiElements.downloadButton && uiElements.downloadPopover) {
         uiElements.downloadButton.addEventListener('click', (e) => {
@@ -191,25 +216,29 @@ document.addEventListener('DOMContentLoaded', () => {
         ro.observe(uiElements.canvasContainer);
     }
 
-    if (uiElements.canvasContainer) {
-        uiElements.canvasContainer.addEventListener('dragover', (event) => {
+    // E-7: ドロップ受付はキャンバスエリア全体（未読込でキャンバス枠が dashed のときも、
+    // 読み込み後に余白へドロップしたときも拾えるように）。`.dragover` の見た目は枠へ付ける。
+    const dropZone = uiElements.canvasArea || uiElements.canvasContainer;
+    if (dropZone) {
+        dropZone.addEventListener('dragover', (event) => {
             event.stopPropagation(); event.preventDefault();
             event.dataTransfer.dropEffect = 'copy';
-            uiElements.canvasContainer.classList.add('dragover');
+            dropZone.classList.add('dragover');
         });
-        uiElements.canvasContainer.addEventListener('dragleave', (event) => {
+        dropZone.addEventListener('dragleave', (event) => {
             event.stopPropagation(); event.preventDefault();
-            uiElements.canvasContainer.classList.remove('dragover');
+            if (event.target === dropZone) dropZone.classList.remove('dragover');
         });
-        uiElements.canvasContainer.addEventListener('drop', (event) => {
+        dropZone.addEventListener('drop', (event) => {
             event.stopPropagation(); event.preventDefault();
-            uiElements.canvasContainer.classList.remove('dragover');
+            dropZone.classList.remove('dragover');
             const files = event.dataTransfer.files;
             if (files.length > 0) {
-                // 同上
                 processImageFile(files[0], requestRedraw);
             }
         });
     }
+
+    updateImagePresenceUI(); // 初期表示（画像なし → ドロップダイアログ）
     console.log("[Main] Kakomi App Initialized.");
 });

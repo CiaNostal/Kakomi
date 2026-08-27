@@ -610,26 +610,53 @@ fieldset div span {
     overflow: hidden;
 }
 
+/* E-7: 画像未読込時にキャンバス中央へ出すドロップダイアログ。 */
 .image-loader-container {
-    width: min(100%, 480px);
-    padding: 0.7rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    width: min(80%, 380px);
+    padding: 2rem 1.5rem;
     border: 2px dashed var(--border-strong);
     background-color: var(--surface-sunken);
     text-align: center;
     border-radius: var(--radius-md);
 }
 
-.image-loader-container label {
+.image-loader-container .drop-icon {
+    width: 34px;
+    height: 34px;
+    color: var(--ink-faint);
+}
+
+.image-loader-container .drop-icon svg {
     display: block;
-    margin-bottom: 0.5rem;
-    font-size: 0.9rem;
-    color: var(--ink-dim);
+    width: 100%;
+    height: 100%;
+}
+
+.image-loader-container .drop-title {
+    margin: 0;
+    font-size: 0.95rem;
     font-weight: 600;
+    color: var(--ink-dim);
+}
+
+.image-loader-container .drop-pick {
+    font-size: 0.82rem;
+    color: var(--accent-strong);
+    cursor: pointer;
+    text-decoration: underline;
 }
 
 #imageLoader {
-    width: calc(100% - 1rem);
-    margin: 0 auto;
+    /* ファイル入力は隠し、「クリックして選択」ラベルと上部バーの「画像を開く」ボタンから開く。 */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
 }
 
 .canvas-container {
@@ -645,9 +672,40 @@ fieldset div span {
     border-radius: var(--radius-md);
 }
 
+/* 画像の有無で、キャンバスとドロップダイアログを出し分ける（main.js が .canvas-area に付与）。 */
+.canvas-area.has-image .image-loader-container {
+    display: none;
+}
+
+.canvas-area.no-image #previewCanvas {
+    display: none;
+}
+
+.canvas-area.no-image .canvas-container {
+    border-style: dashed;
+    border-color: var(--border-strong);
+}
+
 .canvas-container.dragover {
     background-color: var(--surface-muted);
     border-color: var(--accent);
+}
+
+.canvas-area.dragover .canvas-container {
+    background-color: var(--surface-muted);
+    border-color: var(--accent);
+}
+
+.hdr-icon {
+    width: 17px;
+    height: 17px;
+    display: inline-flex;
+}
+
+.hdr-icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
 }
 
 #previewCanvas {
@@ -989,11 +1047,50 @@ fieldset div span {
 
 .preset-row-name {
     flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.1rem;
+}
+
+.preset-row-title {
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 0.9rem;
     color: var(--ink);
+}
+
+.preset-row-meta {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.72rem;
+    color: var(--ink-faint);
+}
+
+/* F-2: 保存する項目のチェックボックス一覧 */
+.preset-section-checks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.9rem;
+    margin-bottom: 0.7rem;
+}
+
+.preset-section-checks label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.82rem;
+    color: var(--ink-dim);
+    cursor: pointer;
+}
+
+.preset-section-checks input[type="checkbox"] {
+    flex-shrink: 0;
 }
 
 .preset-row-apply {

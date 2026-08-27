@@ -87,12 +87,12 @@ UI表示用とテキストオーバーレイ描画用は別系統のフォント
 `index.html`の全体レイアウトは次の3カラム構成（`.app-shell`、`style.css`）。**2026年8月のフェーズ4で Adobe Lightroom Web を参照したシェル刷新を行った**（`docs/roadmap.md` E-1〜E-5・A-8、`docs/session-log-2026-08-29-3.md`）。データフロー・状態管理には影響しない、純粋なUI/DOM構成の話である。
 
 ```
-.app-header（上部バー。ブランド表示・Undo/Redo・右端に「ダウンロード」ボタン＋画質ポップオーバー）
+.app-header（上部バー。ブランド表示・「画像を開く」ボタン・Undo/Redo・右端に「ダウンロード」ボタン＋画質ポップオーバー）
 .app-shell（残り高さいっぱいに広がる横並び3カラム。パネルを畳むと .panel-collapsed が付く）
   ├─ .tab-navigation（左の細いアイコンレール、幅84px。上部にレイアウト／背景／フレーム／文字、
   │                    rail-spacer をはさんで下部にプリセット／情報。全6ボタンが対等なタブ）
   ├─ .tab-content-area（レール項目に対応するフライアウトパネル、幅360px ⇔ 0。中身は7.節の各fieldset）
-  └─ .canvas-area（残り全幅。画像読み込みUI・プレビューCanvas）
+  └─ .canvas-area（残り全幅。プレビューCanvas ＋ 未読込時のドロップダイアログ。ドロップ受付はこの領域全体）
 ```
 
 - **タブ再クリックでパネルが出入りする（フェーズ4 E-1）**: `tabManager.js`は`.tab-button`（`data-tab`属性）のクリックで`.tab-pane`の`active`クラスを付け替える。加えて、**アクティブなタブをもう一度クリックすると`.app-shell`に`.panel-collapsed`を付けてパネル幅を 0 に畳む**（CSS トランジション。キャンバスが広がる）。別のタブを押すと`.panel-collapsed`を外して開き直す。畳まれている間は`.tab-button.active`が無いので`getActiveTab()`は`null`を返す（タブ別ドラッグは「開いているタブ」なしとして扱う＝写真ドラッグ＝枠内配置）。`onTabChange`コールバックは、畳むときは引数`null`で呼ばれる。初期表示はレイアウトのパネルが開いた状態。
@@ -101,6 +101,8 @@ UI表示用とテキストオーバーレイ描画用は別系統のフォント
 - **`.rail-item`と`.tab-button`（E-3 / フェーズ5で整理）**: レール上のボタンの見た目用クラスは`.rail-item`。**レイアウト／背景／フレーム／文字／プリセット／情報の6ボタンすべてに`.rail-item`と`.tab-button`の両方を付与**し、`tabManager.js`が一律に`.tab-pane`と対応づけて切り替える。以前は「情報」だけ独立トグル（`#exifToggleButton`、`.tab-button`なし）だったが、E-3 で他タブと同じ`data-tab="tab-info"`＋`#tab-info`ペインにした（`docs/roadmap.md` E-3、`docs/session-log-2026-08-29-4.md`）。
 - **Exif情報表示（E-3 / フェーズ5）**: Exif は「情報」タブ（`#tab-info`）の中の`#exifDataContainer`に表示する。他タブと同じフライアウトパネル枠で、押すと切り替わり、もう一度押すと E-1 の再クリックで畳まれる（独立オーバーレイではない）。描画は`exifHandler.js`の`displayExifInfo()`で、Lightroom Web 風にカメラ／レンズ名だけを小さく上に置き、撮影設定（絞り・シャッタースピード・ISO感度・焦点距離・撮影日時）は**アイコン＋値だけの定義リスト（`.exif-dl`）**にする。項目名テキストは出さず`<dt>`の`title`属性（ホバーでツールチップ）に入れる。アイコンは`index.html`のスプライト`#i-aperture` / `#i-shutter` / `#i-iso` / `#i-focal` / `#i-cal`。以前の`#exifFloatCard` / `#exifToggleButton` / `.exif-float-card` は廃止。
 - **ダウンロードボタンの位置（フェーズ4 E-5）**: `#downloadButton`は**上部バー右端**（`.app-header .header-actions` 内の`.dl-group`）。押すと画質ポップオーバー（`#downloadPopover`。`#jpgQuality`スライダー＋「書き出す」＝`#downloadConfirmButton`）を開き、「書き出す」で`handleDownload()`を実行する。「出力」タブ（`#tab-output`）とそのレール項目は廃止した。`outputSettings.quality`のデータ・`fileManager.js`側は不変。以前は「出力タブに戻す」方針だったが、ユーザー判断で再度「上部バーへ」に転換（`docs/roadmap.md` E-5）。
+- **画像ドロップ領域（E-7 / フェーズ6）**: ファイル選択用の小枠を廃し、`.canvas-area`（キャンバス領域）全体をドラッグ&ドロップの受付にした。**画像未読込時**は`.canvas-area`に`.no-image`が付き、キャンバス枠内に中央寄せのドロップダイアログ（`#imageDropDialog` = `.image-loader-container`。アイコン＋「画像をドラッグ＆ドロップ」＋`for="imageLoader"`の「またはクリックして選択」ラベル）を出し、`#previewCanvas`は隠す。**読み込み後**は`.has-image`が付き、ダイアログを隠してキャンバスを出す。切り替えは`main.js`の`updateImagePresenceUI()`（`requestRedraw()`冒頭と初期化時に呼ぶ）。`<input type="file" id="imageLoader">`は視覚的に隠し、ダイアログのラベルと**上部バーの「画像を開く」ボタン（`#openImageButton`）**から開く。ドロップの`dragover`/`drop`は`main.js`が`.canvas-area`（無ければ`.canvas-container`）に配線。
+- **Favicon（E-6 / フェーズ6）**: `favicon.svg`（`.app-brand .brand-mark` と同意匠＝角丸四角の線＋内側の小さな角丸四角の線。`prefers-color-scheme`で色を切り替え）を`<head>`に`<link rel="icon" type="image/svg+xml">`で読み込む。
 
 ## 4. ファイル構造
 
@@ -241,7 +243,7 @@ Kakomi/
 **主要関数:**
 - `getState()`: 現在の状態のディープコピーを取得
 - `updateState(updates, options)`: 状態を更新（ディープマージ）。`options.silent`が`true`の場合はリスナーへの通知を行わない（後述）
-- `setImage(img, exifData, fileName)`: 新しい画像を設定
+- `setImage(img, exifData, fileName)`: 新しい画像を設定。**G-2: すでに画像がある状態での差し替え時（`editState.image` が真）は、トリミングだけ初期化する**——`cropSettings.rect` を全体（`FULL_RECT`）へ、`photoViewParams` を中央（`{0.5, 0.5}`）へ戻す。`cropSettings.aspectRatio`（比率制約）は維持し、直後の「固定比率 ＋ 全体 rect → `fitRectToAspect`」で新しい画像のアスペクトに合う最大内接矩形へ作り直す。`cropSettings.rect` は元画像に対する正規化座標なので、アスペクト比の違う画像へ同じ rect を引き継ぐと切り抜き形状が崩れる（1:1 で切ったのに 1:1 でなくなる）ため。背景・フレーム・出力比率・余白・テキストは引き継ぐ。初回ロードでは初期化しない（`docs/roadmap.md` G-2、`docs/session-log-2026-08-29-5.md`）
 - `addStateChangeListener(listener)` / `removeStateChangeListener(listener)`: 状態変更リスナーの登録／解除
 - `addCustomTextLayer()`: 自由テキストレイヤーを1つ追加し、そのidを返す
 - `removeCustomTextLayer(id)`: 指定idの自由テキストレイヤーを削除
@@ -496,6 +498,7 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 - スナップ: ドラッグ中は既定でスナップが有効。**Altキーを押しながらドラッグするとスナップを一時的に無効化**できる
 - **軸ロック**: `move` モードのドラッグ中に **Shiftキーを押している間、移動量の大きい方の軸だけに固定**する（縦だけ／横だけの移動。写真・テキスト・背景・影のどのドラッグでも効く）。スナップ計算の前に適用する。回転ハンドルの Shift（15度スナップ）は別ドラッグモード（`mode: 'rotate'`）なので競合しない
 - 矢印キーnudge: 何かが選択されている状態で矢印キーを押すと1px相当、Shift+矢印キーで10px相当（いずれもプレビューcanvas上のpx単位）移動する。フォーカスが入力欄（input/textarea/select）にある間は無効化される。**「背景」タブ・「フレーム」タブ（影が有効なとき）では、選択の有無に依らず矢印キーが背景／影のオフセット微調整になる**（本体ドラッグのタブ別振り分けと揃えている。5.16節「タブ別ドラッグ」）
+- **Deleteキーでの自由テキスト削除（D-5 / フェーズ6）**: 「文字」タブがアクティブ（`getActiveTab() === 'tab-text'`）で、選択中が自由テキスト（`selectionStore.getSelectedId()` が `text-date` / `text-exif` 以外で、かつ `textSettings.customTexts` に存在するid）のとき、`Delete` / `Backspace` で `removeCustomTextLayer(id)` ＋ 選択解除（＝チップ一覧の × ボタンと同じ）。入力欄フォーカス中は無効。固定レイヤー（撮影日・Exif）は削除不可なので何もしない
 - **拡大・回転ハンドル（テキスト系オブジェクトのみ。自由テキスト・撮影日・Exifブロックいずれも対応）**: `pointerdown`時、通常のオブジェクト当たり判定（`interactionRegistry.hitTest()`）より先に`textHandleStore.getTextHandles()`のハンドル座標との距離判定を行う（当たり判定半径`HANDLE_HIT_RADIUS = 10px`）。ヒットした場合は`dragState.mode`を`'resize'`または`'rotate'`にしてドラッグを開始し、通常の移動ドラッグ（`mode: 'move'`）とは別処理で`textAdapter.commitResize()`/`commitRotate()`を直接呼ぶ（アダプタの`getValue`/`computeChanges`/`commit`という汎用インターフェースではなく、テキスト専用の`getTransform`/`commitResize`/`commitRotate`を使う。写真・背景にはこの概念がないため）
 - **写真の四隅ハンドルとトリミングモード（5.24節・5.25節、7.2節「オンキャンバス・トリミング」参照）**: 写真選択中は`photoEditModeStore`のモード（`select`/`crop`）で挙動を切り替える。
   - `pointerdown`で、テキストハンドルと同様に通常のオブジェクト当たり判定より先に`photoCropStore.getCropHandles()`の四隅座標を距離判定する（半径`HANDLE_HIT_RADIUS`）。**select モード**でヒット → `dragState.mode = 'photoResize'`（開始点と「中心→掴んだ隅」方向の単位ベクトルを保持し、`pointermove`で符号付き投影量を`photoAdapter.commitMarginResizeByDrag()`に渡し`baseMarginPercent`を増減。中心からの距離比を使う旧方式は「中心を通り越すと余白が逆に減る」不具合があったため置き換えた）。**crop モード**でヒット → `dragState.mode = 'cropRectResize'`（掴んだ隅と`frozenFrame.whole`のサイズから`rect`の差分を計算し`resizeCropRect()`→`photoAdapter.commitCropRect()`）。crop モードでクロップ窓の内側なら`dragState.mode = 'cropPan'`（`rect.x/y`をドラッグ方向へ平行移動）。
@@ -551,13 +554,16 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 ### 5.19 presets/presetStore.js
 編集設定（`stateManager.js`の`EDITABLE_SETTINGS_KEYS`で定義される範囲）を、名前付きプリセットとして`localStorage`（キー: `kakomi_presets`）に保存・一覧取得・削除・適用するモジュール。読み込んだ画像そのものは対象外。`textSettings`（`customTexts`配列を含む）もそのまま保存するため、自由テキストの内容・個数もプリセットの一部として保存・復元される。
 
-**主要関数:**
-- `getPresets()`: 保存済みプリセットの一覧を取得（`{ id, name, createdAt, settings }`の配列）
-- `savePreset(name)`: 現在の編集設定を新しいプリセットとして保存し、保存されたプリセットを返す（`localStorage`書き込み失敗時は`null`）
-- `deletePreset(id)`: 指定idのプリセットを削除
-- `applyPreset(id)`: 指定idのプリセットを`updateState()`経由で現在の編集状態に適用する
+**F-2（保存する項目の選択）:** `EDITABLE_SETTINGS_KEYS` を**タブ単位の5セクション**に束ねた `PRESET_SECTIONS` を持つ（`output`＝出力フォーマット: `outputTargetAspectRatioString` / `baseMarginPercent` / `outputSettings`／`crop`＝トリミング: `cropSettings` / `photoViewParams`／`background`＝背景: `backgroundColor` / `backgroundType` / `imageBlurBackgroundParams`／`frame`＝フレーム: `frameSettings`／`text`＝テキスト: `textSettings`）。5セクションで `EDITABLE_SETTINGS_KEYS` を過不足なくカバーする（読み込み時に不一致を `console.warn` するガードあり）。
 
-**UI連携（`uiController.js`）:** 「プリセット」タブに保存フォームと一覧を表示する。プリセット適用後は、`customTexts`配列の個数など非連続な変化が起こりうるため、Undo/Redoのスナップショット適用時と同様に`initializeUIFromState()`でUI全体を再構築する。
+**主要関数:**
+- `getPresets()`: 保存済みプリセットの一覧を取得（`{ id, name, createdAt, sections, settings }`の配列）
+- `savePreset(name, sections)`: 選択されたセクション（`PRESET_SECTIONS` のキー配列）に対応する設定キーだけを保存する。`sections` 省略・空配列なら全セクション（旧挙動）。プリセットに `sections` も記録する
+- `getPresetSections(preset)`: そのプリセットが含むセクションのキー配列を返す（`sections` フィールドが無い旧プリセットは「全セクション」扱い）
+- `deletePreset(id)`: 指定idのプリセットを削除
+- `applyPreset(id)`: 指定idのプリセットを`updateState()`経由で現在の編集状態に適用する。`updateState` はディープマージなので、**プリセットに含まれるキーだけが上書きされ、含まれないセクションは今の値のまま残る**（F-2 の「含まれる項目だけ上書き」はこの既存挙動で成立）。旧プリセット（全キー入り）は従来どおり全セクション適用
+
+**UI連携（`uiController.js`）:** 「プリセット」タブの保存フォームに5つのセクションチェックボックス（`#presetSectionChecks`、既定は全チェック）を置き、チェックされた `data-section` を `savePreset(name, sections)` に渡す。0個なら `alert` で弾く。一覧の各行には、そのプリセットが含むセクション名（全部なら「すべて」）を小さく表示する。プリセット適用後は、`customTexts`配列の個数など非連続な変化が起こりうるため、Undo/Redoのスナップショット適用時と同様に`initializeUIFromState()`でUI全体を再構築する。
 
 ### 5.20 presets/colorHistoryStore.js
 カラーピッカーで選んだ色の履歴（MRU順、最大12件）を`localStorage`（キー: `kakomi_colorHistory`）に保持するモジュール。背景色・影・縁取り・撮影日/Exif/自由テキストの文字色など、アプリ内の全カラーピッカーが共通の履歴を共有する。
@@ -615,11 +621,12 @@ FileReaderでファイル読み込み
   ↓
 exifHandler.extractExifFromFile() でExif抽出
   ↓
-stateManager.setImage() で状態更新
+stateManager.setImage() で状態更新（差し替え時は G-2 でトリミングだけ初期化）
   ↓
 uiController.initializeUIFromState() でUI更新
   ↓
-main.requestRedraw() でプレビュー描画
+main.requestRedraw() でプレビュー描画（冒頭で updateImagePresenceUI() が
+  .canvas-area の .has-image / .no-image を付け替え、ドロップダイアログ↔キャンバスを切り替える）
 ```
 
 ### 6.2 設定変更フロー
@@ -740,7 +747,7 @@ Blobをダウンロード
 （写真のキャンバス内位置まで crop 枠で決める案はユーザーの意向で一旦後回し。）
 
 ### 7.3 背景編集
-- **背景タイプ**: 「単色」または「写真の拡大ぼかし画像」から選択
+- **背景タイプ**: 「単色」または「写真の拡大ぼかし画像」から選択。**B-5（フェーズ6）でラジオボタンから、フレームタブ「角のスタイル」と同じアイコンセグメント（`.corner-segmented` ＋ `.segment` ＋ `.segment-icon`）に変更**（`#i-fill`＝単色、`#i-blur`＝ぼかし）。`<input type="radio">`の`id`（`bgTypeColor` / `bgTypeImageBlur`）・`name`・`value`は据え置きで、`uiController.js`の配線（`addOptionChangeListener` / `toggleBackgroundSettingsVisibility()`）は無変更。
 
 **単色背景:**
 - カラーピッカーで色を選択
@@ -1030,7 +1037,15 @@ Blobをダウンロード
 フェーズ5（情報タブ。`docs/session-log-2026-08-29-4.md`）:
 - ✅ **E-3**: 「情報」を他タブと並列のタブ（`data-tab="tab-info"` ＋ `#tab-info` ペイン、レール下部）に。押すと同じフライアウトパネル枠で切り替わり、再クリックで畳まれる。独立トグル `#exifToggleButton` とフローティングカード `#exifFloatCard` は廃止。Exif 表示を `displayExifInfo()` の作り替えでアイコン＋値だけのミニマルな `.exif-dl` に（項目名は `<dt>` の `title`）。撮影日時の整形バグ（時刻のコロンも `/` になる）も修正（3.1節・7.7節）
 
-未着手のロードマップ項目: **フェーズ6** = C-1 / A-5 / D-1・D-3 / A-4 / A-3。詳細は `docs/roadmap.md`。
+フェーズ6（追加の小〜中改修。`docs/session-log-2026-08-29-5.md`）:
+- ✅ **E-6**: `favicon.svg`（`.brand-mark` と同意匠）＋ `<link rel="icon">`（3.1節）
+- ✅ **B-5**: 背景タイプをアイコンセグメント（`.corner-segmented`）に。`id`/`name`/`value` 据え置きで JS 配線は無変更（7.3節）
+- ✅ **D-5**: 「文字」タブがアクティブで自由テキスト選択中、`Delete` / `Backspace` で削除（`canvasInteraction.js` の keydown。5.16節）
+- ✅ **G-2**: 別画像への差し替え時は `cropSettings.rect`→全体・`photoViewParams`→中央にリセット（比率制約は維持して再フィット）。背景・フレーム・出力比率・余白・テキストは引き継ぐ（`setImage`。5.2節）
+- ✅ **E-7**: ファイル選択の小枠を廃し、`.canvas-area` 全体をドロップ受付に。未読込時は中央にドロップダイアログ、読み込み後はキャンバス。上部バーに「画像を開く」ボタン（`#openImageButton`）（3.1節・6.1節）
+- ✅ **F-2**: プリセット保存時にタブ単位5セクション（`PRESET_SECTIONS`）のチェックで保存項目を選択。適用は含まれるキーだけ上書き（5.19節）
+
+未着手のロードマップ項目: **フェーズ7** = C-1 / A-5 / D-1・D-3 / A-4 / A-3。詳細は `docs/roadmap.md`。
 
 ## 12. 仕様書v1との対応状況
 
