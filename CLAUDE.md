@@ -18,6 +18,29 @@ Kakomiは、写真にフレーム加工とテキストオーバーレイを追�
 ## 開発環境について
 
 - ビルド不要。`index.html`をES Modulesとして読み込むため`file://`では動かない。ローカルHTTPサーバー（例: `python3 -m http.server 8420`）を立てて開く。
-- **ブラウザでの動作確認手段はセッションの実行環境によって変わる。** `chromium-cli`・Linux版Playwrightが使えないセッションでは、構文チェックやDOM id突合などの静的検証のみで実装し、実際の目視確認はユーザーに都度依頼する運用にする。ただし、Windows側の`node.exe`（`/mnt/c/Program Files/nodejs/node.exe`等）がWSL2から見える環境なら、`session-log-2026-08-26-2.md`・`session-log-2026-08-27.md`と同じ方法（`cmd.exe /c "cd /d <Windowsパス> && node ...\.js"`で実行。Windows側から`localhost`のPythonサーバーへはlocalhostフォワードで到達できる）でPlaywright検証が可能なので、まずこれが使えないか試すこと。**新しいセッションを始めたら、まずブラウザ操作ツールの有無を確認すること。**
-- **Playwright + Chromiumの常設運用（2026-08-27にユーザーと合意）**: 従来はセッションごとにWindows側の一時フォルダへインストールし、検証後に`node_modules`・`AppData\Local\ms-playwright`を毎回削除していたが、この方式はやめた。現在は `C:\Users\yello\kakomi-devtools\`（一時フォルダではなく固定フォルダ）に**一度だけ**インストールし、セッションをまたいで残す。テストスクリプトもこのフォルダに置き、`cmd.exe /c "cd /d C:\Users\yello\kakomi-devtools && node <script>.js"` で実行する。**クリーンアップはKakomiの開発が全て完了した時点で1回だけ**行い、そのとき `C:\Users\yello\kakomi-devtools\` と `%LOCALAPPDATA%\ms-playwright` を削除する。WSL側のUbuntu環境は汚さない（この用途でapt・Nodeを入れない）方針。Docker Desktopは併用しているがUbuntu-24.04へのWSLインテグレーションが未有効のため、WSL内から`docker`は現状使えない。
+- **ブラウザでの動作確認手段はセッションの実行環境によって変わる。** 具体的な構築方針は下の「Playwright 検証環境の方針」を参照。過去セッション（`session-log-2026-08-26-2.md`・`-27.md`・`-28.md`）では、Windows側の`node.exe`をWSL2から`cmd.exe /c "cd /d <Windowsパス> && node ...\.js"`で呼び、Windows側から`localhost`のPythonサーバーへはlocalhostフォワードで到達する方法でPlaywright検証を行った。
+
+### Playwright 検証環境の方針（重要・端末非依存）
+
+Playwright + Chromium の実行環境は **このリポジトリには含めない（GitHub で共有されない）ローカル専用ツール**。
+他の端末で作業するときも、毎回この方針で「その端末のローカルに、環境を汚さない形で」構築し直すこと。
+想定する作業環境は「**WSL 上に Claude と Docker が入っている**」状況（今の端末と同じ）。
+
+- **原則**: 検証環境はリポジトリ作業ツリーの外に、自己完結した形で作る。WSL の Ubuntu 環境そのものを汚さない
+  （この用途で `apt install` でブラウザ用システムライブラリを入れたり、ディストロに Node を入れたりしない）。
+- **推奨: Docker を使う**。公式イメージ `mcr.microsoft.com/playwright:<version>`（Node + ブラウザ + 依存を同梱）を
+  使い、リポジトリを bind mount してコンテナ内でテスト（必要なら `python3 -m http.server` もコンテナ内で起動）を回す。
+  イメージは Docker のストレージに載るだけで WSL/OS のファイルツリーは汚れない。開発完了時に `docker rmi` するだけ。
+  ※ Docker Desktop 併用の場合、対象ディストロ（例 `Ubuntu-24.04`）への **WSL インテグレーションを有効化**しておく必要がある。
+- **代替: リポジトリ外の固定フォルダに常設**。Docker が使えないときは、作業ツリー外の専用フォルダ
+  （この端末では `C:\Users\yello\kakomi-devtools\`）に `npm i playwright` ＋ `npx playwright install chromium` を
+  **一度だけ**入れてセッションをまたいで残す。テストスクリプトもそこに置き、
+  `cmd.exe /c "cd /d <そのフォルダ> && node <script>.js"` 等で実行する（WSL からは `localhost` フォワード／
+  `host.docker.internal` 等でローカルサーバーへ到達）。従来やっていた「セッションごとにインストール→毎回削除」は行わない。
+- **クリーンアップは Kakomi の開発が全て完了した時点で 1 回だけ**。Docker ならイメージ、常設フォルダ方式なら
+  そのフォルダと `~/.cache/ms-playwright`（Windows なら `%LOCALAPPDATA%\ms-playwright`）を削除する。
+- Linux 版 Chromium／Playwright がそのまま使えるセッションならそれを使ってよい。いずれも無く Docker も使えない場合のみ、
+  静的検証（構文チェック・DOM id 突合など）だけで実装し、目視確認はユーザーに依頼する。
+- **新しいセッションを始めたら、まずこの環境の有無を確認すること。**
+
 - 変更後は必ず `spec.md` と該当する `docs/session-log-*.md`（新規セッションなら新しいログファイルを追加）を更新し、実装との整合を保つこと。
