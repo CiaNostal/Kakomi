@@ -111,7 +111,7 @@ Kakomi/
     ├── stateManager.js     # 状態管理
     ├── uiController.js     # UI制御とイベントハンドリング
     ├── uiDefinitions.js    # UI設定値とフォント定義
-    ├── tabManager.js       # タブ切り替え機能
+    ├── tabManager.js       # タブ切り替え機能＋現在アクティブなタブの取得（getActiveTab）＋タブ変更コールバック（onTabChange）
     ├── layoutCalculator.js # レイアウト計算
     ├── canvasRenderer.js   # キャンバス描画の統合
     ├── backgroundRenderer.js # 背景描画
@@ -125,13 +125,14 @@ Kakomi/
     │   ├── guideStore.js           # ドラッグ中に表示するスナップガイド線の一時状態
     │   ├── textHandleStore.js      # 選択中テキストの拡大・回転ハンドルの画面上座標の一時状態
     │   ├── snapEngine.js           # スナップ（吸着）位置の計算
-    │   ├── canvasInteraction.js    # pointerイベント処理・ドラッグ状態機械・矢印キーnudge・拡大回転ハンドル操作・写真の選択/トリミングモード操作
+    │   ├── canvasInteraction.js    # pointerイベント処理・ドラッグ状態機械・矢印キーnudge・拡大回転ハンドル操作・写真の選択/トリミングモード操作・タブ別ドラッグの振り分け
     │   ├── photoCropStore.js       # 選択中の写真の四隅ハンドル座標（select=■/crop=L字）と、cropモード時のクロップ窓・元画像全体の画面矩形（一時的なUI状態）
     │   ├── photoEditModeStore.js   # 写真選択中の編集サブモード（select / crop）と、cropモード開始時の座標スナップショット（frozenFrame）
     │   └── adapters/
     │       ├── textAdapter.js        # 自由テキストレイヤーの値変換（位置・サイズ・回転）
     │       ├── photoAdapter.js       # 写真の枠内配置・クロップ矩形・余白リサイズの値変換
-    │       └── backgroundAdapter.js  # 拡大ぼかし背景の位置の値変換
+    │       ├── backgroundAdapter.js  # 拡大ぼかし背景の位置の値変換
+    │       └── shadowAdapter.js      # フレームの影オフセットの値変換（「フレーム」タブ表示中の本体ドラッグ用）
     ├── ui/
     │   ├── scrubInput.js   # ドラッグでスクラブ／クリックでタイプ入力できる数値入力コンポーネント
     │   └── colorSwatches.js # カラーピッカーの直下にカラー履歴スウォッチ行を追加する機能拡張
@@ -475,14 +476,15 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 **操作仕様:**
 - ドラッグ移動: `pointerdown`で`interactionRegistry.hitTest()`により対象を特定し選択、`pointermove`で移動量を計算して対応するアダプタの`commit()`を呼ぶ
 - スナップ: ドラッグ中は既定でスナップが有効。**Altキーを押しながらドラッグするとスナップを一時的に無効化**できる
-- 矢印キーnudge: 何かが選択されている状態で矢印キーを押すと1px相当、Shift+矢印キーで10px相当（いずれもプレビューcanvas上のpx単位）移動する。フォーカスが入力欄（input/textarea/select）にある間は無効化される
+- **軸ロック**: `move` モードのドラッグ中に **Shiftキーを押している間、移動量の大きい方の軸だけに固定**する（縦だけ／横だけの移動。写真・テキスト・背景・影のどのドラッグでも効く）。スナップ計算の前に適用する。回転ハンドルの Shift（15度スナップ）は別ドラッグモード（`mode: 'rotate'`）なので競合しない
+- 矢印キーnudge: 何かが選択されている状態で矢印キーを押すと1px相当、Shift+矢印キーで10px相当（いずれもプレビューcanvas上のpx単位）移動する。フォーカスが入力欄（input/textarea/select）にある間は無効化される。**「背景」タブ・「フレーム」タブ（影が有効なとき）では、選択の有無に依らず矢印キーが背景／影のオフセット微調整になる**（本体ドラッグのタブ別振り分けと揃えている。5.16節「タブ別ドラッグ」）
 - **拡大・回転ハンドル（テキスト系オブジェクトのみ。自由テキスト・撮影日・Exifブロックいずれも対応）**: `pointerdown`時、通常のオブジェクト当たり判定（`interactionRegistry.hitTest()`）より先に`textHandleStore.getTextHandles()`のハンドル座標との距離判定を行う（当たり判定半径`HANDLE_HIT_RADIUS = 10px`）。ヒットした場合は`dragState.mode`を`'resize'`または`'rotate'`にしてドラッグを開始し、通常の移動ドラッグ（`mode: 'move'`）とは別処理で`textAdapter.commitResize()`/`commitRotate()`を直接呼ぶ（アダプタの`getValue`/`computeChanges`/`commit`という汎用インターフェースではなく、テキスト専用の`getTransform`/`commitResize`/`commitRotate`を使う。写真・背景にはこの概念がないため）
 - **写真の四隅ハンドルとトリミングモード（5.24節・5.25節、7.2節「オンキャンバス・トリミング」参照）**: 写真選択中は`photoEditModeStore`のモード（`select`/`crop`）で挙動を切り替える。
   - `pointerdown`で、テキストハンドルと同様に通常のオブジェクト当たり判定より先に`photoCropStore.getCropHandles()`の四隅座標を距離判定する（半径`HANDLE_HIT_RADIUS`）。**select モード**でヒット → `dragState.mode = 'photoResize'`（開始点と「中心→掴んだ隅」方向の単位ベクトルを保持し、`pointermove`で符号付き投影量を`photoAdapter.commitMarginResizeByDrag()`に渡し`baseMarginPercent`を増減。中心からの距離比を使う旧方式は「中心を通り越すと余白が逆に減る」不具合があったため置き換えた）。**crop モード**でヒット → `dragState.mode = 'cropRectResize'`（掴んだ隅と`frozenFrame.whole`のサイズから`rect`の差分を計算し`resizeCropRect()`→`photoAdapter.commitCropRect()`）。crop モードでクロップ窓の内側なら`dragState.mode = 'cropPan'`（`rect.x/y`をドラッグ方向へ平行移動）。
-  - `pointerup`で、pointerdown からの移動量が`CLICK_MOVE_THRESHOLD`(4px)未満なら「クリック」とみなす: select モードで選択済みの写真本体クリック → `photoEditModeStore.enterCrop()`（現在のプレビュー座標を`frozenFrame`にスナップショット）。crop モードでクロップ窓の外のクリック → `photoEditModeStore.exitCrop()`（出力枠は変えない）。
+  - `pointerup`で、**pointerdown からの移動量が`CLICK_MOVE_THRESHOLD`(4px)未満、かつ押下時間が`CLICK_TAP_MS`(400ms)未満**のときだけ「短いタップ」とみなす: select モードで選択済みの写真本体タップ → `photoEditModeStore.enterCrop()`（現在のプレビュー座標を`frozenFrame`にスナップショット）。crop モードでクロップ窓の外のタップ → `photoEditModeStore.exitCrop()`（出力枠は変えない）。**動かさずに長押ししてから離した場合はモード切替が発動しない**（`pointerDownCtx.downTime` を `performance.now()` で記録して判定。以前は移動量だけを見ていたため、単なる長押しでも切り替わっていた）。`CLICK_TAP_MS` は手触りを見て調整可。
   - `Escape`キーでも crop モードを抜ける。crop モード中は矢印キーがクロップ矩形のパンになる。
   - 写真本体（ハンドル以外）の select モードでのドラッグは従来どおり`photoAdapter`の`move`処理（`photoViewParams`更新）。
-- **プレビュー上のホイール操作**: 現在は未使用（`previewCanvas`に`wheel`リスナーを付けていない）。以前は select モードで写真上のホイールが`baseMarginPercent`（余白）を増減していたが、四隅■ハンドルのドラッグで余白を直接いじれるようになったため冗長・誤操作の元として削除した（`docs/roadmap.md` A-6。`photoAdapter.commitMarginDelta()`と定数`MARGIN_WHEEL_STEP`も撤去）。今後「開いているタブに応じてホイールの用途を切り替える」設計（背景タブ＝背景拡大倍率など、`docs/roadmap.md` B-2）でリスナーを復活させる想定
+- **プレビュー上のホイール操作**: 現在は未使用（`previewCanvas`に`wheel`リスナーを付けていない）。以前は select モードで写真上のホイールが`baseMarginPercent`（余白）を増減していたが、四隅■ハンドルのドラッグで余白を直接いじれるようになったため冗長・誤操作の元として削除した（`docs/roadmap.md` A-6。`photoAdapter.commitMarginDelta()`と定数`MARGIN_WHEEL_STEP`も撤去）。「背景タブでホイール→背景拡大倍率」（`docs/roadmap.md` B-2）も検討したが、誤操作の元になるとしてユーザー判断で不採用。本体ドラッグ側だけタブで切り替える（上記「タブ別ドラッグ」）
 - **選択変更と再描画（設計上の注記）:** `selectionStore`の選択状態変更（`setSelectedId()`）自体は`editState`の変更ではないため、`stateManager.js`の通常の状態変更リスナー（`requestRedraw`等）を経由しない。ドラッグを伴わない純粋なクリック選択（`pointerdown`直後に一度も`pointermove`が発火しないケース）でも選択ハイライトやハンドルが即座に表示されるよう、`main.js`が`selectionStore.onSelectionChange(() => requestRedraw())`を明示的に登録している。
   - 拡大: ボックス中心からハンドルまでの距離の比（現在距離÷ドラッグ開始時距離）をドラッグ開始時点の`size`に掛ける。回転角に関わらず「ハンドルを中心から遠ざける/近づける」動作になる
   - 回転: ボックス中心から見たポインタの角度（`Math.atan2`）の変化量をドラッグ開始時点の`rotation`に加算する。**Shiftキーを押しながらドラッグすると15度刻みにスナップ**する
@@ -494,11 +496,24 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 |---|---|---|---|
 | `textAdapter.js` | `customTexts[]`の各レイヤー、および撮影日・Exifブロック（固定id `'text-date'`/`'text-exif'`） | 写真短辺基準の% | `customTexts[]`は`updateCustomTextLayer()`、撮影日・Exifは`updateState({ textSettings: { date/exif: changes } })`と、idに応じて内部で経路を振り分ける（`resolveLayer()`ヘルパー） |
 | `photoAdapter.js` | 写真の枠内配置（`photoViewParams`） | 可動範囲(movable width/height)に対する0.0〜1.0の割合 | `layoutCalculator.js`の可動範囲計算と対応させる必要があり、`getLastPreviewContext().scale`を使った変換が必要。加えてトリミング用に、`getCropRect()`（`resolveCropRect`で現在の割合矩形を返す）・`commitCropRect(rect)`（`cropSettings.rect`を更新）・`getCropConstraint()`（比率制約の取得）・`commitMarginResizeByDrag(startMargin, projPx, startShortSidePx)`（select モードの四隅ハンドル→`baseMarginPercent`、符号付き投影量ベース）を持つ（5.16節参照。`textAdapter`の`getTransform`系と同種の拡張） |
-| `backgroundAdapter.js` | 拡大ぼかし背景の位置（`imageBlurBackgroundParams`） | 写真短辺基準の%（textAdapterと同じ単位系） | 単色背景（`backgroundType === 'color'`）の場合はそもそも`interactionRegistry`に登録されないため、ドラッグ対象にならない |
+| `backgroundAdapter.js` | 拡大ぼかし背景の位置（`imageBlurBackgroundParams`） | 写真短辺基準の%（textAdapterと同じ単位系） | 単色背景（`backgroundType === 'color'`）の場合はそもそも`interactionRegistry`に登録されないため、ドラッグ対象にならない。**背景のドラッグ位置調整は「背景」タブでのみ有効**で、そのタブでは写真の上を含むキャンバス全面のドラッグを`canvasInteraction.js`がこのアダプタへ振り替える。他タブでの余白ドラッグでは背景は動かない（5.16節「タブ別ドラッグ」参照）。原点スナップ用の`originSnapPx(startValue, ctx)`を持つ |
+| `shadowAdapter.js` | フレームの影のオフセット（`frameSettings.shadowParams.offsetX/offsetY`） | 写真短辺基準の%（-25〜25でクランプ。`controlsConfig.frameShadowOffsetX`） | 「フレーム」タブ表示中かつ`shadowEnabled === true`のときだけ、`canvasInteraction.js`が写真本体（テキスト以外）のドラッグをこのアダプタへ振り替える。`backgroundAdapter`と同じ`getValue`/`computeChanges`/`commit`＋`originSnapPx`パターン。0.1%丸めも同様（5.16節「タブ別ドラッグ」参照） |
 
 **単位変換上の注意（重要）:** `getLastPreviewContext()`が返す`photoShortSidePx`は、写真の実解像度ではなく**プレビュー描画時に縮小された後の短辺px**を指す。ドラッグのポインタ移動量（`dxPx`/`dyPx`）も同じプレビューcanvasのpx空間の値であるため、`textAdapter`や`backgroundAdapter`ではscaleによる再変換は不要で、単純な比率計算（`dxPx / photoShortSidePx * 100`）だけで正しく変換できる。過去にここへ誤って`/ scale`を追加してしまい、プレビューの縮小率次第でドラッグ量が数倍に増幅される不具合が発生したことがあるため、新しいアダプタを追加する際は注意すること。
 
-**桁あふれ対策の丸め処理（重要）:** `textAdapter.js`・`backgroundAdapter.js`の`computeChanges()`は、割り算由来の循環小数（例: `-11.640211640211641`）をそのまま状態に書き戻さないよう、結果を必ず0.1%単位に丸める（`Math.round(value * 10) / 10`）。ドラッグ中継続的に加算されていく値のため丸めを怠ると、UIの数値表示欄が有効数字ギリギリまで表示されて桁あふれを起こす（実際に発生した不具合）。この`computeChanges()`はドラッグだけでなく矢印キーnudgeからも呼ばれるため、丸めは両方の経路に効く。`uiController.js`側の対応する表示スパン（`bgOffsetX/YValueSpan`、`textDateOffsetX/YValueSpan`、`textExifOffsetX/YValueSpan`）も`.toFixed(1)`で表示桁を明示的に制限し、二重に防御している。
+**タブ別ドラッグ（「開いているタブでプレビュー上のドラッグの意味を切り替える」）:** `canvasInteraction.js`の`pointerdown`は、通常のオブジェクト選択・移動に入る前に`tabManager.getActiveTab()`を見て分岐する。
+
+- **「背景」タブ**表示中は、テキスト以外のヒット（写真本体・余白どちらも）を`backgroundAdapter`（id `'background'`）へのドラッグに振り替える（キャンバス全面が背景の位置調整面になる）。ホイールでの拡大倍率変更は検討したが不要と判断し実装しない。
+- **「フレーム」タブ**表示中は、`frameSettings.shadowEnabled === true`なら写真本体（テキスト以外）のドラッグを新設の`shadowAdapter`（id `'shadow'`）へ振り替える。影オフなら何も起こさない（写真位置ドラッグへフォールバックしない）。
+- **それ以外のタブ（レイアウト／文字／出力／プリセット）で余白（背景ボックス）をクリック／ドラッグしても、背景は動かさない**。単なる選択解除（`setSelectedId(null)`）として扱う。以前は「背景」タブ以外でも余白ドラッグで背景がパンし、キャンバス全体に選択枠が出ていた（不具合として修正）。背景のドラッグ位置調整は「背景」タブ限定になった。
+
+これらのタブ限定ドラッグは**それ自体は選択状態を変えず**、クロップモードへの入口（`onPhotoBody`）にもしない。バウンディングボックスのガイドスナップの代わりに**原点スナップ**を使う（`dragState.originSnap`）: オフセット値が中立(0)に`ORIGIN_SNAP_PX`(6px)以内まで近づくと 0 にスナップし、赤い中央ガイド線（X=0 は縦線、Y=0 は横線）を出す。各アダプタの`originSnapPx(startValue, ctx)`が「各軸を 0 に戻すためのドラッグ量(px)」を返す。モードを示すUI（カーソル変更・ヒント文など）は出さず、「開いているタブ」自体を手がかりとする。テキストレイヤーのドラッグ・選択はどのタブでも従来どおり最優先で効く（`interactionRegistry`の登録順で text が後勝ち）。
+
+**タブ切り替え時の写真選択の解除:** 「背景」「フレーム」タブでは写真の本体ドラッグ・クロップができない。レイアウトタブで写真を選択した（四隅に■マーカーが出ている）まま「背景」「フレーム」タブへ移ると、マーカーが出たまま操作不能に見えて紛らわしい。そのため `tabManager.onTabChange()` を介して、**これらのタブへ移った瞬間に写真の選択（`selectedId === 'photo'`）を解除する**（`main.js` で配線。`selectionStore.onSelectionChange` 経由で crop モード解除・再描画も走る）。「文字」「出力」「プリセット」タブでは写真の本体ドラッグが従来どおり効くため、選択は維持する。テキストの選択はどのタブでも維持する。
+
+**矢印キーによる背景／影の微調整:** 「背景」タブ・「フレーム」タブ（`shadowEnabled === true`）では、`canvasInteraction.js` の keydown ハンドラが（選択の有無・種類より先に）矢印キーを `backgroundAdapter` / `shadowAdapter` のオフセット微調整へ振り替える（Shift 併用で 10px 相当、通常 1px 相当。プレビュー px → 写真短辺基準% に換算）。フレームタブで影が無効なときは振り替えず、通常の選択オブジェクトの nudge にフォールバックする。
+
+**桁あふれ対策の丸め処理（重要）:** `textAdapter.js`・`backgroundAdapter.js`・`shadowAdapter.js`の`computeChanges()`は、割り算由来の循環小数（例: `-11.640211640211641`）をそのまま状態に書き戻さないよう、結果を必ず0.1%単位に丸める（`Math.round(value * 10) / 10`）。ドラッグ中継続的に加算されていく値のため丸めを怠ると、UIの数値表示欄が有効数字ギリギリまで表示されて桁あふれを起こす（実際に発生した不具合）。この`computeChanges()`はドラッグだけでなく矢印キーnudgeからも呼ばれるため、丸めは両方の経路に効く。`uiController.js`側の対応する表示スパン（`bgOffsetX/YValueSpan`、`textDateOffsetX/YValueSpan`、`textExifOffsetX/YValueSpan`）も`.toFixed(1)`で表示桁を明示的に制限し、二重に防御している。
 
 **`textAdapter.js`の拡張（拡大・回転ハンドル用）:** 通常の`getValue`/`computeChanges`/`commit`（位置移動用）に加えて、以下を持つ。
 - `getTransform(id)`: ドラッグ開始時点の`{ size, rotation }`を取得（`resolveLayer()`経由で撮影日・Exifにも対応）
@@ -727,7 +742,7 @@ Blobをダウンロード
 - **Y方向オフセット**: -500%〜500%（写真短辺基準、デフォルト0%）
   - 背景として使用する元画像の表示位置を上下に調整
   - **注意:** 仕様書v1では-50%～50%とあるが、現在の実装では-500%～500%となっている
-- 拡大ぼかし背景が有効な場合、スライダーでの調整に加え、**プレビュー上で写真の外側（余白部分）を直接ドラッグしても位置を調整できる**（`interaction/adapters/backgroundAdapter.js`）。単色背景の場合は位置の概念がないためドラッグ対象にならない
+- 拡大ぼかし背景が有効な場合、スライダーでの調整に加え、**「背景」タブを開いている間、プレビュー上のドラッグ（写真の上を含むキャンバス全面）で位置を調整できる**（`interaction/adapters/backgroundAdapter.js`、5.16節「タブ別ドラッグ」）。オフセットが 0 に近づくと 0 にスナップし赤い中央ガイドが出る。**「背景」タブ以外では余白をドラッグしても背景は動かない**（以前は他タブでも余白ドラッグで背景がパンしていた。不具合として修正）。単色背景の場合は位置の概念がないためドラッグ対象にならない
 
 **実装詳細:**
 - Canvas全体を覆うように画像を拡大（cover方式）
@@ -742,7 +757,7 @@ Blobをダウンロード
   - 超楕円: 次数nを指定（3-40）
 - **影**:
   - タイプ: 外側（ドロップ）または内側（インナー）
-  - オフセットX/Y: -25%〜25%（写真短辺基準）
+  - オフセットX/Y: -25%〜25%（写真短辺基準）。スライダーに加え、**「フレーム」タブを開いていて影が有効（`shadowEnabled`）なとき、プレビュー上で写真本体をドラッグして直接動かせる**（`interaction/adapters/shadowAdapter.js`、5.16節「タブ別ドラッグ」）。Shiftドラッグで軸ロック、0 付近で 0 にスナップ＋赤い中央ガイド。影が無効なときはドラッグしても何も起こらない
   - ぼかし: 0-10%（写真短辺基準）
   - 効果の範囲: 0-10%（写真短辺基準）
   - 色: HEXカラーコード
@@ -953,13 +968,27 @@ Blobをダウンロード
 
 ### 11.6 ロードマップ（`docs/roadmap.md`）対応状況
 
-2026-08-28にユーザーからの要望を`docs/roadmap.md`（A〜Fの各タブ）に整理した。フェーズ0（設計不要の小改修）として以下を実施済み（`docs/session-log-2026-08-29.md`）:
+2026-08-28にユーザーからの要望を`docs/roadmap.md`（A〜Fの各タブ）に整理した。フェーズ0（設計不要の小改修、`docs/session-log-2026-08-29.md`）:
 - ✅ **E**: ダウンロードボタンを上部バー →「出力」タブ内へ戻した（7.6節）
 - ✅ **A-2**: crop モードのオーバーレイに三分割グリッド（rule of thirds）を追加（7.2節、`canvasRenderer.js` `drawCropModeOverlay`）
 - ✅ **A-6**: select モードのプレビュー上ホイールによる余白変更を削除（5.16節、`photoAdapter.commitMarginDelta`・`MARGIN_WHEEL_STEP`撤去）
 - ✅ **D-2**: テキストの固定表示位置アンカー選択（`#textLayerPosition`）をUIから撤去（`position`データモデルは維持。5.3節・7.5節）
 
-未着手のロードマップ項目（方向性の相談から）: A-1（出力フォーマットUIのグラフィカル化・位置スライダー撤去）、A-3〜A-5（crop/確定まわりの拡張）、B（背景タブのスライダー整理・ホイールで背景拡大）、C（超楕円スライダーの体感等間隔化・影オフセットのドラッグ）、D-1/D-3（テキスト追加フロー再設計・設定共通化＝データモデル統合の是非）、F（プリセットの置き場所）。B-2／C-2／A-6は「開いているタブでプレビュー上のホイール・本体ドラッグの意味を切り替える」共通設計にまとめられる見込み。
+フェーズ1（「開いているタブでプレビュー上のドラッグの意味を切り替える」共通設計、`docs/session-log-2026-08-29.md`）:
+- ✅ **共通基盤**: `tabManager.getActiveTab()` を追加し、`canvasInteraction.js` の `pointerdown` がアクティブタブで本体ドラッグの振り先を分岐（5.16節「タブ別ドラッグ」）
+- ✅ **C-2**: 「フレーム」タブ表示中かつ影が有効なとき、写真本体ドラッグ →影オフセット（新設 `shadowAdapter.js`。7.4節）
+- ✅ **背景タブのドラッグ拡張**: 「背景」タブ表示中はキャンバス全面のドラッグ →背景の位置（`backgroundAdapter` 流用。7.3節）。反面、**「背景」タブ以外での余白ドラッグは背景を動かさない**よう修正（従来はどのタブでも余白ドラッグで背景がパンしていた）
+- ❌ **B-2**（背景タブでホイール→背景拡大倍率）: 誤操作の元になるとしてユーザー判断で**不採用**。プレビュー上のホイールは引き続き未使用
+
+フェーズ1追補（移動・配置の操作性、`docs/session-log-2026-08-29.md`）:
+- ✅ **軸ロック**: `move` ドラッグ中に Shift で移動量の大きい軸だけに固定（縦だけ／横だけ。写真・テキスト・背景・影すべて。5.16節）
+- ✅ **原点スナップ**: 背景・影のドラッグでオフセットが 0 付近まで戻ると 0 にスナップし赤い中央ガイドを表示（`originSnapPx`。5.16節）
+- ✅ **タップ判定の厳格化**: モード切替（select↔crop）を「移動量 < 4px かつ 押下時間 < `CLICK_TAP_MS`(400ms)」の短いタップ限定に。動かさず長押しして離してもモードが切り替わらない（5.16節）
+- ✅ **タブ切り替え時の写真選択解除**: 「背景」「フレーム」タブへ移ったら写真の選択（四隅■マーカー）を解除する。マーカーが出たまま操作不能に見える紛らわしさを解消（`tabManager.onTabChange` ＋ `main.js`。5.16節）
+- ✅ **矢印キーで背景／影の微調整**: 「背景」タブ・「フレーム」タブ（影が有効）で、矢印キーを背景／影のオフセット nudge に割り当て（5.16節）
+- ダブルクリックでオフセットをリセットする案は「他の操作が暴発しそう」としてユーザー判断で見送り
+
+未着手のロードマップ項目（方向性の相談から）: A-1（出力フォーマットUIのグラフィカル化・位置スライダー撤去）、A-3〜A-5（crop/確定まわりの拡張）、B-1（背景タブのスライダー整理）、C-1（超楕円スライダーの体感等間隔化）、D-1/D-3（テキスト追加フロー再設計・設定共通化＝データモデル統合の是非）、F（プリセットの置き場所）。
 
 ## 12. 仕様書v1との対応状況
 

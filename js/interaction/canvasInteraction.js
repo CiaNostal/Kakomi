@@ -20,10 +20,20 @@ import { clampRect, resizeCropRect } from '../utils/cropRect.js';
 import textAdapter from './adapters/textAdapter.js';
 import photoAdapter from './adapters/photoAdapter.js';
 import backgroundAdapter from './adapters/backgroundAdapter.js';
+import shadowAdapter from './adapters/shadowAdapter.js';
+import { getActiveTab } from '../tabManager.js';
+import { getState } from '../stateManager.js';
 
-// pointerdown→pointerup の移動量がこの px 未満なら「ドラッグではなくクリック」とみなす。
-// 選択モード↔クロップモードの切り替えはこのクリック判定で行う。
+// pointerdown→pointerup が「ドラッグではなく短いタップ」とみなされる条件。
+// 選択モード↔クロップモードの切り替えはこのタップ判定で行う。移動量がこの px 未満で、
+// かつ押下時間が CLICK_TAP_MS 未満のときだけタップ扱いにする（長押ししてから離しても
+// モード切替が発動しないようにするため。値は手触りを見て調整可）。
 const CLICK_MOVE_THRESHOLD = 4;
+const CLICK_TAP_MS = 400;
+
+// 背景・影のドラッグで、オフセット値が中立(0)にこの px 以内まで近づいたら 0 にスナップし、
+// 赤い中央ガイド線を表示する（snapEngine の SNAP_THRESHOLD_PX と揃えている）。
+const ORIGIN_SNAP_PX = 6;
 
 function pointInRect(px, py, r) {
     return r && px >= r.x && px <= r.x + r.width && py >= r.y && py <= r.y + r.height;
@@ -105,6 +115,7 @@ export function initCanvasInteraction(canvas) {
 
         pointerDownCtx = {
             clientX: e.clientX, clientY: e.clientY,
+            downTime: performance.now(),
             modeAtDown: editMode,
             photoWasSelected: photoSelected,
             onPhotoBody: false,
@@ -173,6 +184,43 @@ export function initCanvasInteraction(canvas) {
 
         // --- 通常のオブジェクト選択・移動 ---
         const hit = interactionRegistry.hitTest(x, y);
+
+        // 「背景」「フレーム」タブを開いているときは、テキスト以外の場所（写真本体・余白）の
+        // ドラッグの意味を差し替える。背景タブ = 背景（拡大ぼかし）の位置、フレームタブ = 影のオフセット。
+        // これらは選択状態を変えず、クロップモードへの入口（onPhotoBody）にもしない。
+        const activeTab = getActiveTab();
+        if (hit && hit.type !== 'text' && (activeTab === 'tab-background' || activeTab === 'tab-frame')) {
+            if (activeTab === 'tab-background') {
+                dragState = {
+                    mode: 'move', id: 'background', adapter: backgroundAdapter,
+                    startClientX: e.clientX, startClientY: e.clientY,
+                    startValue: backgroundAdapter.getValue('background'),
+                    startBox: interactionRegistry.getById('background') || hit, originSnap: true
+                };
+                canvas.setPointerCapture(e.pointerId);
+                canvas.classList.add('dragging-object');
+            } else if (getState().frameSettings.shadowEnabled) {
+                dragState = {
+                    mode: 'move', id: 'shadow', adapter: shadowAdapter,
+                    startClientX: e.clientX, startClientY: e.clientY,
+                    startValue: shadowAdapter.getValue('shadow'),
+                    startBox: hit, originSnap: true
+                };
+                canvas.setPointerCapture(e.pointerId);
+                canvas.classList.add('dragging-object');
+            }
+            // フレームタブで影が無効なときは何もしない（無反応）。いずれの場合も選択は変えない。
+            return;
+        }
+
+        // 背景（拡大ぼかし）の位置調整ドラッグは「背景」タブでのみ行う（上の分岐で処理済み）。
+        // それ以外のタブで余白（背景ボックス）をクリック／ドラッグしても背景は動かさず、
+        // 単なる選択解除として扱う。
+        if (hit && hit.type === 'background') {
+            selectionStore.setSelectedId(null);
+            return;
+        }
+
         selectionStore.setSelectedId(hit ? hit.id : null);
         if (!hit) return;
         if (hit.id === 'photo') pointerDownCtx.onPhotoBody = true;
@@ -240,9 +288,25 @@ export function initCanvasInteraction(canvas) {
 
         let dxPx = e.clientX - dragState.startClientX;
         let dyPx = e.clientY - dragState.startClientY;
+        const ctx = getLastPreviewContext();
 
-        // Altキーを押しながらドラッグすると、細かい位置調整のためスナップを一時的に無効化できる
-        if (!e.altKey) {
+        // Shiftを押しながらドラッグすると、移動量の大きい方の軸だけに固定する（縦だけ／横だけ）。
+        if (e.shiftKey) {
+            if (Math.abs(dxPx) >= Math.abs(dyPx)) dyPx = 0; else dxPx = 0;
+        }
+
+        // Altキーを押しながらドラッグすると、細かい位置調整のためスナップを一時的に無効化できる。
+        if (e.altKey) {
+            clearActiveGuides();
+        } else if (dragState.originSnap) {
+            // 背景・影のドラッグ: オフセットが中立(0)に近づいたら 0 にスナップし、赤い中央ガイドを出す。
+            // adapter.originSnapPx() が「各軸を 0 に戻すためのドラッグ量(px)」を返す。
+            const { xPx, yPx } = dragState.adapter.originSnapPx(dragState.startValue, ctx);
+            const guides = [];
+            if (Math.abs(dxPx - xPx) < ORIGIN_SNAP_PX) { dxPx = xPx; guides.push({ axis: 'x', value: canvas.width / 2 }); }
+            if (Math.abs(dyPx - yPx) < ORIGIN_SNAP_PX) { dyPx = yPx; guides.push({ axis: 'y', value: canvas.height / 2 }); }
+            setActiveGuides(guides);
+        } else {
             const candidateBox = {
                 x: dragState.startBox.x + dxPx,
                 y: dragState.startBox.y + dyPx,
@@ -254,11 +318,8 @@ export function initCanvasInteraction(canvas) {
             dxPx += snap.dx;
             dyPx += snap.dy;
             setActiveGuides(snap.guideLines);
-        } else {
-            clearActiveGuides();
         }
 
-        const ctx = getLastPreviewContext();
         const changes = dragState.adapter.computeChanges(dragState.startValue, dxPx, dyPx, ctx);
         dragState.adapter.commit(dragState.id, changes);
     });
@@ -288,9 +349,11 @@ export function initCanvasInteraction(canvas) {
         endDrag();
         if (!pd) return;
 
-        // ドラッグ量がわずかなときだけ「クリック」とみなしてモードを切り替える
+        // 「ほとんど動かさず、かつ短時間で離した」＝短いタップのときだけモードを切り替える。
+        // 動かさずに長押ししてから離した場合は切り替えない。
         const moved = Math.hypot(e.clientX - pd.clientX, e.clientY - pd.clientY);
-        if (moved > CLICK_MOVE_THRESHOLD) return;
+        const heldMs = performance.now() - pd.downTime;
+        if (moved > CLICK_MOVE_THRESHOLD || heldMs > CLICK_TAP_MS) return;
 
         if (pd.modeAtDown === 'select' && pd.photoWasSelected && pd.onPhotoBody) {
             // 選択済みの写真をもう一度クリック → クロップモードへ
@@ -314,9 +377,6 @@ export function initCanvasInteraction(canvas) {
             return;
         }
 
-        const selectedId = selectionStore.getSelectedId();
-        if (!selectedId) return;
-
         let dxPx = 0, dyPx = 0;
         const step = e.shiftKey ? 10 : 1;
         if (e.key === 'ArrowLeft') dxPx = -step;
@@ -324,6 +384,23 @@ export function initCanvasInteraction(canvas) {
         else if (e.key === 'ArrowUp') dyPx = -step;
         else if (e.key === 'ArrowDown') dyPx = step;
         else return;
+
+        // 「背景」「フレーム」タブでは、矢印キーを背景／影のオフセット微調整に割り当てる
+        // （本体ドラッグのタブ別振り分けと同じ考え方。写真・テキストの選択有無に依らない）。
+        const activeTab = getActiveTab();
+        const tabAdapter = activeTab === 'tab-background'
+            ? backgroundAdapter
+            : (activeTab === 'tab-frame' && getState().frameSettings.shadowEnabled ? shadowAdapter : null);
+        if (tabAdapter) {
+            const id = tabAdapter === backgroundAdapter ? 'background' : 'shadow';
+            e.preventDefault();
+            const sv = tabAdapter.getValue(id);
+            tabAdapter.commit(id, tabAdapter.computeChanges(sv, dxPx, dyPx, getLastPreviewContext()));
+            return;
+        }
+
+        const selectedId = selectionStore.getSelectedId();
+        if (!selectedId) return;
 
         // crop モードで写真を選択中: 矢印はクロップ矩形のパン（本体ドラッグと同じ向き）
         if (photoEditModeStore.isCropMode() && selectedId === 'photo') {

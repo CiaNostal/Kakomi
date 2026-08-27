@@ -29,6 +29,18 @@ const backgroundAdapter = {
         };
     },
 
+    /**
+     * 各軸のオフセットを中立(0)へ戻すために必要なドラッグ量(px)を返す。
+     * canvasInteraction.js の原点スナップ（背景ドラッグ時に 0 で赤い中央ガイドを出す）が使う。
+     */
+    originSnapPx(startValue, ctx) {
+        const p = ctx && ctx.photoShortSidePx ? ctx.photoShortSidePx : 1;
+        return {
+            xPx: -(startValue.offsetXPercent / 100) * p,
+            yPx: -(startValue.offsetYPercent / 100) * p
+        };
+    },
+
     commit(id, changes) {
         updateState({ imageBlurBackgroundParams: changes });
     }

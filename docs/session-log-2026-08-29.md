@@ -121,9 +121,160 @@
 - `docs/roadmap.md`: 冒頭に「進捗」節、A-2 / A-6 / D-2 / E を ✅ 完了に更新し対応内容を追記。
 - 本ログを新規追加。
 
-## 7. 現状のステータス
+## 7. フェーズ1: 「開いているタブでプレビュー上のドラッグの意味を切り替える」
 
-- フェーズ0（E / A-2 / D-2 / A-6）実装・Playwright 自動検証済み。ユーザーのブラウザでの目視・操作感確認は次回。
-- 三分割グリッドの線の濃さは実写での見え方次第で調整の余地あり（手触りチューニング項目）。
-- **次セッションはフェーズ1（「開いているタブでプレビュー上のホイール・本体ドラッグの意味を切り替える」共通設計）から。**
-  この設計を決めてから B-2（背景ホイール）・C-2（影ドラッグ）へ。UI モックアップ系（A-1 ＋ B-1、F）はフェーズ2。
+フェーズ0のあと、同じセッションで続けて実施。
+
+### 7.1 仕様の相談（AskUserQuestion）と当初案からの変更
+
+当初は「ホイール＝背景拡大倍率（B-2）」＋「本体ドラッグ＝タブ依存（C-2 ほか）」の両方を1つのディスパッチ層に
+乗せる案だった。3点確認した結果:
+
+1. **本体ドラッグの切替範囲** → 「背景・フレームだけ上書き」。レイアウト/文字/出力/プリセットは従来どおり
+   `photoViewParams`（枠内配置）。要望のある2タブだけ挙動を変える（驚きが少ない）。
+2. **背景タブのドラッグ範囲** → 「キャンバス全面で背景を動かす」。写真の上でも余白でも、背景タブにいる間は
+   ドラッグ＝背景の位置。従来は余白部分だけだった。
+3. **モードの見せ方** → 「特に何も出さない」。カーソル変更もヒント文もなし。開いているタブ自体が手がかり。
+
+さらにユーザーから追加の仕様変更: **ホイールでの背景拡大倍率変更（B-2）は取りやめ、ホイールは引き続き
+何もしない**（誤操作の元になるとの判断）。→ `wheel` リスナーの再追加・`backgroundAdapter.commitScaleDelta()`
+は実装しないことにした。結果、フェーズ1は「本体ドラッグの振り替え」だけの実装になった。
+
+### 7.2 実装
+
+- **`js/tabManager.js`**: `getActiveTab()` を追加（`.tab-button.active` の `data-tab` を返すだけ。状態は持たず
+  DOM を読む）。`canvasInteraction.js` が pointerdown 時に参照する。
+- **`js/interaction/adapters/shadowAdapter.js`（新規）**: `type: 'shadow'`。`getValue()` が
+  `frameSettings.shadowParams.offsetX/offsetY` を返し、`computeChanges()` が写真短辺基準%へ変換して
+  0.1%丸め＋[-25, 25] クランプ（`controlsConfig.frameShadowOffsetX`）、`commit()` が
+  `updateState({ frameSettings: { shadowParams: changes } })`。`backgroundAdapter` と同型。
+- **`js/interaction/canvasInteraction.js`**:
+  - import に `shadowAdapter` / `getActiveTab` / `getState` を追加。
+  - pointerdown の「通常のオブジェクト選択・移動」に入る手前で、`hit.type !== 'text'` かつアクティブタブが
+    `tab-background` / `tab-frame` のときに分岐:
+    - `tab-background` → `dragState` を `backgroundAdapter`（id `'background'`、`startBox` は
+      `interactionRegistry.getById('background')`）で組み立て、`skipSnap: true`。
+    - `tab-frame` かつ `getState().frameSettings.shadowEnabled` → `shadowAdapter`（id `'shadow'`）で組み立て、
+      `skipSnap: true`。影オフなら `dragState` を作らず `return`（無反応）。
+    - どちらの分岐でも `selectionStore.setSelectedId()` を呼ばない（選択を変えない）し、`onPhotoBody` も
+      立てない（クリックで crop モードに入らない）。
+  - pointermove のスナップ補正ブロックのガードを `if (!e.altKey)` → `if (!e.altKey && !dragState.skipSnap)` に。
+    タブ限定ドラッグではガイドスナップを行わない（背景・影が写真の端に吸着すると不自然なため）。
+- テキストレイヤーのドラッグは `interactionRegistry` の登録順（text が後勝ち）で、どのタブでも従来どおり最優先。
+- crop モード中（`editMode === 'crop'`）はその分岐が pointerdown の先頭で `return` するため、タブ分岐より優先される
+  （crop 中にタブを触っても crop 操作が生きる。稀なエッジケース、現状はこのままでよい）。
+
+### 7.3 検証
+
+`phase1-test.js` を新規作成（14 アサーション、全パス）:
+
+- **レイアウトタブ**: 写真本体ドラッグで `photoViewParams` が動く（回帰）／背景オフセットは不変。
+- **背景タブ**: 写真の上のドラッグで `imageBlurBackgroundParams.offsetX/YPercent` が動く／`photoViewParams` 不変／
+  選択（`selectedId`）不変／ホイールを回しても `scale` 不変（B-2 廃止の確認）。
+- **フレームタブ（影オフ）**: 本体ドラッグで `shadowParams` 不変・`photoViewParams` 不変（フォールバックしない）。
+- **フレームタブ（影オン）**: 本体ドラッグで `shadowParams.offsetX/Y` が動く／右ドラッグで `offsetX` が増える／
+  `photoViewParams` 不変／[-25, 25] に収まる。
+- 全操作でコンソールエラーなし。
+
+`crop-test.js` 24/24、`phase0-test.js` 10/10 も再実行して回帰なしを確認。
+
+## 8. ドキュメント更新（フェーズ1分）
+
+- `spec.md`: 4章ファイル構造（`shadowAdapter.js` 追加、`tabManager` 注記、`canvasInteraction` 説明）、
+  5.16節（「タブ別ドラッグ」節を新設、ホイール未使用の理由に B-2 不採用を追記、桁あふれ丸めに `shadowAdapter` 追記）、
+  5.17節アダプタ表（`shadowAdapter` 行追加、`backgroundAdapter` 行にタブ拡張を追記）、7.3節（背景ドラッグのタブ拡張）、
+  7.4節（影オフセットのドラッグ）、11.6節（フェーズ1の完了項目と B-2 不採用）。
+- `docs/roadmap.md`: 「進捗」節にフェーズ1、B-2 を ❌ 不採用に、C-2 を ✅ 完了に、背景タブのドラッグ拡張を追記、
+  「進め方のメモ」の該当行を更新。
+- 本ログに 7〜8 節を追記。
+
+## 9. フェーズ1追補: 移動・配置の操作性と、タップ判定・背景ドラッグの修正
+
+フェーズ1をユーザーがブラウザで確認（当初報告された「localhost で画像が読めない」はブラウザキャッシュが原因で、
+ハードリロードで解消。コード側の問題ではなかった）。そのうえで3件の要望・不具合が出た。
+
+### 9.1 要望・不具合
+
+1. **移動・配置の操作性**（相談）: オフセット 0 に戻す／片軸だけ動かす、ができず不便。レイアウトタブの中央ガイドは
+   良いので、背景・フレームでも赤ガイドを出す・ダブルクリックで戻す等を検討してほしい、と。
+   → 相談の結果、**「Shift 軸ロック」＋「背景・影の原点スナップ＋赤ガイド」の2点を採用**。
+   **ダブルクリックでのリセットは「他の操作が暴発しそう」としてユーザー判断で見送り**。
+2. **モード切替の暴発**（仕様変更）: レイアウトタブの select モードで、動かさずに左クリックを長押しして離しても
+   crop モードへ切り替わってしまう。**短いタップのときだけ切り替わる**ようにしたい。
+3. **背景ドラッグの不具合**: レイアウトタブで背景（余白）部分をドラッグすると背景が動いてしまう。
+   → フェーズ1で「背景」タブのときだけ振り替える実装にしたが、それ以外のタブでは従来の汎用ドラッグ経路が
+   生きていて `backgroundAdapter` に到達していた。**「背景」タブ以外では余白ドラッグで背景を動かさない**よう修正。
+
+### 9.2 実装
+
+- **`canvasInteraction.js`**:
+  - 定数 `CLICK_TAP_MS = 400`（タップとみなす最大押下時間）と `ORIGIN_SNAP_PX = 6` を追加。
+  - `pointerDownCtx` に `downTime: performance.now()` を持たせ、`pointerup` のタップ判定を
+    「移動量 < `CLICK_MOVE_THRESHOLD`(4px) **かつ** 押下時間 < `CLICK_TAP_MS`」に変更（select↔crop の両経路）。
+  - `pointermove` の `move` モード:
+    - Shift 押下中は `|dxPx| >= |dyPx|` で小さい方の軸を 0 に固定（軸ロック）。スナップ計算の前。
+    - スナップ分岐を `Alt→スナップ無効` / `originSnap→原点スナップ` / それ以外→従来のボックススナップ、の3分岐に再構成。
+      原点スナップは `dragState.adapter.originSnapPx(startValue, ctx)` が返す「各軸を 0 に戻す px 量」に対して
+      現在のドラッグ量が `ORIGIN_SNAP_PX` 以内なら、その px 量へ吸着し `{axis, value: canvas中央}` のガイドを出す。
+  - タブ分岐（背景／フレーム）の `dragState` フラグを `skipSnap` → `originSnap` に改名。
+  - タブ分岐の後、`hit.type === 'background'`（＝背景タブでもフレームタブでもない状態で余白をヒット）なら
+    `selectionStore.setSelectedId(null)` して `return`。背景は動かさず、キャンバス全体の選択枠も出なくなる。
+- **`backgroundAdapter.js` / `shadowAdapter.js`**: `originSnapPx(startValue, ctx)` を追加
+  （`xPx = -(offset% / 100) * photoShortSidePx`、Y も同様）。
+- 背景のドラッグ位置調整・矢印キー nudge は事実上「背景」タブ限定になった（他タブでは背景が選択されなくなるため
+  nudge 対象にもならない）。ユーザーの意図（背景操作は背景タブで）と一致。
+
+### 9.3 検証
+
+新規 `phase1b-test.js`（10 アサーション、全パス）:
+
+- レイアウトタブで余白ドラッグ → `imageBlurBackgroundParams.offset*` 不変・`selectedId` が `'background'` にならない。
+- 長押し（動かさず 550ms）で離す → `mode` が `'select'` のまま（crop に入らない）。
+- 短いタップ → `mode` が `'crop'` に切り替わる（従来どおり）。
+- レイアウトタブで Shift ドラッグ（横大・縦わずか）→ `photoViewParams.offsetX` だけ動き `offsetY` は不変。
+- 背景タブ／フレームタブ（影オン）で、オフセット 3% から 0 の 1px 手前まで戻すドラッグ → オフセットが厳密に 0 に吸着。
+- コンソールエラーなし。
+
+`crop-test.js` 24/24・`phase0-test.js` 10/10・`phase1-test.js` 14/14 も再実行して回帰なし。
+
+### 9.4 ドキュメント更新（追補分）
+
+- `spec.md`: 5.16節（軸ロック・タップ判定の厳格化・「タブ別ドラッグ」節に原点スナップと「背景タブ以外は余白ドラッグ無効」を追記）、
+  5.17節アダプタ表（`originSnapPx`）、7.3節（背景ドラッグは背景タブ限定・原点スナップ）、7.4節（影ドラッグに軸ロック・原点スナップ）、
+  11.6節（フェーズ1追補）。
+- `docs/roadmap.md`: 「進捗」節にフェーズ1追補。
+- 本ログに 9 節を追記。
+
+### 9.5 追加の2点（写真選択マーカーの残留、矢印キー対応）
+
+フェーズ1追補をユーザーが確認したうえで、さらに2点。
+
+1. **写真の選択マーカーが残って操作不能に見える**: レイアウトタブで写真を選択（四隅に■マーカー）した状態で
+   「背景」「フレーム」タブへ移ると、マーカーが出たままなのに写真をクリックしても選択・トリミングできない
+   （フェーズ1でこれらのタブでは本体ドラッグが背景／影に振り替わるため）。「選択できそう」に見えて操作不能なのが
+   ユーザーフレンドリーでない。
+   → **`tabManager` に `onTabChange(callback)` を追加**し、`main.js` で「`tab-background` / `tab-frame` へ移り、かつ
+   写真が選択されていたら `selectionStore.setSelectedId(null)`」を配線。`onSelectionChange` 経由で crop モード解除・
+   再描画も走り、マーカーが消える。「文字」「出力」「プリセット」タブでは写真の本体ドラッグが従来どおり効くので
+   選択は維持。テキストの選択はどのタブでも維持。
+2. **背景・フレームで矢印キー微調整に未対応**: レイアウトタブの選択モードでは矢印キーで nudge できるが、
+   背景・影ではできない。
+   → **`canvasInteraction.js` の keydown ハンドラを再構成**。矢印キーの解釈（step 1px / Shift 10px）を
+   `selectedId` チェックより前に出し、`getActiveTab()` が `tab-background`（または `tab-frame` かつ `shadowEnabled`）
+   なら `backgroundAdapter` / `shadowAdapter` の `computeChanges`/`commit` を直接呼んで `return`。それ以外は
+   従来どおり選択オブジェクトの nudge。フレームタブで影オフのときは振り替えず、選択オブジェクトの nudge にフォールバック。
+
+検証は `phase1b-test.js` を 17 アサーションに拡張（写真選択がタブ移動で解除される／文字タブでは維持される、
+背景・フレーム（影オン）で矢印キーがオフセットを動かす、影オフでは動かさない）。`crop-test` 24 / `phase0` 10 /
+`phase1` 14 も回帰なし。
+
+`spec.md` は 5.16節（「タブ切り替え時の写真選択の解除」「矢印キーによる背景／影の微調整」の段落追加）・矢印キー nudge の記述・
+4章ファイル構造（`onTabChange`）・11.6節を更新。
+
+## 10. 現状のステータス
+
+- フェーズ0＋フェーズ1＋フェーズ1追補（軸ロック／原点スナップ＋赤ガイド／タップ判定の厳格化／背景ドラッグをタブ限定化／
+  タブ移動で写真選択を解除／背景・影の矢印キー微調整）を実装・Playwright 自動検証済み。ユーザーのブラウザでの目視・操作感確認は次回。
+- 手触りチューニング項目: 三分割グリッドの線の濃さ、`CLICK_TAP_MS`（400ms）、`ORIGIN_SNAP_PX`（6px）、背景・影の矢印キー nudge 量（1px≒0.2%）。
+- **次はフェーズ2**: A-1（出力フォーマット UI のグラフィカル化・位置スライダー撤去）＋ B-1（背景タブのスライダー整理）を
+  `artifact-design` でモックアップしてから実装。F（プリセットの置き場所）も同じ流れに乗せられる。以降 C-1 / A-5、D 再設計、A-4 / A-3。

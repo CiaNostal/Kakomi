@@ -7,7 +7,7 @@ import { calculateLayout } from './layoutCalculator.js'; // 正しいレイア�
 import { drawPreview } from './canvasRenderer.js';     // 現在の描画モジュール
 import { processImageFile, handleDownload } from './fileManager.js';
 import { displayExifInfo } from './exifHandler.js';   // Exif表示用
-import { initializeTabs } from './tabManager.js';
+import { initializeTabs, onTabChange } from './tabManager.js';
 import { initCanvasInteraction } from './interaction/canvasInteraction.js';
 import * as selectionStore from './interaction/selectionStore.js';
 import * as photoEditModeStore from './interaction/photoEditModeStore.js';
@@ -95,6 +95,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // 明示的に再描画をトリガーする（selectionStore と同じ考え方）。
     photoEditModeStore.onChange(() => {
         requestRedraw();
+    });
+
+    // 「背景」「フレーム」タブでは写真本体ドラッグの意味が変わり、写真の選択・トリミングができない。
+    // レイアウトタブで選択したまま移ると四隅マーカーが出たまま操作不能に見えるため、
+    // これらのタブへ移ったら写真の選択を解除する（onSelectionChange 経由で crop モード解除・再描画も走る）。
+    onTabChange((tab) => {
+        if ((tab === 'tab-background' || tab === 'tab-frame') && selectionStore.getSelectedId() === 'photo') {
+            selectionStore.setSelectedId(null);
+        }
     });
 
     if (uiElements.previewCanvas) {
