@@ -3,18 +3,21 @@ import { drawBackground } from './backgroundRenderer.js';
 import { createAndApplyClippingPath, applyShadow, applyBorder } from './frameRenderer.js'; // createSuperellipsePath, roundedRect はframeRenderer内部で使用
 import { drawText } from './textRenderer.js'; // テキスト描画もインポートしておく
 import { drawImageWithPrecision } from './utils/canvasUtils.js';
-import { calculateLayout } from './layoutCalculator.js';
 import * as interactionRegistry from './interaction/interactionRegistry.js';
 import { getSelectedId } from './interaction/selectionStore.js';
 import { getActiveGuides } from './interaction/guideStore.js';
 import { setTextHandles, clearTextHandles } from './interaction/textHandleStore.js';
 import { setCropHandles, clearCropHandles } from './interaction/photoCropStore.js';
+import * as photoEditModeStore from './interaction/photoEditModeStore.js';
+import { resolveCropRect } from './utils/cropRect.js';
 import { rotatePoint } from './utils/geometry.js';
 
 const HANDLE_SIZE = 8; // 拡大ハンドル（四角）の一辺の長さ(px)
 const ROTATE_HANDLE_RADIUS = 4; // 回転ハンドル（丸）の半径(px)
 const ROTATE_HANDLE_OFFSET = 22; // 回転ハンドルをボックス上端からどれだけ離すか(px)
-const CROP_HANDLE_SIZE = 10; // クロップ矩形の四隅ハンドル（四角）の一辺の長さ(px)
+const CROP_HANDLE_SIZE = 10; // select モードの写真四隅 ■ ハンドルの一辺の長さ(px)
+const CROP_L_HANDLE_LEN = 18; // crop モードの L 字ハンドルの腕の長さ(px)
+const CROP_L_HANDLE_THICK = 3; // crop モードの L 字ハンドルの線の太さ(px)
 
 // コンテナサイズをキャッシュして、canvasサイズ変更によるレイアウト再計算の影響を防ぐ
 let cachedContainerSize = null;
@@ -102,72 +105,152 @@ function drawTextHandles(ctx, box) {
 }
 
 /**
- * 写真選択中に表示する「オンキャンバス直接トリミング」オーバーレイ（Lightroom風）。
- * ズーム1.0時点で見えるはずの範囲（box全体）を元画像で埋め、実際に使われている範囲
- * （クロップ矩形、box内でzoom/offsetX/Yに応じた位置・サイズの矩形）だけ通常表示、
- * それ以外の周辺部分は暗くマスクする。
+ * frozenFrame（crop モード開始時のスナップショット）から、
+ * 「元画像全体」と「現在のクロップ矩形」のプレビュー px 上の矩形を求める。
  *
- * box（写真のバウンディングボックス）のscreen上のサイズ・位置は、baseMarginPercentが
- * 写真短辺に対する比率で定義されているため、cropSettings.zoomの値によらず常に一定になる
- * （zoomは「元画像のどれだけを使うか」だけを変え、写真とその余白の比率自体は変えないため）。
- * そのため、box自体を「ズーム1.0相当の基準枠」としてそのまま使い、内側にzoomに応じた
- * 縮小率のクロップ矩形を描けば、追加のスケール計算なしで一致する。
+ * Kakomi では出力枠＝写真＋余白、余白は写真短辺に対する％のため、クロップ矩形を変えても
+ * 画面上の写真ボックスの大きさはほぼ変わらない（photoEditModeStore の説明参照）。そこで
+ * crop モード中は通常のレイアウト結果を使わず、開始時に固定した photoBox0 / rect0 を基準に、
+ * 「rect0 が photoBox0 に載る」よう元画像全体の矩形 whole を逆算する。現在のクロップ矩形は
+ * whole 上の割合として配置するので、ドラッグに応じて画面上でも素直に伸縮・移動する。
+ *
+ * @param {{photoBox0:{x,y,width,height}, rect0:{x,y,w,h}}} frozenFrame
+ * @param {{x:number,y:number,w:number,h:number}} liveRect - 現在の cropSettings.rect
+ * @returns {{whole:{x,y,width,height}, cropScreen:{x,y,width,height}}}
+ */
+function cropModeGeometry(frozenFrame, liveRect) {
+    const { photoBox0, rect0 } = frozenFrame;
+    const wholeWidth = photoBox0.width / Math.max(1e-4, rect0.w);
+    const wholeHeight = photoBox0.height / Math.max(1e-4, rect0.h);
+    const whole = {
+        x: photoBox0.x - rect0.x * wholeWidth,
+        y: photoBox0.y - rect0.y * wholeHeight,
+        width: wholeWidth,
+        height: wholeHeight
+    };
+    const cropScreen = {
+        x: whole.x + liveRect.x * wholeWidth,
+        y: whole.y + liveRect.y * wholeHeight,
+        width: liveRect.w * wholeWidth,
+        height: liveRect.h * wholeHeight
+    };
+    return { whole, cropScreen };
+}
+
+/**
+ * crop モードのオーバーレイ（PowerPoint 風トリミング）。
+ * 元画像全体を whole の位置・サイズで敷き、全面を暗くマスクした上で、
+ * 現在のクロップ矩形 cropScreen の内側だけを明るく再描画する。四隅には L 字ハンドルを描き、
+ * その座標を photoCropStore に記録する（canvasInteraction.js が当たり判定に読む）。
  *
  * @param {CanvasRenderingContext2D} ctx
  * @param {HTMLImageElement} img - 元画像
  * @param {Object} currentState
- * @param {{x:number,y:number,width:number,height:number}} box - 写真のバウンディングボックス（プレビューpx）
+ * @param {{scale:number, photoBox0:{x,y,width,height}, rect0:{x,y,w,h}}} frozenFrame
  */
-function drawCropOverlay(ctx, img, currentState, box) {
-    const { zoom, offsetX: panX, offsetY: panY } = currentState.cropSettings;
-    const invZoom = 1 / Math.max(1, zoom);
+function drawCropModeOverlay(ctx, img, currentState, frozenFrame) {
+    const liveRect = resolveCropRect(currentState.cropSettings, currentState.originalWidth, currentState.originalHeight);
+    const { whole, cropScreen } = cropModeGeometry(frozenFrame, liveRect);
+    if (whole.width <= 0 || whole.height <= 0) return;
 
-    const innerWidth = box.width * invZoom;
-    const innerHeight = box.height * invZoom;
-    const innerX = box.x + (box.width - innerWidth) * panX;
-    const innerY = box.y + (box.height - innerHeight) * panY;
-
-    // box全体を埋める「ズーム1.0相当」の元画像領域（sourceX/Y/Width/Height）を、
-    // 既存のlayoutCalculatorのロジックをそのまま再利用して求める（計算式の重複を避けるため）。
-    const refLayout = calculateLayout({ ...currentState, cropSettings: { ...currentState.cropSettings, zoom: 1.0 } });
-    const { sourceX: refSrcX, sourceY: refSrcY, sourceWidth: refSrcW, sourceHeight: refSrcH } = refLayout.photoDrawConfig;
-    if (refSrcW <= 0 || refSrcH <= 0) return;
+    const imgW = currentState.originalWidth;
+    const imgH = currentState.originalHeight;
 
     ctx.save();
 
-    // box全体に「ズーム1.0相当」の元画像を敷く
-    drawImageWithPrecision(ctx, img, refSrcX, refSrcY, refSrcW, refSrcH, box.x, box.y, box.width, box.height);
+    // 1. 元画像全体を whole に敷く
+    drawImageWithPrecision(ctx, img, 0, 0, imgW, imgH, whole.x, whole.y, whole.width, whole.height);
 
-    // 周辺部分（クロップ矩形の外）を暗くマスク
+    // 2. 全面を暗くマスク
     ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
-    ctx.fillRect(box.x, box.y, box.width, box.height);
+    ctx.fillRect(whole.x, whole.y, whole.width, whole.height);
 
-    // クロップ矩形の内側だけ、マスクなしで再描画
+    // 3. クロップ矩形の内側だけ、マスクなしで再描画
     ctx.beginPath();
-    ctx.rect(innerX, innerY, innerWidth, innerHeight);
+    ctx.rect(cropScreen.x, cropScreen.y, cropScreen.width, cropScreen.height);
     ctx.clip();
-    drawImageWithPrecision(ctx, img, refSrcX, refSrcY, refSrcW, refSrcH, box.x, box.y, box.width, box.height);
+    drawImageWithPrecision(ctx, img, 0, 0, imgW, imgH, whole.x, whole.y, whole.width, whole.height);
     ctx.restore();
 
-    // クロップ矩形の枠と四隅ハンドル
+    // 4. クロップ矩形の枠（黒フチの上に白。明暗どちらの背景でも見えるように）
     ctx.save();
+    ctx.setLineDash([]);
+    ctx.lineJoin = 'miter';
+    const rx = cropScreen.x + 0.5, ry = cropScreen.y + 0.5;
+    const rw = Math.max(0, cropScreen.width - 1), rh = Math.max(0, cropScreen.height - 1);
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(rx, ry, rw, rh);
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(innerX + 0.5, innerY + 0.5, Math.max(0, innerWidth - 1), Math.max(0, innerHeight - 1));
+    ctx.lineWidth = 1.25;
+    ctx.strokeRect(rx, ry, rw, rh);
 
+    // 5. 四隅の L 字ハンドル（内向き）。座標は photoCropStore に記録する。
     const corners = {
-        tl: { x: innerX, y: innerY },
-        tr: { x: innerX + innerWidth, y: innerY },
-        bl: { x: innerX, y: innerY + innerHeight },
-        br: { x: innerX + innerWidth, y: innerY + innerHeight }
+        tl: { x: cropScreen.x, y: cropScreen.y },
+        tr: { x: cropScreen.x + cropScreen.width, y: cropScreen.y },
+        bl: { x: cropScreen.x, y: cropScreen.y + cropScreen.height },
+        br: { x: cropScreen.x + cropScreen.width, y: cropScreen.y + cropScreen.height }
     };
-    setCropHandles({ corners, center: { x: innerX + innerWidth / 2, y: innerY + innerHeight / 2 } });
+    setCropHandles({
+        corners,
+        center: { x: cropScreen.x + cropScreen.width / 2, y: cropScreen.y + cropScreen.height / 2 },
+        cropScreen,
+        whole
+    });
 
+    // 黒の太線を敷いてから白の細線を重ねることで「白塗り・黒フチ」相当の高コントラストにする
+    const L = CROP_L_HANDLE_LEN;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.shadowColor = 'transparent';
+    const drawLPath = (cx, cy, sx, sy) => {
+        ctx.beginPath();
+        ctx.moveTo(cx + sx * L, cy);
+        ctx.lineTo(cx, cy);
+        ctx.lineTo(cx, cy + sy * L);
+    };
+    const drawLPair = (cx, cy, sx, sy) => {
+        ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+        ctx.lineWidth = CROP_L_HANDLE_THICK + 3;
+        drawLPath(cx, cy, sx, sy); ctx.stroke();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = CROP_L_HANDLE_THICK;
+        drawLPath(cx, cy, sx, sy); ctx.stroke();
+    };
+    drawLPair(corners.tl.x, corners.tl.y, 1, 1);
+    drawLPair(corners.tr.x, corners.tr.y, -1, 1);
+    drawLPair(corners.bl.x, corners.bl.y, 1, -1);
+    drawLPair(corners.br.x, corners.br.y, -1, -1);
+    ctx.restore();
+}
+
+/**
+ * select モードで、選択中の写真の四隅に ■ リサイズハンドルを描く。
+ * ドラッグは baseMarginPercent（余白＝枠に対する写真の見かけの大きさ）に対応する。
+ * 座標は photoCropStore に記録し、crop モードの L 字ハンドルと同じ当たり判定経路で拾う。
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{x:number,y:number,width:number,height:number}} box - 写真のバウンディングボックス（プレビューpx）
+ */
+function drawPhotoResizeHandles(ctx, box) {
+    const corners = {
+        tl: { x: box.x, y: box.y },
+        tr: { x: box.x + box.width, y: box.y },
+        bl: { x: box.x, y: box.y + box.height },
+        br: { x: box.x + box.width, y: box.y + box.height }
+    };
+    setCropHandles({ corners, center: { x: box.x + box.width / 2, y: box.y + box.height / 2 } });
+
+    // 白塗り・黒フチ。明暗どちらの背景でも見えるように。
+    ctx.save();
+    ctx.setLineDash([]);
     ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = '#1877f2';
+    ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+    ctx.lineWidth = 2;
     for (const corner of Object.values(corners)) {
-        ctx.fillRect(corner.x - CROP_HANDLE_SIZE / 2, corner.y - CROP_HANDLE_SIZE / 2, CROP_HANDLE_SIZE, CROP_HANDLE_SIZE);
-        ctx.strokeRect(corner.x - CROP_HANDLE_SIZE / 2, corner.y - CROP_HANDLE_SIZE / 2, CROP_HANDLE_SIZE, CROP_HANDLE_SIZE);
+        const hx = corner.x - CROP_HANDLE_SIZE / 2, hy = corner.y - CROP_HANDLE_SIZE / 2;
+        ctx.fillRect(hx, hy, CROP_HANDLE_SIZE, CROP_HANDLE_SIZE);
+        ctx.strokeRect(hx, hy, CROP_HANDLE_SIZE, CROP_HANDLE_SIZE);
     }
     ctx.restore();
 }
@@ -239,11 +322,14 @@ export async function drawPreview(currentState, previewCanvas, previewCtx) { // 
     if (img && sourceWidth > 0 && sourceHeight > 0 && photoWidth > 0 && photoHeight > 0) {
         interactionRegistry.register({ id: 'photo', type: 'photo', x: photoX, y: photoY, width: photoWidth, height: photoHeight });
 
-        // 写真選択中は、オンキャンバス直接トリミング用のLightroom風オーバーレイ
-        // （クロップ範囲外を暗くマスク＋四隅ハンドル）に切り替える。フレーム装飾
-        // （角丸・影・縁取り）はクロップ編集中は表示しない（選択解除で通常表示に戻る）。
-        if (getSelectedId() === 'photo') {
-            drawCropOverlay(ctx, img, currentState, { x: photoX, y: photoY, width: photoWidth, height: photoHeight });
+        // 写真を選択中かつ crop モードのときだけ、PowerPoint 風トリミングのオーバーレイ
+        // （元画像全体を暗く敷き、クロップ矩形の内側だけ明るく＋L字ハンドル）に切り替える。
+        // フレーム装飾（角丸・影・縁取り）はトリミング編集中は表示しない。
+        // select モード（通常）では従来どおり装飾込みで写真を描き、選択中なら四隅に ■ ハンドルを重ねる。
+        const photoSelected = getSelectedId() === 'photo';
+        const frozenFrame = photoEditModeStore.getFrozenFrame();
+        if (photoSelected && photoEditModeStore.isCropMode() && frozenFrame) {
+            drawCropModeOverlay(ctx, img, currentState, frozenFrame);
         } else {
             ctx.save(); // 写真とその装飾のためのコンテキスト保存
 
@@ -272,6 +358,11 @@ export async function drawPreview(currentState, previewCanvas, previewCtx) { // 
             }
 
             ctx.restore(); // 写真と装飾のためのコンテキスト復元 (クリッピング解除)
+
+            // select モードで写真選択中: 四隅に ■ リサイズハンドルを重ねる
+            if (photoSelected) {
+                drawPhotoResizeHandles(ctx, { x: photoX, y: photoY, width: photoWidth, height: photoHeight });
+            }
         }
     }
 
@@ -292,7 +383,10 @@ export async function drawPreview(currentState, previewCanvas, previewCtx) { // 
     const selectedId = getSelectedId();
     if (selectedId) {
         const box = interactionRegistry.getById(selectedId);
-        if (box) {
+        // crop モード中の写真は drawCropModeOverlay が独自の枠・ハンドルを描くため、
+        // 通常の点線ハイライト（ライブの写真ボックス基準）は描かない。
+        const skipOutline = selectedId === 'photo' && photoEditModeStore.isCropMode();
+        if (box && !skipOutline) {
             drawSelectionOutline(ctx, box);
             if (box.type === 'text') drawTextHandles(ctx, box);
         }

@@ -146,14 +146,17 @@
                         <fieldset>
                             <legend>写真の配置</legend>
                             <p class="custom-text-drag-hint" style="margin-top:0;">
-                                次に、その枠の中で写真をどう見せるかを決めます（画素を減らす縮小は行われません。ズームは元画像のうちどこまでを使うかの指定です）。
+                                次に、その枠の中で写真をどう見せるかを決めます（画素を減らす縮小は行われません。トリミングは元画像のうちどこを使うかの指定です）。
                             </p>
 
-                            <p class="subsection-heading">元画像から使う範囲</p>
+                            <p class="subsection-heading">トリミング（切り抜き範囲）</p>
+                            <p class="custom-text-drag-hint" style="margin-top:0;">
+                                プレビューで写真を選択してもう一度クリックするとトリミングモードになり、四隅のL字ハンドルで切り抜き範囲を決められます。写真の外をクリックまたはEscで確定します。
+                            </p>
                             <div class="form-row-simple">
-                                <label for="cropAspectRatio">切り出し比率:</label>
+                                <label for="cropAspectRatio">切り抜き比率:</label>
                                 <select id="cropAspectRatio">
-                                    <option value="original">元画像のまま</option>
+                                    <option value="free">フリー（自由比率）</option>
                                     <option value="1:1">1:1 (正方形)</option>
                                     <option value="4:3">4:3</option>
                                     <option value="3:4">3:4</option>
@@ -170,20 +173,15 @@
                                 <input type="number" id="cropCustomAspectRatioHeight" min="0.01" step="any" value="1">
                             </div>
                             <div class="form-row-slider">
-                                <label for="cropZoom">拡大率:</label>
-                                <input type="range" id="cropZoom">
-                                <span id="cropZoomValue">1.0x</span>
-                            </div>
-                            <div class="form-row-slider">
-                                <label for="cropOffsetX">横位置（パン）:</label>
+                                <label for="cropOffsetX">切り抜き位置（横）:</label>
                                 <input type="range" id="cropOffsetX"> <span id="cropOffsetXValue">中央</span>
                             </div>
                             <div class="form-row-slider">
-                                <label for="cropOffsetY">縦位置（パン）:</label>
+                                <label for="cropOffsetY">切り抜き位置（縦）:</label>
                                 <input type="range" id="cropOffsetY"> <span id="cropOffsetYValue">中央</span>
                             </div>
                             <p class="custom-text-drag-hint">
-                                ズームすると、その分だけ横位置・縦位置でパン（元画像内で切り出す位置の移動）ができるようになります。
+                                切り抜き範囲を狭めると、その分だけ横位置・縦位置で切り抜く場所を動かせます。
                             </p>
 
                             <p class="subsection-heading">枠内での配置</p>

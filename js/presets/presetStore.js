@@ -9,6 +9,7 @@
  * 自由テキストの内容・個数もプリセットの一部として保存・復元される。
  */
 import { getState, updateState, EDITABLE_SETTINGS_KEYS } from '../stateManager.js';
+import { migrateCropSettings } from '../utils/cropRect.js';
 
 const STORAGE_KEY = 'kakomi_presets';
 
@@ -87,6 +88,18 @@ export function deletePreset(id) {
 export function applyPreset(id) {
     const preset = loadPresets().find(p => p.id === id);
     if (!preset) return false;
-    updateState(preset.settings);
+
+    // 旧形式（{ aspectRatio, zoom, offsetX, offsetY }）で保存されたプリセットを、
+    // 現行の矩形ベース（{ aspectRatio, rect }）へ移行してから適用する。
+    // updateState は deepMerge のため、事前に cropSettings オブジェクトごと差し替えて
+    // 旧キー（zoom 等）が状態に残らないようにする。
+    const settings = { ...preset.settings };
+    if (settings.cropSettings) {
+        const state = getState();
+        settings.cropSettings = migrateCropSettings(
+            settings.cropSettings, state.originalWidth, state.originalHeight
+        );
+    }
+    updateState(settings);
     return true;
 }

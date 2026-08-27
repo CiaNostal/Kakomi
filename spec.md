@@ -125,11 +125,12 @@ Kakomi/
     │   ├── guideStore.js           # ドラッグ中に表示するスナップガイド線の一時状態
     │   ├── textHandleStore.js      # 選択中テキストの拡大・回転ハンドルの画面上座標の一時状態
     │   ├── snapEngine.js           # スナップ（吸着）位置の計算
-    │   ├── canvasInteraction.js    # pointerイベント処理・ドラッグ状態機械・矢印キーnudge・拡大回転ハンドル操作・写真クロップハンドル操作・ホイール操作
-    │   ├── photoCropStore.js       # 選択中の写真のクロップ矩形の四隅ハンドル座標（一時的なUI状態）
+    │   ├── canvasInteraction.js    # pointerイベント処理・ドラッグ状態機械・矢印キーnudge・拡大回転ハンドル操作・写真の選択/トリミングモード操作・ホイール操作
+    │   ├── photoCropStore.js       # 選択中の写真の四隅ハンドル座標（select=■/crop=L字）と、cropモード時のクロップ窓・元画像全体の画面矩形（一時的なUI状態）
+    │   ├── photoEditModeStore.js   # 写真選択中の編集サブモード（select / crop）と、cropモード開始時の座標スナップショット（frozenFrame）
     │   └── adapters/
     │       ├── textAdapter.js        # 自由テキストレイヤーの値変換（位置・サイズ・回転）
-    │       ├── photoAdapter.js       # 写真の枠内配置の値変換
+    │       ├── photoAdapter.js       # 写真の枠内配置・クロップ矩形・余白リサイズの値変換
     │       └── backgroundAdapter.js  # 拡大ぼかし背景の位置の値変換
     ├── ui/
     │   ├── scrubInput.js   # ドラッグでスクラブ／クリックでタイプ入力できる数値入力コンポーネント
@@ -139,7 +140,8 @@ Kakomi/
     │   └── colorHistoryStore.js # カラーピッカーで選んだ色の履歴（localStorage、全ピッカー共通）
     └── utils/
         ├── canvasUtils.js  # Canvas操作ユーティリティ
-        └── geometry.js     # 回転を伴う当たり判定・ハンドル配置用の幾何ヘルパー（rotatePoint）
+        ├── geometry.js     # 回転を伴う当たり判定・ハンドル配置用の幾何ヘルパー（rotatePoint）
+        └── cropRect.js     # クロップ矩形（元画像に対する割合 {x,y,w,h}）の幾何ヘルパーと旧cropSettingsからの移行
 ```
 
 ## 5. 主要モジュールの説明
@@ -326,7 +328,7 @@ UI要素の制御とイベントハンドリングを担当します。
 
 **拡大・回転ハンドルの描画（`drawTextHandles`）:** 選択中オブジェクトが`type === 'text'`の場合のみ、ボックス右下角に拡大ハンドル（四角）、ボックス上端中央から少し離れた位置に回転ハンドル（丸、接続線付き）を描画する。回転時はハンドルもボックスと一緒に回転させて描く。同時に、その画面上の座標（回転適用後）を`interaction/textHandleStore.js`に記録し、`canvasInteraction.js`がポインタ操作時の当たり判定に使う。詳細は5.22節参照。
 
-**写真選択中のクロップオーバーレイ描画（`drawCropOverlay`。5.24節参照）:** 選択中オブジェクトが写真（`getSelectedId() === 'photo'`）の場合、通常のフレーム装飾（角丸・影・縁取り）の代わりにこちらを描画する。Lightroom風に、クロップ範囲外（ズーム1.0相当で見えるはずの周辺部分）を暗くマスクしつつ、実際のクロップ矩形は通常表示＋四隅ハンドル付きで描く。
+**写真選択中の四隅ハンドル／トリミングオーバーレイ描画（5.24節・5.25節・7.2節参照）:** 選択中オブジェクトが写真（`getSelectedId() === 'photo'`）の場合、`photoEditModeStore`のモードで分岐する。**crop モード**かつ`frozenFrame`があれば`drawCropModeOverlay()`を呼ぶ（`frozenFrame`から「元画像全体の画面矩形」を逆算し、暗くマスクした上で現在のクロップ矩形の内側だけ明るく再描画、四隅にL字ハンドル）。**それ以外**は通常のフレーム装飾（角丸・影・縁取り）込みで写真を描き、select モードで選択中なら`drawPhotoResizeHandles()`で四隅に■ハンドルを重ねる。
 
 ### 5.6 backgroundRenderer.js
 背景描画を担当します。
@@ -475,8 +477,12 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 - スナップ: ドラッグ中は既定でスナップが有効。**Altキーを押しながらドラッグするとスナップを一時的に無効化**できる
 - 矢印キーnudge: 何かが選択されている状態で矢印キーを押すと1px相当、Shift+矢印キーで10px相当（いずれもプレビューcanvas上のpx単位）移動する。フォーカスが入力欄（input/textarea/select）にある間は無効化される
 - **拡大・回転ハンドル（テキスト系オブジェクトのみ。自由テキスト・撮影日・Exifブロックいずれも対応）**: `pointerdown`時、通常のオブジェクト当たり判定（`interactionRegistry.hitTest()`）より先に`textHandleStore.getTextHandles()`のハンドル座標との距離判定を行う（当たり判定半径`HANDLE_HIT_RADIUS = 10px`）。ヒットした場合は`dragState.mode`を`'resize'`または`'rotate'`にしてドラッグを開始し、通常の移動ドラッグ（`mode: 'move'`）とは別処理で`textAdapter.commitResize()`/`commitRotate()`を直接呼ぶ（アダプタの`getValue`/`computeChanges`/`commit`という汎用インターフェースではなく、テキスト専用の`getTransform`/`commitResize`/`commitRotate`を使う。写真・背景にはこの概念がないため）
-- **写真のクロップハンドル（四隅、オンキャンバス直接トリミング。5.24節参照）**: テキストの拡大ハンドルと同じパターンで、`pointerdown`時に`photoCropStore.getCropHandles()`の四隅座標との距離判定を通常のオブジェクト当たり判定より先に行う。ヒットした場合は`dragState.mode = 'cropResize'`にしてドラッグを開始し、`pointermove`で中心からの距離比（`scaleFactor`）を`photoAdapter.commitCropZoom()`に渡して`cropSettings.zoom`を更新する。写真本体（ハンドル以外の領域）のドラッグは、選択中かどうかに関わらず従来通り`photoAdapter`の`move`処理（`photoViewParams`更新）のまま変更していない
-- **写真上でのホイール操作（余白調整）**: `previewCanvas`に`wheel`イベントリスナーを追加。`interactionRegistry.hitTest()`で写真上かどうかを判定し、写真上でなければ`preventDefault()`せずページの通常スクロールに委ねる。写真上であれば`preventDefault()`した上で`photoAdapter.commitMarginDelta()`を呼び、`baseMarginPercent`を1刻み（`MARGIN_WHEEL_STEP`）で増減する（上スクロールで写真を大きく＝余白を減らす、下スクロールで余白を増やす）
+- **写真の四隅ハンドルとトリミングモード（5.24節・5.25節、7.2節「オンキャンバス・トリミング」参照）**: 写真選択中は`photoEditModeStore`のモード（`select`/`crop`）で挙動を切り替える。
+  - `pointerdown`で、テキストハンドルと同様に通常のオブジェクト当たり判定より先に`photoCropStore.getCropHandles()`の四隅座標を距離判定する（半径`HANDLE_HIT_RADIUS`）。**select モード**でヒット → `dragState.mode = 'photoResize'`（開始点と「中心→掴んだ隅」方向の単位ベクトルを保持し、`pointermove`で符号付き投影量を`photoAdapter.commitMarginResizeByDrag()`に渡し`baseMarginPercent`を増減。中心からの距離比を使う旧方式は「中心を通り越すと余白が逆に減る」不具合があったため置き換えた）。**crop モード**でヒット → `dragState.mode = 'cropRectResize'`（掴んだ隅と`frozenFrame.whole`のサイズから`rect`の差分を計算し`resizeCropRect()`→`photoAdapter.commitCropRect()`）。crop モードでクロップ窓の内側なら`dragState.mode = 'cropPan'`（`rect.x/y`をドラッグ方向へ平行移動）。
+  - `pointerup`で、pointerdown からの移動量が`CLICK_MOVE_THRESHOLD`(4px)未満なら「クリック」とみなす: select モードで選択済みの写真本体クリック → `photoEditModeStore.enterCrop()`（現在のプレビュー座標を`frozenFrame`にスナップショット）。crop モードでクロップ窓の外のクリック → `photoEditModeStore.exitCrop()`（出力枠は変えない）。
+  - `Escape`キーでも crop モードを抜ける。crop モード中は矢印キーがクロップ矩形のパンになる。
+  - 写真本体（ハンドル以外）の select モードでのドラッグは従来どおり`photoAdapter`の`move`処理（`photoViewParams`更新）。
+- **写真上でのホイール操作（余白調整。select モードのみ）**: `previewCanvas`に`wheel`イベントリスナーを追加。crop モード中、および写真以外の上では`preventDefault()`せずページの通常スクロールに委ねる。select モードで写真上なら`preventDefault()`して`photoAdapter.commitMarginDelta()`を呼び、`baseMarginPercent`を1刻み（`MARGIN_WHEEL_STEP`）で増減する（上スクロールで写真を大きく＝余白を減らす）
 - **選択変更と再描画（設計上の注記）:** `selectionStore`の選択状態変更（`setSelectedId()`）自体は`editState`の変更ではないため、`stateManager.js`の通常の状態変更リスナー（`requestRedraw`等）を経由しない。ドラッグを伴わない純粋なクリック選択（`pointerdown`直後に一度も`pointermove`が発火しないケース）でも選択ハイライトやハンドルが即座に表示されるよう、`main.js`が`selectionStore.onSelectionChange(() => requestRedraw())`を明示的に登録している。
   - 拡大: ボックス中心からハンドルまでの距離の比（現在距離÷ドラッグ開始時距離）をドラッグ開始時点の`size`に掛ける。回転角に関わらず「ハンドルを中心から遠ざける/近づける」動作になる
   - 回転: ボックス中心から見たポインタの角度（`Math.atan2`）の変化量をドラッグ開始時点の`rotation`に加算する。**Shiftキーを押しながらドラッグすると15度刻みにスナップ**する
@@ -487,7 +493,7 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 | アダプタ | 対象 | 値の単位系 | 備考 |
 |---|---|---|---|
 | `textAdapter.js` | `customTexts[]`の各レイヤー、および撮影日・Exifブロック（固定id `'text-date'`/`'text-exif'`） | 写真短辺基準の% | `customTexts[]`は`updateCustomTextLayer()`、撮影日・Exifは`updateState({ textSettings: { date/exif: changes } })`と、idに応じて内部で経路を振り分ける（`resolveLayer()`ヘルパー） |
-| `photoAdapter.js` | 写真の枠内配置（`photoViewParams`） | 可動範囲(movable width/height)に対する0.0〜1.0の割合 | `layoutCalculator.js`の可動範囲計算と対応させる必要があり、`getLastPreviewContext().scale`を使った変換が必要。加えて、オンキャンバス直接トリミング用に`getCropTransform()`/`commitCropZoom()`（四隅ハンドル用、`cropSettings.zoom`を操作）と`commitMarginDelta()`（写真上でのホイール用、`baseMarginPercent`を操作）を持つ（5.16節参照。通常の`getValue`/`computeChanges`/`commit`とは別の、`textAdapter`の`getTransform`/`commitResize`/`commitRotate`と同種の拡張） |
+| `photoAdapter.js` | 写真の枠内配置（`photoViewParams`） | 可動範囲(movable width/height)に対する0.0〜1.0の割合 | `layoutCalculator.js`の可動範囲計算と対応させる必要があり、`getLastPreviewContext().scale`を使った変換が必要。加えてトリミング用に、`getCropRect()`（`resolveCropRect`で現在の割合矩形を返す）・`commitCropRect(rect)`（`cropSettings.rect`を更新）・`getCropConstraint()`（比率制約の取得）・`commitMarginResizeByDrag(startMargin, projPx, startShortSidePx)`（select モードの四隅ハンドル→`baseMarginPercent`、符号付き投影量ベース）・`commitMarginDelta()`（ホイール→`baseMarginPercent`）を持つ（5.16節参照。`textAdapter`の`getTransform`系と同種の拡張） |
 | `backgroundAdapter.js` | 拡大ぼかし背景の位置（`imageBlurBackgroundParams`） | 写真短辺基準の%（textAdapterと同じ単位系） | 単色背景（`backgroundType === 'color'`）の場合はそもそも`interactionRegistry`に登録されないため、ドラッグ対象にならない |
 
 **単位変換上の注意（重要）:** `getLastPreviewContext()`が返す`photoShortSidePx`は、写真の実解像度ではなく**プレビュー描画時に縮小された後の短辺px**を指す。ドラッグのポインタ移動量（`dxPx`/`dyPx`）も同じプレビューcanvasのpx空間の値であるため、`textAdapter`や`backgroundAdapter`ではscaleによる再変換は不要で、単純な比率計算（`dxPx / photoShortSidePx * 100`）だけで正しく変換できる。過去にここへ誤って`/ scale`を追加してしまい、プレビューの縮小率次第でドラッグ量が数倍に増幅される不具合が発生したことがあるため、新しいアダプタを追加する際は注意すること。
@@ -550,12 +556,19 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 - `rotatePoint(x, y, cx, cy, angleDeg)`: 点`(x, y)`を中心`(cx, cy)`を軸に`angleDeg`度（時計回り、Canvas座標系）回転させた座標を返す。逆回転させたい場合は`-angleDeg`を渡す（`interactionRegistry.hitTest()`がクリック座標をローカル座標に戻す用途で使用）。`canvasRenderer.js`の`drawTextHandles()`はハンドルの画面上座標（回転適用後）を求めるのに使用する
 
 ### 5.24 interaction/photoCropStore.js
-選択中の写真に表示する「オンキャンバス直接トリミング」オーバーレイ（Lightroom風。5.5節`drawCropOverlay`参照）の、クロップ矩形の四隅ハンドルの画面上の座標（previewCanvasのpx空間）を一時的に保持する。`textHandleStore.js`（5.22節）と同じ「描画側が書き、操作側が読む」パターンだが、写真のクロップ矩形は回転しないため回転ハンドルは持たない。
+選択中の写真に表示する四隅ハンドルの画面上の座標（previewCanvasのpx空間）を一時的に保持する。`textHandleStore.js`（5.22節）と同じ「描画側が書き、操作側が読む」パターンだが、写真の四隅ハンドルは回転しないため回転ハンドルは持たない。select モードでは■リサイズハンドル、crop モードではL字ハンドルと見た目・挙動は変わるが、四隅の座標を共有ストアに置いて同じ当たり判定経路で拾う点は共通。
 
 **主要関数:**
-- `setCropHandles(h)`: `{ corners: { tl, tr, bl, br }, center: {x,y} }`を設定する（`canvasRenderer.js`の`drawCropOverlay()`が`drawPreview`のたびに書き込む）
+- `setCropHandles(h)`: `{ corners: { tl, tr, bl, br }, center: {x,y}, cropScreen?, whole? }`を設定する（`canvasRenderer.js`の`drawPhotoResizeHandles()`／`drawCropModeOverlay()`が`drawPreview`のたびに書き込む）。`cropScreen`（現在のクロップ矩形の画面矩形）と`whole`（元画像全体の画面矩形）は crop モードのときだけ入り、`canvasInteraction.js`が本体パン・ハンドルドラッグの座標変換に使う
 - `getCropHandles()`: 現在の値を取得する（未選択または写真以外を選択中は`null`。`canvasInteraction.js`の`pointerdown`がハンドルへの当たり判定に読み取る）
 - `clearCropHandles()`: 値をクリアする（`drawPreview`の冒頭で`interactionRegistry.clear()`等と合わせて呼ばれる）
+
+### 5.25 interaction/photoEditModeStore.js
+写真が選択されているときの「編集サブモード」（`'select'` / `'crop'`）を保持する一時UI状態。`selectionStore.js`（5.13節）と同じく`editState`とは分離しており、Undo履歴にも書き出しファイルにも含めない。
+
+- `getMode()` / `isCropMode()`、`enterCrop(frozenFrame)` / `exitCrop()` / `reset()`、`onChange(fn)`。
+- `frozenFrame`: crop モードに入った瞬間の `{ scale, photoBox0: {x,y,width,height}, rect0: {x,y,w,h} }`。crop モード中の描画（`drawCropModeOverlay`）と当たり判定はこれを基準に固定する（7.2節「フリーズフレーム」参照）。
+- `main.js`が`onChange(() => requestRedraw())`（モード変更＝`editState`変更ではないため明示的に再描画）と、`selectionStore.onSelectionChange`内で「写真以外が選択されたら`reset()`」を配線する。
 
 ## 6. データフロー
 
@@ -644,25 +657,22 @@ Blobをダウンロード
 
 ### 7.1 構図調整（トリミング）
 
-`cropSettings`として実装されており、「レイアウト設定」タブの「構図調整（トリミング）」フィールドセットからスライダー・数値入力で操作できる（出力アスペクト比と同じ、プリセットselect＋幅/高さ自由入力＋⇄反転ボタンのパターン）。
+`cropSettings`として実装される。**2026年8月28日の再設計で、中央固定ズーム＋パン方式（`{ aspectRatio, zoom, offsetX, offsetY }`）から、非対称な切り抜き矩形をそのまま持つ方式（`{ aspectRatio, rect }`）に変更した**。詳細な経緯は `docs/session-log-2026-08-28.md` 参照。
 
-**設定項目:**
-- **アスペクト比**: 元画像から切り出す部分のアスペクト比
-  - `'original'`: 元画像の比率を使用（UI上は「元画像のまま」）
-  - `'1:1'`, `'4:3'`, `'16:9'`など: 指定された比率で切り出し。プリセット（1:1, 4:3, 3:4, 16:9, 9:16）に加え、「カスタム」選択時は幅/高さの自由入力＋⇄反転ボタンで任意の比率を指定できる
-- **拡大率（ズーム）**: 元画像の解像度を維持する範囲でのトリミング領域の調整
-  - 範囲: 1.0〜5.0（1.0で拡大なし、UIスライダーの上限。内部計算上は1.0以上であれば動作する）
-  - 基準サイズ（ズーム1.0時点でアスペクト比に収まる最大の切り出し窓）を、指定したズーム倍率で均等に縮小する方式
-- **位置調整（パン、offsetX/Y）**: ズームによって生まれた可動範囲内で、切り出し窓の位置を調整
-  - 範囲: 0.0-1.0（0.5が中央）
-  - X方向: 横方向の位置、Y方向: 縦方向の位置
-  - **重要な設計上の注記**: 可動範囲は`元画像のサイズ - ズーム後の切り出し窓のサイズ`で決まるため、ズームするほどパンできる範囲が広がる。ズーム1.0かつアスペクト比が`'original'`（元画像と同じ比率）の場合は可動範囲が0になり、パンしても見た目は変化しない（切り出し窓がすでに原画像いっぱいのため）
-  - 以前の実装では、パン位置を「ズーム前の基準窓内での位置」として決定してからズームで中心を縮小する方式だったため、`'original'`のようにズーム前の可動範囲が0のケースではズームインしてもパンが一切効かないという制約があった。現在の実装（`layoutCalculator.js`）はズーム後の可動範囲を基準にパン位置を計算するため、常に「ズームした分だけパンできる」という直感的な挙動になっている
+**データモデル:**
+- **`cropSettings.rect`**: 切り抜き矩形を「元画像に対する割合」 `{ x, y, w, h }`（いずれも 0–1、x/y が左上、w/h がサイズ）で保持する。これが唯一の表現。
+- **`cropSettings.aspectRatio`**: 切り抜き矩形に課す比率制約。
+  - `'free'`: 制約なし（自由比率、UI上は「フリー（自由比率）」）。既定値。
+  - `'1:1'`, `'4:3'`, `'16:9'` など、または `'幅:高さ'` のカスタム: その比率でしか矩形をリサイズできない。比率を選ぶと、そのとき現在の矩形の中心を保ったまま、その比率に一致する最大の矩形へ再フィットする（`utils/cropRect.js` の `fitRectToAspect`）。
+
+**操作方法:**
+- **プレビュー上（オンキャンバス）**: 5.16〜5.17節・7.2節「オンキャンバス・トリミング」参照。写真を選択した状態でもう一度クリックすると「トリミングモード」に入り、四隅の L 字ハンドルで切り抜き範囲を指定、写真本体ドラッグで切り抜き範囲を平行移動、写真の外をクリックまたは Esc で確定する。
+- **「レイアウト」パネルの数値 UI**: 「切り抜き比率」select（`free` / 各比率 / カスタム幅高さ＋⇄）と、「切り抜き位置（横／縦）」スライダー。位置スライダーは 0–1（0.5＝中央）の値で、`rect.x = (1 - rect.w) * panX` のように矩形位置へ写像される（`uiController.js` の `cropRectWithPan` / `cropPanFromRect`）。
 
 **実装詳細:**
-- `layoutCalculator.js`の`calculateLayout()`関数で処理
-- 元画像から切り出す領域（sourceX, sourceY, sourceWidth, sourceHeight）を計算
-- 切り出した領域は元画像の解像度を完全に維持して描画される
+- `layoutCalculator.js` の `calculateLayout()` が `utils/cropRect.js` の `resolveCropRect(cropSettings, originalW, originalH)` を呼んで矩形を得る。`resolveCropRect` は `cropSettings.rect` が有効ならそれを、旧 `zoom`/`offset` 形式ならその場で矩形へ変換、どちらでもなければ全体（`{0,0,1,1}`）を返すため、未移行の状態でも描画は壊れない。
+- `sourceX = rect.x * originalW`、`sourceWidth = rect.w * originalW`（Y も同様）。`destWidth === sourceWidth`（元画像の解像度を一切変えないという中核不変条件は維持）。
+- **旧形式からの移行**: 保存済みプリセットは `presetStore.js` の `applyPreset()` が `utils/cropRect.js` の `migrateCropSettings()` で `{ aspectRatio, rect }` に正規化してから適用する。旧 `'original'`＋ズーム1＋オフセット0.5 は `rect {0,0,1,1}` に完全一致、旧 `'original'` は `'free'` に寄せる。固定比率＋ズームありは幾何変換でベストエフォート移行し、画像ロード前に適用された場合は `stateManager.js` の `setImage()` が実際の画像比率で `rect` を再フィットする。
 
 ### 7.2 レイアウト設定
 - **出力アスペクト比**: 最終的な出力画像の縦横比を指定
@@ -671,7 +681,7 @@ Blobをダウンロード
     - 内部的には `outputTargetAspectRatioString` に `"custom:"` プレフィックスを付けた古い形式の後方互換処理（プレフィックス除去）が残っているが、現在のUIはプレフィックスなしの `"幅:高さ"` 形式で保存する。
   - `layoutCalculator.js` は特別な値 `"original_photo"`（入力写真の比率をそのまま使う）にも対応しているが、現在のプリセット選択肢にはこの項目がなく、UIから選択する手段はない。
   - これが最終的なJPEGのアスペクト比となる
-- **基準余白**: 構図調整後の写真の短辺に対する%で指定（0-100%）
+- **基準余白**: 構図調整後の写真の短辺に対する%で指定（0-300%）
   - この値は「最小限の余白量」の目安
   - 実際の余白は、出力画像の目標アスペクト比を維持するために、この基準値よりも一部が自動的に広がる場合がある
 - **写真位置調整**: 出力画像のフレーム内で、写真をどこに配置するか
@@ -680,9 +690,23 @@ Blobをダウンロード
   - スライダーでの調整に加え、**プレビュー上で写真を直接ドラッグしても位置を調整できる**（`interaction/adapters/photoAdapter.js`）。ドラッグ中はキャンバス中央線・端・他オブジェクトへのスナップも働く
   - **注意:** 仕様書v1では「9点から選択」とあるが、現在の実装では連続的な位置調整（スライダー・ドラッグの両方）となっている
 
-**UI上のグルーピング（2026年8月のUI刷新で変更）:** 「出力フォーマット」（アスペクト比＋余白）を「レイアウト」フライアウトパネルの先頭に配置し、その下に「写真の配置」fieldsetとして「元画像から使う範囲」（7.1節の構図調整＝切り出し比率・ズーム・パン）と「枠内での配置」（本節の写真位置調整）をサブセクション見出し付きでまとめている。これは「まず出力の枠を決め、その中で写真を配置する」という操作順序をUI上でも表すためのグルーピング変更であり、`cropSettings`と`photoViewParams`という2つの状態・計算ロジック自体は従来のまま独立している（統合していない）。
+**UI上のグルーピング（2026年8月のUI刷新で変更）:** 「出力フォーマット」（アスペクト比＋余白）を「レイアウト」フライアウトパネルの先頭に配置し、その下に「写真の配置」fieldsetとして「トリミング（切り抜き範囲）」（7.1節＝切り抜き比率・切り抜き位置）と「枠内での配置」（本節の写真位置調整）をサブセクション見出し付きでまとめている。これは「まず出力の枠を決め、その中で写真を配置する」という操作順序をUI上でも表すためのグルーピングであり、`cropSettings`と`photoViewParams`という2つの状態・計算ロジック自体は独立している（統合していない）。
 
-**オンキャンバス直接トリミング（2026年8月27日実装）:** 写真本体ドラッグ（枠内配置）・写真の四隅ドラッグ（クロップズーム）・写真上でのホイール（余白調整）という3種類のジェスチャーで操作対象を切り分けることで、別モード/別ビューへの切り替えなしに実現している。詳細は5.16〜5.17節、11.1節参照。
+**オンキャンバス・トリミング（2026年8月28日に再設計。旧「オンキャンバス直接トリミング」＝中央固定ズーム方式を置き換え）:**
+
+写真が選択されているとき、`photoEditModeStore`（5.25節）が **select モード** と **crop モード** を持ち、**プレビュー上での「ドラッグを伴わないクリック」で切り替える**（専用ボタンは設けない）。写真以外を選択すると select に戻る。
+
+| | select モード（通常） | crop モード（トリミング編集中） |
+|---|---|---|
+| 四隅ハンドル | ■（白塗り・黒フチ）。ドラッグ＝**余白 `baseMarginPercent` の増減**（外へ引く＝余白減＝写真が枠いっぱいへ。写真のピクセル数・写る範囲は不変）。「中心→掴んだ隅」方向への符号付き移動量で余白を動かす（`photoAdapter.commitMarginResizeByDrag`。中心を通り越しても反転せず、移動量に比例。感度は `MARGIN_RESIZE_FACTOR`） | L 字（白塗り・黒フチ）。ドラッグ＝**クロップ矩形 `cropSettings.rect` の変更**（掴んだ隅だけ動く。比率制約時は連動。`resizeCropRect`→`photoAdapter.commitCropRect`） |
+| 写真本体ドラッグ | 出力枠内での写真位置（`photoViewParams`）。従来どおり | クロップ矩形の平行移動（`rect.x/y`。ドラッグ方向にクロップ窓が動く） |
+| 表示 | フレーム装飾（角丸・影・縁取り）込みで写真を描画＋■ハンドル | クロップ矩形の内側だけ明るく、外側を暗くマスクした周辺減光オーバーレイ＋L字ハンドル。枠線・ハンドルは黒フチ＋白で明暗どちらの背景でも視認できる |
+| ホイール／矢印キー | ホイール＝余白、矢印＝`photoViewParams` の nudge | ホイール無効、矢印＝クロップ矩形のパン（本体ドラッグと同じ向き） |
+| 抜け方 | 選択済みの写真をもう一度クリック → crop へ | 写真の外をクリック／Esc → select へ戻る。**出力枠（`outputTargetAspectRatioString`）は変えない**。枠は固定のまま、切り抜かれた写真がそのクロップ比率の形で枠の中に配置される（横長にクロップすれば写真が横長の帯になり、上下に余白がつく） |
+
+**設計上の要点（フリーズフレーム）:** Kakomi は「出力枠＝写真＋余白、余白は写真短辺に対する％」というモデルのため、クロップ矩形を変えても画面上の写真ボックスの大きさはほぼ変わらない（余白が比例して縮むだけ。`session-log-2026-08-27.md` 2.2節）。このままライブに再レイアウトすると「内側へドラッグしているのに枠が縮まない」体験になる。そこで crop モードに入った瞬間のプレビュースケールと写真ボックス矩形・クロップ矩形を `photoEditModeStore.frozenFrame` にスナップショットし、crop モード中の描画・当たり判定はこれを基準に固定する（`canvasRenderer.js` の `drawCropModeOverlay`）。モード終了時に通常描画へ戻り、`calculateLayout` が最終 `rect` で一度だけリフローして収束する（PowerPoint の「確定」に相当）。
+
+（写真のキャンバス内位置まで crop 枠で決める案はユーザーの意向で一旦後回し。）
 
 ### 7.3 背景編集
 - **背景タイプ**: 「単色」または「写真の拡大ぼかし画像」から選択
@@ -898,7 +922,7 @@ Blobをダウンロード
 ### 11.1 インタラクション基盤の続き
 - ✅ 構図調整（クロップのズーム・パン）の数値UI化（7.1節参照）
 - ✅ テキストの拡大・回転ハンドル（5.22節参照。自由テキスト・撮影日・Exifブロックいずれも対応。photo/backgroundは対象外）
-- ✅ **オンキャンバス直接トリミング（2026年8月27日実装、7.2節・5.16〜5.17節参照）**: 「写真の枠内配置ドラッグ」（既存、本体ドラッグ）と「クロップズーム」（新規、四隅ハンドルドラッグ）は、モード切り替えではなくジェスチャーの種類（本体/四隅ハンドル/ホイール）で操作対象を切り分けることで共存させている。写真上でのホイール操作による余白（`baseMarginPercent`）調整も同時に追加した。クロップ矩形自体のパン（`cropSettings.offsetX/Y`）は引き続き既存スライダーのみで操作する（on-canvasパンは未対応、11.5節参照）
+- ✅ **オンキャンバス・トリミング（2026年8月27日に中央固定ズーム方式で実装 → 8月28日にPowerPoint型へ再設計、7.2節・5.16〜5.17節・5.25節参照）**: 写真選択中は`photoEditModeStore`が select / crop モードを持ち、プレビュー上のクリックで切り替える。select モードの四隅■ハンドル＝余白（`baseMarginPercent`）、写真本体ドラッグ＝枠内配置（`photoViewParams`）。crop モードの四隅L字ハンドル＝切り抜き矩形（`cropSettings.rect`）、写真本体ドラッグ＝切り抜き位置のパン。`cropSettings`は割合矩形 `{ aspectRatio, rect }` ベース。クロップ矩形のon-canvasパンは crop モードの写真本体ドラッグ／矢印キーで対応済み
 - 自由テキストレイヤーの並び替え・複製
 - 複数選択・一括移動
 - タッチデバイスでの実機確認（Pointer Events自体は実装済みだが未検証）

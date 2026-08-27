@@ -10,6 +10,12 @@
  */
 import { getState, updateState } from '../../stateManager.js';
 import { controlsConfig } from '../../uiDefinitions.js';
+import { resolveCropRect, parseAspectRatio } from '../../utils/cropRect.js';
+
+// select モードの四隅 ■ ハンドルのドラッグ感度。
+// 掴んだ隅を「中心→隅の方向」へ写真短辺ぶん動かすと、baseMarginPercent が
+// 100% * この係数 だけ減る（外へ引く＝余白減＝写真が大きく）。手触りに応じて調整してよい。
+const MARGIN_RESIZE_FACTOR = 1.0;
 
 function clamp01(v) {
     return Math.min(1, Math.max(0, v));
@@ -50,30 +56,59 @@ const photoAdapter = {
     },
 
     /**
-     * 写真の四隅ハンドルのドラッグ開始時点のクロップズーム値を取得する
-     * （オンキャンバス直接トリミング用。5.12節以降のインタラクション基盤におけるgetTransform相当）。
+     * 現在のクロップ矩形（元画像に対する割合 { x, y, w, h }）を取得する。
+     * crop モードのハンドルドラッグ／パンの開始値として使う。
      */
-    getCropTransform() {
-        return { zoom: getState().cropSettings.zoom };
+    getCropRect() {
+        const state = getState();
+        return resolveCropRect(state.cropSettings, state.originalWidth, state.originalHeight);
     },
 
     /**
-     * 写真の四隅ハンドルのドラッグによるクロップズーム変更を反映する。
-     * ハンドルを中心から遠ざける=ズームアウト（元画像をより広く使う）、
-     * 近づける=ズームイン（寄る）という直感的な操作にするため、
-     * scaleFactor（ドラッグ開始時距離に対する現在距離の比）の逆数をズームに掛ける。
-     * これはtextAdapter.commitResize()とは逆方向の関係になる点に注意
-     * （テキストはハンドルを遠ざけるほど直接サイズが大きくなるが、
-     * 写真のクロップズームは「見た目のボックスサイズ」ではなく「元画像からの切り出し倍率」を
-     * 表すため、ボックスを大きく見せたい＝ズーム値を下げる、という逆相関になる）。
-     * @param {number} startZoom - ドラッグ開始時点のcropSettings.zoom
-     * @param {number} scaleFactor - 開始時距離に対する現在距離の比
+     * crop モードのハンドルドラッグに課す比率制約を取得する。
+     * @returns {{aspectValue: number|null, imgAspectValue: number}}
+     *   aspectValue: 望むクロップ比率（幅/高さ、元画像ピクセル基準）。'free' なら null。
+     *   imgAspectValue: 元画像の 幅/高さ。
      */
-    commitCropZoom(startZoom, scaleFactor) {
-        const { min, max } = controlsConfig.cropZoom;
-        const factor = scaleFactor > 0 ? scaleFactor : 1;
-        const newZoom = Math.round(Math.min(max, Math.max(min, startZoom / factor)) * 100) / 100;
-        updateState({ cropSettings: { zoom: newZoom } });
+    getCropConstraint() {
+        const state = getState();
+        const imgAspectValue = (state.originalWidth > 0 && state.originalHeight > 0)
+            ? state.originalWidth / state.originalHeight : 1;
+        return { aspectValue: parseAspectRatio(state.cropSettings.aspectRatio), imgAspectValue };
+    },
+
+    /** select モードの四隅 ■ ハンドルのドラッグ開始時点の baseMarginPercent。 */
+    getMarginPercent() {
+        return getState().baseMarginPercent;
+    },
+
+    /**
+     * select モードの四隅 ■ ハンドルのドラッグによる「写真の拡大縮小」を baseMarginPercent の
+     * 増減として反映する。中心→掴んだ隅の方向への符号付き移動量 projPx（プレビュー px）を使う。
+     * projPx > 0（外へ引く）で余白減、< 0（内へ押す）で余白増。
+     *
+     * 旧実装は「中心からの距離比」を使っていたため、(a) マウス移動量と拡大縮小量が対応せず、
+     * (b) 中心を通り越すと距離が再び増えて余白が逆に減る、という問題があった。符号付き投影量に
+     * 変えることで単調（通り越しても反転しない）かつ移動量に比例した挙動になる。
+     * @param {number} startMargin - ドラッグ開始時点の baseMarginPercent
+     * @param {number} projPx - 中心→隅方向への符号付き移動量（プレビュー px、ドラッグ開始点からの差分）
+     * @param {number} startShortSidePx - ドラッグ開始時点のプレビュー上の写真短辺（px）
+     */
+    commitMarginResizeByDrag(startMargin, projPx, startShortSidePx) {
+        const { min, max } = controlsConfig.baseMarginPercent;
+        const deltaPct = projPx * (100 / Math.max(1, startShortSidePx)) * MARGIN_RESIZE_FACTOR;
+        const raw = startMargin - deltaPct;
+        const newMargin = Math.round(Math.min(max, Math.max(min, raw)) * 10) / 10;
+        updateState({ baseMarginPercent: newMargin });
+    },
+
+    /**
+     * crop モードで算出した新しいクロップ矩形を反映する。
+     * 比率制約のクランプ・[0,1] へのクランプは呼び出し側（canvasInteraction.js）が済ませた前提。
+     * @param {{x:number,y:number,w:number,h:number}} rect
+     */
+    commitCropRect(rect) {
+        updateState({ cropSettings: { rect: { x: rect.x, y: rect.y, w: rect.w, h: rect.h } } });
     },
 
     /**

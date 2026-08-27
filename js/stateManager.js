@@ -1,5 +1,6 @@
 // js/stateManager.js
 import { googleFonts } from './uiDefinitions.js'; // Google Fontsリストをインポート
+import { parseAspectRatio, fitRectToAspect, isValidRect, FULL_RECT } from './utils/cropRect.js';
 
 /**
  * stateManager.js
@@ -117,12 +118,13 @@ let editState = {
         quality: 100,
         preserveExif: true
     },
-    // 元画像から切り出すための構図調整設定を追加
+    // 元画像から切り出すための構図調整設定。
+    // rect は「元画像に対する割合」 { x, y, w, h }（0–1）で切り出し矩形を表す。
+    // aspectRatio はクロップ矩形に課す比率制約（'free' なら自由、'1:1' 等なら固定）。
+    // 旧形式（zoom / offsetX / offsetY）はプリセット読込時に utils/cropRect.js で矩形へ移行する。
     cropSettings: {
-        aspectRatio: 'original',
-        zoom: 1.0,
-        offsetX: 0.5,
-        offsetY: 0.5
+        aspectRatio: 'free',
+        rect: { x: 0, y: 0, w: 1, h: 1 }
     },
     // Exif情報
     exifData: null
@@ -289,6 +291,21 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
     editState.originalHeight = img.height;
     editState.exifData = exifData;
     editState.originalFileName = typeof fileName === 'string' ? fileName : 'image';
+
+    // クロップ矩形の後追い整形。
+    // ・rect が壊れている場合は全体に戻す。
+    // ・aspectRatio が固定比率なのに rect が既定の全体のまま（画像ロード前にプリセットを
+    //   適用したケースなど、比率に合った矩形をまだ計算できていない状態）の場合は、
+    //   ここで初めて分かる元画像の比率を使ってその比率の最大内接矩形へ再フィットする。
+    const crop = editState.cropSettings;
+    if (!isValidRect(crop.rect)) {
+        crop.rect = { ...FULL_RECT };
+    }
+    const aspectValue = parseAspectRatio(crop.aspectRatio);
+    const rectIsFull = crop.rect.x === 0 && crop.rect.y === 0 && crop.rect.w === 1 && crop.rect.h === 1;
+    if (aspectValue != null && rectIsFull && img.width > 0 && img.height > 0) {
+        crop.rect = fitRectToAspect(crop.rect, aspectValue, img.width / img.height);
+    }
 
     // Reset relevant parts of the state for the new image
     // editState.photoViewParams = { offsetX: 0.5, offsetY: 0.5 };

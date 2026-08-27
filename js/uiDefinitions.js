@@ -101,14 +101,15 @@ export const exifTagDefinitions = [
  */
 export const controlsConfig = {
     // レイアウト設定タブ - 構図調整（クロップ）
-    cropAspectRatio: { defaultValue: 'original' }, // select要素のデフォルト選択値
-    cropZoom: { defaultValue: 1.0, min: 1.0, max: 5.0, step: 0.05 }, // range input
+    cropAspectRatio: { defaultValue: 'free' }, // select要素のデフォルト選択値（'free' = 自由比率）
+    // クロップ位置スライダー。値は 0–1（0.5 = 中央）で、cropSettings.rect のパンに写像される
+    // （uiController.js の cropRectWithPan / cropPanFromRect）。
     cropOffsetX: { defaultValue: 0.5, min: 0, max: 1, step: 0.01 }, // range input（パン）
     cropOffsetY: { defaultValue: 0.5, min: 0, max: 1, step: 0.01 }, // range input（パン）
 
     // レイアウト設定タブ
     outputAspectRatio: { defaultValue: '1:1' }, // select要素のデフォルト選択値
-    baseMarginPercent: { defaultValue: 5, min: 0, max: 100, step: 0.5 }, // number input
+    baseMarginPercent: { defaultValue: 5, min: 0, max: 300, step: 0.5 }, // number input（写真短辺に対する%。大きめの余白も置けるよう上限300%）
     photoPosX: { defaultValue: 0.5, min: 0, max: 1, step: 0.01 }, // range input
     photoPosY: { defaultValue: 0.5, min: 0, max: 1, step: 0.01 }, // range input
     // 背景編集タブ

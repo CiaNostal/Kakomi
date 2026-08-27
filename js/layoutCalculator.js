@@ -2,6 +2,7 @@
  * layout.js
  * レイアウト計算を担当するモジュール
  */
+import { resolveCropRect } from './utils/cropRect.js';
 
 /**
  * アスペクト比文字列から後方互換用の "custom:" プレフィックスを取り除く
@@ -37,44 +38,15 @@ function calculateLayout(currentState) {
     const originalImgHeight = currentState.originalHeight;
     const { offsetX, offsetY } = currentState.photoViewParams;
 
-    // 1. 構図調整設定に基づいて、元画像から切り出す領域を決定
-    const cropSettings = currentState.cropSettings;
-    let sourceX, sourceY, sourceWidth, sourceHeight;
-
-    // アスペクト比を解析
-    let cropAspectRatio;
-    if (cropSettings.aspectRatio === 'original') {
-        cropAspectRatio = originalImgWidth / originalImgHeight;
-    } else {
-        const parts = cropSettings.aspectRatio.split(':');
-        cropAspectRatio = parseFloat(parts[0]) / parseFloat(parts[1]);
-    }
-
-    // ズーム1.0（拡大なし）時点で元画像に収まる最大サイズの切り出し窓（基準サイズ）を決定
-    let baseWidth, baseHeight;
-    if (originalImgWidth / originalImgHeight > cropAspectRatio) {
-        // 元画像が切り出し比率より横長の場合、高さに合わせる
-        baseHeight = originalImgHeight;
-        baseWidth = baseHeight * cropAspectRatio;
-    } else {
-        // 元画像が切り出し比率より縦長の場合、幅に合わせる
-        baseWidth = originalImgWidth;
-        baseHeight = baseWidth / cropAspectRatio;
-    }
-
-    // ズームを適用：基準サイズより小さい窓ほど拡大されて見える
-    const zoom = Math.max(1.0, cropSettings.zoom || 1.0);
-    sourceWidth = baseWidth / zoom;
-    sourceHeight = baseHeight / zoom;
-
-    // パン：ズームによって生まれた可動範囲（元画像内で切り出し窓が動ける範囲）の中で、
-    // offsetX/offsetY（0.0-1.0、0.5が中央）に応じて窓を配置する。
-    // 可動範囲はズームするほど広がるため、ズームインして初めてパンが効くようになる
-    // （ズーム1.0かつaspectRatioが'original'の場合は可動範囲が0になり、パンは無効）。
-    const movableSourceX = originalImgWidth - sourceWidth;
-    const movableSourceY = originalImgHeight - sourceHeight;
-    sourceX = movableSourceX * cropSettings.offsetX;
-    sourceY = movableSourceY * cropSettings.offsetY;
+    // 1. 構図調整設定に基づいて、元画像から切り出す領域を決定する。
+    // cropSettings.rect は「元画像に対する割合」 { x, y, w, h }（0–1）で切り出し矩形を表す。
+    // 旧形式（zoom / offsetX / offsetY）の状態が渡された場合も resolveCropRect が矩形へ変換する。
+    // 切り出した領域は元画像の解像度をそのまま維持して描画される（destWidth === sourceWidth）。
+    const cropRect = resolveCropRect(currentState.cropSettings, originalImgWidth, originalImgHeight);
+    const sourceX = cropRect.x * originalImgWidth;
+    const sourceY = cropRect.y * originalImgHeight;
+    const sourceWidth = cropRect.w * originalImgWidth;
+    const sourceHeight = cropRect.h * originalImgHeight;
 
     // 描画サイズ = 切り出したサイズ（元の解像度を維持）
     const photoDrawWidthPx = sourceWidth;
