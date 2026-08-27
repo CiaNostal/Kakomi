@@ -850,6 +850,22 @@ fieldset div span {
     margin-top: 0.35rem;
 }
 
+/* デスクトップの3カラム時は、アプリシェルの高さをビューポートに固定して余剰をクリップする。
+   内側（`.tab-navigation` / `.tab-content-area` / `.canvas-area`）はそれぞれ overflow を持ち、
+   はみ出しは各自の中でスクロールする。
+   これがないと、パネル（`.tab-content-area`）を開くトランジション中に、パネル内容が
+   極小幅（width ~0）でいったんレイアウトされて縦に ~1800px まで伸び、`.app-container` が
+   `min-height:100vh` で下方向に伸びられるため、キャンバスを含む画面全体が一瞬ガクッと下がって
+   戻る（`docs/session-log-2026-08-29-6.md`）。あわせて G-1 の残り 2px も解消する。
+   幅 1024px 以下では `.app-shell` が縦積みになり全体スクロールが要るため、この固定はかけない。 */
+@media (min-width: 1025px) {
+    .app-container {
+        height: 100dvh;
+        min-height: 0;
+        overflow: hidden;
+    }
+}
+
 /* レスポンシブ対応 */
 @media (max-width: 1024px) {
     .app-shell {

@@ -84,7 +84,7 @@ UI表示用とテキストオーバーレイ描画用は別系統のフォント
 
 ### 3.1 UIシェル構成（アイコンレール + フライアウトパネル + キャンバスエリア）
 
-`index.html`の全体レイアウトは次の3カラム構成（`.app-shell`、`style.css`）。**2026年8月のフェーズ4で Adobe Lightroom Web を参照したシェル刷新を行った**（`docs/roadmap.md` E-1〜E-5・A-8、`docs/session-log-2026-08-29-3.md`）。データフロー・状態管理には影響しない、純粋なUI/DOM構成の話である。
+`index.html`の全体レイアウトは次の3カラム構成（`.app-shell`、`style.css`）。**2026年8月のフェーズ4で Adobe Lightroom Web を参照したシェル刷新を行った**（`docs/roadmap.md` E-1〜E-5・A-8、`docs/session-log-2026-08-27-5.md`）。データフロー・状態管理には影響しない、純粋なUI/DOM構成の話である。
 
 ```
 .app-header（上部バー。ブランド表示・「画像を開く」ボタン・Undo/Redo・右端に「ダウンロード」ボタン＋画質ポップオーバー）
@@ -96,9 +96,10 @@ UI表示用とテキストオーバーレイ描画用は別系統のフォント
 ```
 
 - **タブ再クリックでパネルが出入りする（フェーズ4 E-1）**: `tabManager.js`は`.tab-button`（`data-tab`属性）のクリックで`.tab-pane`の`active`クラスを付け替える。加えて、**アクティブなタブをもう一度クリックすると`.app-shell`に`.panel-collapsed`を付けてパネル幅を 0 に畳む**（CSS トランジション。キャンバスが広がる）。別のタブを押すと`.panel-collapsed`を外して開き直す。畳まれている間は`.tab-button.active`が無いので`getActiveTab()`は`null`を返す（タブ別ドラッグは「開いているタブ」なしとして扱う＝写真ドラッグ＝枠内配置）。`onTabChange`コールバックは、畳むときは引数`null`で呼ばれる。初期表示はレイアウトのパネルが開いた状態。
-- **パネル開閉時のキャンバス再フィット**: パネルの畳み／展開でキャンバス領域の幅が変わるが window resize は発生しないため、`main.js`が`.canvas-container`に`ResizeObserver`を張り、**「幅」の変化（≥1px）を検知したときだけ**`canvasRenderer.clearContainerSizeCache()`＋`requestRedraw()`する（デバウンス 180ms）。キャンバス要素自体は`max-width:100%`でトランジション中も CSS スケールで追従する。**「幅のみ」に限定しているのは既知の不具合 G-1 への多重防御**: 縦長／正方形の出力比率ではプレビューキャンバスが「高さ基準」で決まり、その要素がコンテナ高さを数px押し上げ → `ResizeObserver`発火 → 再描画で更に高く …という正のフィードバックでキャンバスがじわじわ拡大し続けた（`docs/session-log-2026-08-29-3.md` §13）。**根本原因＝`#previewCanvas`の`border: 1px`が要素のレイアウトボックスに乗っていたこと**は、`docs/session-log-2026-08-29-4.md`で枠線を`outline`（`outline-offset: -1px`。レイアウトに影響しない）へ置き換えて解消済み。高さ反応の`ResizeObserver`を実験的に戻しても縦長比率で拡大しないことを確認した。ガード（「幅のみに反応」）は別経路での再発防止として残す。
+- **アプリシェルの高さ固定（G-3 対策。デスクトップのみ）**: `@media (min-width: 1025px)`で`.app-container { height: 100dvh; min-height: 0; overflow: hidden }`。内側の`.tab-navigation`（`overflow-y:auto`）・`.tab-content-area`（`overflow:hidden auto`）・`.canvas-area`（`overflow:hidden`）が各自スクロールする。これがないと、パネル（`.tab-content-area`）を`width:0→360px`で展開するトランジションの途中、極小幅で中身（比率タイル群等）がいったん縦 ~1800px にレイアウトされ、`.app-container`が`min-height:100vh`で下方向に伸びられるため、キャンバスを含む画面全体が一瞬ガクッと下がって戻る（`docs/session-log-2026-08-28.md`）。G-1 の残っていた 2px オーバーフローもこれで消える。**幅 1024px 以下では`.app-shell`が縦積みになり全体スクロールが要るため、この固定はかけない**（`min-width:1025px`にスコープ）。
+- **パネル開閉時のキャンバス再フィット**: パネルの畳み／展開でキャンバス領域の幅が変わるが window resize は発生しないため、`main.js`が`.canvas-container`に`ResizeObserver`を張り、**「幅」の変化（≥1px）を検知したときだけ**`canvasRenderer.clearContainerSizeCache()`＋`requestRedraw()`する（デバウンス 180ms）。キャンバス要素自体は`max-width:100%`でトランジション中も CSS スケールで追従する。**「幅のみ」に限定しているのは既知の不具合 G-1 への多重防御**: 縦長／正方形の出力比率ではプレビューキャンバスが「高さ基準」で決まり、その要素がコンテナ高さを数px押し上げ → `ResizeObserver`発火 → 再描画で更に高く …という正のフィードバックでキャンバスがじわじわ拡大し続けた（`docs/session-log-2026-08-27-5.md` §13）。**根本原因＝`#previewCanvas`の`border: 1px`が要素のレイアウトボックスに乗っていたこと**は、`docs/session-log-2026-08-27-6.md`で枠線を`outline`（`outline-offset: -1px`。レイアウトに影響しない）へ置き換えて解消済み。高さ反応の`ResizeObserver`を実験的に戻しても縦長比率で拡大しないことを確認した。ガード（「幅のみに反応」）は別経路での再発防止として残す。
 - **枠囲みをやめ線ベースに（フェーズ4 E-2）**: 各パネルの`fieldset`は枠なし＋見出し＋（2つ目以降は）上罫線（`border-top`）だけで区切る。`legend`は小さめの大文字見出し。フレームタブの`.frame-card`も同様に枠を外して線区切りに寄せた。説明文（`.custom-text-drag-hint`）はアイコン＋数語まで削った（E-4）。
-- **`.rail-item`と`.tab-button`（E-3 / フェーズ5で整理）**: レール上のボタンの見た目用クラスは`.rail-item`。**レイアウト／背景／フレーム／文字／プリセット／情報の6ボタンすべてに`.rail-item`と`.tab-button`の両方を付与**し、`tabManager.js`が一律に`.tab-pane`と対応づけて切り替える。以前は「情報」だけ独立トグル（`#exifToggleButton`、`.tab-button`なし）だったが、E-3 で他タブと同じ`data-tab="tab-info"`＋`#tab-info`ペインにした（`docs/roadmap.md` E-3、`docs/session-log-2026-08-29-4.md`）。
+- **`.rail-item`と`.tab-button`（E-3 / フェーズ5で整理）**: レール上のボタンの見た目用クラスは`.rail-item`。**レイアウト／背景／フレーム／文字／プリセット／情報の6ボタンすべてに`.rail-item`と`.tab-button`の両方を付与**し、`tabManager.js`が一律に`.tab-pane`と対応づけて切り替える。以前は「情報」だけ独立トグル（`#exifToggleButton`、`.tab-button`なし）だったが、E-3 で他タブと同じ`data-tab="tab-info"`＋`#tab-info`ペインにした（`docs/roadmap.md` E-3、`docs/session-log-2026-08-27-6.md`）。
 - **Exif情報表示（E-3 / フェーズ5）**: Exif は「情報」タブ（`#tab-info`）の中の`#exifDataContainer`に表示する。他タブと同じフライアウトパネル枠で、押すと切り替わり、もう一度押すと E-1 の再クリックで畳まれる（独立オーバーレイではない）。描画は`exifHandler.js`の`displayExifInfo()`で、Lightroom Web 風にカメラ／レンズ名だけを小さく上に置き、撮影設定（絞り・シャッタースピード・ISO感度・焦点距離・撮影日時）は**アイコン＋値だけの定義リスト（`.exif-dl`）**にする。項目名テキストは出さず`<dt>`の`title`属性（ホバーでツールチップ）に入れる。アイコンは`index.html`のスプライト`#i-aperture` / `#i-shutter` / `#i-iso` / `#i-focal` / `#i-cal`。以前の`#exifFloatCard` / `#exifToggleButton` / `.exif-float-card` は廃止。
 - **ダウンロードボタンの位置（フェーズ4 E-5）**: `#downloadButton`は**上部バー右端**（`.app-header .header-actions` 内の`.dl-group`）。押すと画質ポップオーバー（`#downloadPopover`。`#jpgQuality`スライダー＋「書き出す」＝`#downloadConfirmButton`）を開き、「書き出す」で`handleDownload()`を実行する。「出力」タブ（`#tab-output`）とそのレール項目は廃止した。`outputSettings.quality`のデータ・`fileManager.js`側は不変。以前は「出力タブに戻す」方針だったが、ユーザー判断で再度「上部バーへ」に転換（`docs/roadmap.md` E-5）。
 - **画像ドロップ領域（E-7 / フェーズ6）**: ファイル選択用の小枠を廃し、`.canvas-area`（キャンバス領域）全体をドラッグ&ドロップの受付にした。**画像未読込時**は`.canvas-area`に`.no-image`が付き、キャンバス枠内に中央寄せのドロップダイアログ（`#imageDropDialog` = `.image-loader-container`。アイコン＋「画像をドラッグ＆ドロップ」＋`for="imageLoader"`の「またはクリックして選択」ラベル）を出し、`#previewCanvas`は隠す。**読み込み後**は`.has-image`が付き、ダイアログを隠してキャンバスを出す。切り替えは`main.js`の`updateImagePresenceUI()`（`requestRedraw()`冒頭と初期化時に呼ぶ）。`<input type="file" id="imageLoader">`は視覚的に隠し、ダイアログのラベルと**上部バーの「画像を開く」ボタン（`#openImageButton`）**から開く。ドロップの`dragover`/`drop`は`main.js`が`.canvas-area`（無ければ`.canvas-container`）に配線。
@@ -243,7 +244,7 @@ Kakomi/
 **主要関数:**
 - `getState()`: 現在の状態のディープコピーを取得
 - `updateState(updates, options)`: 状態を更新（ディープマージ）。`options.silent`が`true`の場合はリスナーへの通知を行わない（後述）
-- `setImage(img, exifData, fileName)`: 新しい画像を設定。**G-2: すでに画像がある状態での差し替え時（`editState.image` が真）は、トリミングだけ初期化する**——`cropSettings.rect` を全体（`FULL_RECT`）へ、`photoViewParams` を中央（`{0.5, 0.5}`）へ戻す。`cropSettings.aspectRatio`（比率制約）は維持し、直後の「固定比率 ＋ 全体 rect → `fitRectToAspect`」で新しい画像のアスペクトに合う最大内接矩形へ作り直す。`cropSettings.rect` は元画像に対する正規化座標なので、アスペクト比の違う画像へ同じ rect を引き継ぐと切り抜き形状が崩れる（1:1 で切ったのに 1:1 でなくなる）ため。背景・フレーム・出力比率・余白・テキストは引き継ぐ。初回ロードでは初期化しない（`docs/roadmap.md` G-2、`docs/session-log-2026-08-29-5.md`）
+- `setImage(img, exifData, fileName)`: 新しい画像を設定。**G-2: すでに画像がある状態での差し替え時（`editState.image` が真）は、トリミングだけ初期化する**——`cropSettings.rect` を全体（`FULL_RECT`）へ、`photoViewParams` を中央（`{0.5, 0.5}`）へ戻す。`cropSettings.aspectRatio`（比率制約）は維持し、直後の「固定比率 ＋ 全体 rect → `fitRectToAspect`」で新しい画像のアスペクトに合う最大内接矩形へ作り直す。`cropSettings.rect` は元画像に対する正規化座標なので、アスペクト比の違う画像へ同じ rect を引き継ぐと切り抜き形状が崩れる（1:1 で切ったのに 1:1 でなくなる）ため。背景・フレーム・出力比率・余白・テキストは引き継ぐ。初回ロードでは初期化しない（`docs/roadmap.md` G-2、`docs/session-log-2026-08-27-7.md`）
 - `addStateChangeListener(listener)` / `removeStateChangeListener(listener)`: 状態変更リスナーの登録／解除
 - `addCustomTextLayer()`: 自由テキストレイヤーを1つ追加し、そのidを返す
 - `removeCustomTextLayer(id)`: 指定idの自由テキストレイヤーを削除
@@ -331,7 +332,7 @@ UI要素の制御とイベントハンドリングを担当します。
 - `drawPreview(currentState, previewCanvas, previewCtx)`: プレビュー描画
 - `renderFinal(currentState)`: 最終出力用の高解像度Canvasを生成
 - `getLastPreviewContext()`: 直近の`drawPreview`呼び出し時点でのプレビュー⇔出力解像度の変換情報（`{ scale, photoShortSidePx }`）を返す。`canvasInteraction.js`がドラッグ量の単位変換に使用する
-- `clearContainerSizeCache()`: プレビューコンテナ寸法のキャッシュ（`cachedContainerSize`。canvasサイズ変更でレイアウトが揺れる＝正のフィードバックを防ぐためのキャッシュ）を破棄する。従来は`window`の`resize`でのみクリアしていたが、フェーズ4で設定パネルの畳み／展開でもキャンバス幅が変わるようになったため、`main.js`が`ResizeObserver`経由でこれを呼んで次の`drawPreview`に寸法を取り直させる。**ただし「幅」の変化に限定**（既知の不具合 G-1 への多重防御。根本原因の`#previewCanvas`ボーダーは`outline`化で解消済み。3.1節・`docs/session-log-2026-08-29-3.md` §13・`docs/session-log-2026-08-29-4.md`）
+- `clearContainerSizeCache()`: プレビューコンテナ寸法のキャッシュ（`cachedContainerSize`。canvasサイズ変更でレイアウトが揺れる＝正のフィードバックを防ぐためのキャッシュ）を破棄する。従来は`window`の`resize`でのみクリアしていたが、フェーズ4で設定パネルの畳み／展開でもキャンバス幅が変わるようになったため、`main.js`が`ResizeObserver`経由でこれを呼んで次の`drawPreview`に寸法を取り直させる。**ただし「幅」の変化に限定**（既知の不具合 G-1 への多重防御。根本原因の`#previewCanvas`ボーダーは`outline`化で解消済み。3.1節・`docs/session-log-2026-08-27-5.md` §13・`docs/session-log-2026-08-27-6.md`）
 
 **描画順序（`drawPreview`。`renderFinal`は8・9を除く1〜7のみ）:**
 1. 背景描画（拡大ぼかし背景の場合、当たり判定用に背景の矩形を`interactionRegistry`へ登録）
@@ -697,7 +698,7 @@ Blobをダウンロード
 
 ### 7.1 構図調整（トリミング）
 
-`cropSettings`として実装される。**2026年8月28日の再設計で、中央固定ズーム＋パン方式（`{ aspectRatio, zoom, offsetX, offsetY }`）から、非対称な切り抜き矩形をそのまま持つ方式（`{ aspectRatio, rect }`）に変更した**。詳細な経緯は `docs/session-log-2026-08-28.md` 参照。
+`cropSettings`として実装される。**2026年8月28日の再設計で、中央固定ズーム＋パン方式（`{ aspectRatio, zoom, offsetX, offsetY }`）から、非対称な切り抜き矩形をそのまま持つ方式（`{ aspectRatio, rect }`）に変更した**。詳細な経緯は `docs/session-log-2026-08-27-2.md` 参照。
 
 **データモデル:**
 - **`cropSettings.rect`**: 切り抜き矩形を「元画像に対する割合」 `{ x, y, w, h }`（いずれも 0–1、x/y が左上、w/h がサイズ）で保持する。これが唯一の表現。
@@ -835,7 +836,7 @@ Blobをダウンロード
 - **Exif保持**: `outputSettings.preserveExif` は状態として存在し（初期値 `true`）、`fileManager.js`の`handleDownload()`がこの値を見てExif埋め込みの要否を判定する。ただし、この設定値を切り替えるUIチェックボックス自体が存在せず、常に「保持する」設定のままダウンロードが行われる。
 
 ### 7.7 Exif情報表示
-**E-3（フェーズ5、`docs/session-log-2026-08-29-4.md`）:** 「情報」はアイコンレール下部の**他タブと並列のタブ**（`data-tab="tab-info"` ＋ `#tab-info` ペイン）。押すと他タブと同じフライアウトパネル枠に切り替わって Exif が出る／もう一度押すと E-1 の再クリックでパネルごと畳まれる（独立オーバーレイではない）。以前の独立トグル（`#exifToggleButton`）とフローティングカード（`#exifFloatCard` / `.exif-float-card`）は廃止した。
+**E-3（フェーズ5、`docs/session-log-2026-08-27-6.md`）:** 「情報」はアイコンレール下部の**他タブと並列のタブ**（`data-tab="tab-info"` ＋ `#tab-info` ペイン）。押すと他タブと同じフライアウトパネル枠に切り替わって Exif が出る／もう一度押すと E-1 の再クリックでパネルごと畳まれる（独立オーバーレイではない）。以前の独立トグル（`#exifToggleButton`）とフローティングカード（`#exifFloatCard` / `.exif-float-card`）は廃止した。
 
 描画は `exifHandler.js` の `displayExifInfo(exifData, container)`。`main.js` の `requestRedraw()` が毎回 `#exifDataContainer` に対して呼ぶ。Lightroom Web 風のミニマル表示:
 - **カメラ／レンズ名**だけを小さく上部に1行（`.exif-cam`。「メーカー 機種名 · レンズ名」。Model が Make で始まる場合は Model のみ）
@@ -993,19 +994,19 @@ Blobをダウンロード
 
 ### 11.6 ロードマップ（`docs/roadmap.md`）対応状況
 
-2026-08-28にユーザーからの要望を`docs/roadmap.md`（A〜Fの各タブ）に整理した。フェーズ0（設計不要の小改修、`docs/session-log-2026-08-29.md`）:
+2026-08-27にユーザーからの要望を`docs/roadmap.md`（A〜Fの各タブ）に整理した。フェーズ0（設計不要の小改修、`docs/session-log-2026-08-27-3.md`）:
 - ✅ **E**: ダウンロードボタンを上部バー →「出力」タブ内へ戻した（7.6節）
 - ✅ **A-2**: crop モードのオーバーレイに三分割グリッド（rule of thirds）を追加（7.2節、`canvasRenderer.js` `drawCropModeOverlay`）
 - ✅ **A-6**: select モードのプレビュー上ホイールによる余白変更を削除（5.16節、`photoAdapter.commitMarginDelta`・`MARGIN_WHEEL_STEP`撤去）
 - ✅ **D-2**: テキストの固定表示位置アンカー選択（`#textLayerPosition`）をUIから撤去（`position`データモデルは維持。5.3節・7.5節）
 
-フェーズ1（「開いているタブでプレビュー上のドラッグの意味を切り替える」共通設計、`docs/session-log-2026-08-29.md`）:
+フェーズ1（「開いているタブでプレビュー上のドラッグの意味を切り替える」共通設計、`docs/session-log-2026-08-27-3.md`）:
 - ✅ **共通基盤**: `tabManager.getActiveTab()` を追加し、`canvasInteraction.js` の `pointerdown` がアクティブタブで本体ドラッグの振り先を分岐（5.16節「タブ別ドラッグ」）
 - ✅ **C-2**: 「フレーム」タブ表示中かつ影が有効なとき、写真本体ドラッグ →影オフセット（新設 `shadowAdapter.js`。7.4節）
 - ✅ **背景タブのドラッグ拡張**: 「背景」タブ表示中はキャンバス全面のドラッグ →背景の位置（`backgroundAdapter` 流用。7.3節）。反面、**「背景」タブ以外での余白ドラッグは背景を動かさない**よう修正（従来はどのタブでも余白ドラッグで背景がパンしていた）
 - ❌ **B-2**（背景タブでホイール→背景拡大倍率）: 誤操作の元になるとしてユーザー判断で**不採用**。プレビュー上のホイールは引き続き未使用
 
-フェーズ1追補（移動・配置の操作性、`docs/session-log-2026-08-29.md`）:
+フェーズ1追補（移動・配置の操作性、`docs/session-log-2026-08-27-3.md`）:
 - ✅ **軸ロック**: `move` ドラッグ中に Shift で移動量の大きい軸だけに固定（縦だけ／横だけ。写真・テキスト・背景・影すべて。5.16節）
 - ✅ **原点スナップ**: 背景・影のドラッグでオフセットが 0 付近まで戻ると 0 にスナップし赤い中央ガイドを表示（`originSnapPx`。5.16節）
 - ✅ **タップ判定の厳格化**: モード切替（select↔crop）を「移動量 < 4px かつ 押下時間 < `CLICK_TAP_MS`(400ms)」の短いタップ限定に。動かさず長押しして離してもモードが切り替わらない（5.16節）
@@ -1013,17 +1014,17 @@ Blobをダウンロード
 - ✅ **矢印キーで背景／影の微調整**: 「背景」タブ・「フレーム」タブ（影が有効）で、矢印キーを背景／影のオフセット nudge に割り当て（5.16節）
 - ダブルクリックでオフセットをリセットする案は「他の操作が暴発しそう」としてユーザー判断で見送り
 
-フェーズ2（UI のスライダー羅列・プルダウン整理、`docs/session-log-2026-08-29-2.md`）:
+フェーズ2（UI のスライダー羅列・プルダウン整理、`docs/session-log-2026-08-27-4.md`）:
 - ✅ **A-1**: 出力アスペクト比・切り抜き比率を比率タイルピッカー（`js/ui/ratioPicker.js`）に置き換え。「切り抜き位置（横／縦）」「枠内位置（横位置／縦位置）」のスライダー計4本を撤去し、`cropSettings.rect` のパンと `photoViewParams` はプレビュー操作＋「配置をリセット」ボタンのみで動かす（5.3節・7.1節・7.2節）
 - ✅ **B-1**（軽微版）: 拡大ぼかし背景の「明るさ・彩度」を既定で閉じたアコーディオンに移動、X/Yオフセットのスライダーを撤去し「位置をリセット」ボタンに置き換え（5.3節・7.3節）。背景タイプのセグメント化やカード化は「後で画面レイアウトを一新する」ユーザー方針のため見送り
 
-フェーズ3（小改修・バグ、`docs/session-log-2026-08-29-3.md`）:
+フェーズ3（小改修・バグ、`docs/session-log-2026-08-27-5.md`）:
 - ✅ **B-3**（バグ）: 拡大ぼかし背景を「クロップ後の写真」から生成する（`backgroundRenderer.js`。`photoDrawConfig.source*` を `sourceRect` として使う。5.6節・7.3節）
 - ✅ **D-4**（バグ）: テキストの不透明度スライダーのラベルを「透過度」→「不透明度」に（`uiController.js` の `renderTextLayerSettingsPanel()`。5.3節・7.5節）
 - ✅ **A-7**: 出力／切り抜きの比率タイルの選択肢順を共通化（`ratioPicker.js` の `RATIO_FAMILIES` が唯一の並び）。カスタム幅高さ入力欄を折り返さない1行（`.ratio-custom-row`）に（5.3節）
 - ✅ **B-4**: 背景の「明るさ・彩度」をアコーディオンから常時表示に戻し、「見え方／色調／位置」の区切り線付き小見出しで分離（B-1 のアコーディオンを撤回。5.3節・7.3節）
 
-フェーズ4（Lightroom Web 風のシェル刷新。`artifact-design` モックアップで方向性合意後に実装。`docs/session-log-2026-08-29-3.md` §9–11）:
+フェーズ4（Lightroom Web 風のシェル刷新。`artifact-design` モックアップで方向性合意後に実装。`docs/session-log-2026-08-27-5.md` §9–11）:
 - ✅ **E-1**: `tabManager.js` にアクティブタブ再クリックでパネルを畳む処理（`.app-shell.panel-collapsed`）。初期表示はレイアウト開。パネル開閉で `main.js` の `ResizeObserver` が `clearContainerSizeCache()`＋再描画（3.1節・5.5節）
 - ✅ **E-2**: `fieldset`／`legend`／`.frame-card` を枠なし＋見出し＋上罫線の線ベースに（`style.css`）（3.1節）
 - ✅ **E-4**: `.custom-text-drag-hint` の長文をアイコン＋数語に削減
@@ -1031,19 +1032,22 @@ Blobをダウンロード
 - ✅ **A-8**: 「レイアウト」パネルを ① 出力アスペクト比 → ② トリミング → ③ 余白と配置 の順に。余白を①から③へ分離（7.2節）
 - ✅ **F**: プリセットはレール下部の一項目のまま（「情報」の隣）。レイアウトの中に畳み込むのは見送り
 
-既知の不具合の解消（`docs/session-log-2026-08-29-4.md`）:
+既知の不具合の解消（`docs/session-log-2026-08-27-6.md`）:
 - ✅ **G-1**（縦長／正方形の出力比率でプレビューキャンバスがじわじわ拡大し続ける）: 根本原因は`#previewCanvas`の`border: 1px`が要素のレイアウトボックスに乗り、高さ基準で決まるキャンバスがコンテナ高さを押し上げて`ResizeObserver`との正のフィードバックになっていたこと。枠線を`outline`（`outline-offset: -1px`）へ置き換えて解消（`style.css`。3.1節）。フェーズ4 で入れた「幅のみに反応する`ResizeObserver`」は多重防御として維持。
 
-フェーズ5（情報タブ。`docs/session-log-2026-08-29-4.md`）:
+フェーズ5（情報タブ。`docs/session-log-2026-08-27-6.md`）:
 - ✅ **E-3**: 「情報」を他タブと並列のタブ（`data-tab="tab-info"` ＋ `#tab-info` ペイン、レール下部）に。押すと同じフライアウトパネル枠で切り替わり、再クリックで畳まれる。独立トグル `#exifToggleButton` とフローティングカード `#exifFloatCard` は廃止。Exif 表示を `displayExifInfo()` の作り替えでアイコン＋値だけのミニマルな `.exif-dl` に（項目名は `<dt>` の `title`）。撮影日時の整形バグ（時刻のコロンも `/` になる）も修正（3.1節・7.7節）
 
-フェーズ6（追加の小〜中改修。`docs/session-log-2026-08-29-5.md`）:
+フェーズ6（追加の小〜中改修。`docs/session-log-2026-08-27-7.md`）:
 - ✅ **E-6**: `favicon.svg`（`.brand-mark` と同意匠）＋ `<link rel="icon">`（3.1節）
 - ✅ **B-5**: 背景タイプをアイコンセグメント（`.corner-segmented`）に。`id`/`name`/`value` 据え置きで JS 配線は無変更（7.3節）
 - ✅ **D-5**: 「文字」タブがアクティブで自由テキスト選択中、`Delete` / `Backspace` で削除（`canvasInteraction.js` の keydown。5.16節）
 - ✅ **G-2**: 別画像への差し替え時は `cropSettings.rect`→全体・`photoViewParams`→中央にリセット（比率制約は維持して再フィット）。背景・フレーム・出力比率・余白・テキストは引き継ぐ（`setImage`。5.2節）
 - ✅ **E-7**: ファイル選択の小枠を廃し、`.canvas-area` 全体をドロップ受付に。未読込時は中央にドロップダイアログ、読み込み後はキャンバス。上部バーに「画像を開く」ボタン（`#openImageButton`）（3.1節・6.1節）
 - ✅ **F-2**: プリセット保存時にタブ単位5セクション（`PRESET_SECTIONS`）のチェックで保存項目を選択。適用は含まれるキーだけ上書き（5.19節）
+
+既知の不具合の解消（`docs/session-log-2026-08-28.md`）:
+- ✅ **G-3**（レイアウトタブ開閉のトランジション中に画面全体が一瞬下にずれて戻る）: 極小幅のパネル内容が縦に伸び、`.app-container`（`min-height:100vh`）が下方向に膨張していた。`@media (min-width:1025px)` で `.app-container { height:100dvh; min-height:0; overflow:hidden }` にしてデスクトップ3カラム時のシェル高をビューポートに固定（内側は各自スクロール）。1024px 以下の縦積みには適用しない。G-1 の残り 2px も解消（3.1節）
 
 未着手のロードマップ項目: **フェーズ7** = C-1 / A-5 / D-1・D-3 / A-4 / A-3。詳細は `docs/roadmap.md`。
 
