@@ -558,16 +558,27 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 ### 5.19 presets/presetStore.js
 編集設定（`stateManager.js`の`EDITABLE_SETTINGS_KEYS`で定義される範囲）を、名前付きプリセットとして`localStorage`（キー: `kakomi_presets`）に保存・一覧取得・削除・適用するモジュール。読み込んだ画像そのものは対象外。`textSettings`（`customTexts`配列を含む）もそのまま保存するため、自由テキストの内容・個数もプリセットの一部として保存・復元される。
 
-**F-2（保存する項目の選択）:** `EDITABLE_SETTINGS_KEYS` を**タブ単位の5セクション**に束ねた `PRESET_SECTIONS` を持つ（`output`＝キャンバス（旧「出力フォーマット」。`docs/roadmap.md` E-8）: `outputTargetAspectRatioString` / `baseMarginPercent` / `outputSettings`／`crop`＝写真のトリミング（旧「トリミング」）: `cropSettings` / `photoViewParams`／`background`＝背景: `backgroundColor` / `backgroundType` / `imageBlurBackgroundParams`／`frame`＝フレーム: `frameSettings`／`text`＝テキスト: `textSettings`）。各セクションの `label` は「保存済み」一覧のメタ表示（`uiController.js`）に出る。5セクションで `EDITABLE_SETTINGS_KEYS` を過不足なくカバーする（読み込み時に不一致を `console.warn` するガードあり）。
+**F-2 / F-5（保存する項目の2階層選択）:** `EDITABLE_SETTINGS_KEYS` を**タブ単位の5セクション**に束ねた `PRESET_SECTIONS` を持つ。**背景・フレーム・テキストの3つは「効く所だけ」の子グループ（`groups`）を持つ**（F-5、`docs/roadmap.md` F-5）:
+
+| セクション | 子グループ | 保存キー（ドット付き含む） |
+|---|---|---|
+| `output`＝キャンバス | —（葉） | `outputTargetAspectRatioString` / `baseMarginPercent` / `outputSettings` |
+| `crop`＝写真のトリミング | —（葉） | `cropSettings` / `photoViewParams` |
+| `background`＝背景 | `type` / `color` / `blur` | `backgroundType` ／ `backgroundColor` ／ `imageBlurBackgroundParams` |
+| `frame`＝フレーム | `corner` / `border` / `shadow` | `frameSettings.cornerStyle`ほか ／ `frameSettings.border` ／ `frameSettings.{shadowEnabled,shadowType,shadowParams}` |
+| `text`＝テキスト | `date` / `exif` / `custom` | `textSettings.date` ／ `textSettings.exif` ／ `textSettings.customTexts` |
+
+`keys` の要素はドット無しの状態キーか**ドット付きパス**（`frameSettings.border` など）。`savePreset` はパスを辿って部分オブジェクトを組み立て、`applyPreset` 側の `updateState` deep-merge で既存値の上にマージされる（移行関数不要）。各セクションの `label` は「保存済み」一覧のメタ表示に出る。ドリフト検知ガードは葉キーをトップレベルへ丸めて `EDITABLE_SETTINGS_KEYS` と突き合わせる。
 
 **主要関数:**
-- `getPresets()`: 保存済みプリセットの一覧を取得（`{ id, name, createdAt, sections, settings }`の配列）
-- `savePreset(name, sections)`: 選択されたセクション（`PRESET_SECTIONS` のキー配列）に対応する設定キーだけを保存する。`sections` 省略・空配列なら全セクション（旧挙動）。プリセットに `sections` も記録する
-- `getPresetSections(preset)`: そのプリセットが含むセクションのキー配列を返す（`sections` フィールドが無い旧プリセットは「全セクション」扱い）
-- `deletePreset(id)`: 指定idのプリセットを削除
-- `applyPreset(id)`: 指定idのプリセットを`updateState()`経由で現在の編集状態に適用する。`updateState` はディープマージなので、**プリセットに含まれるキーだけが上書きされ、含まれないセクションは今の値のまま残る**（F-2 の「含まれる項目だけ上書き」はこの既存挙動で成立）。旧プリセット（全キー入り）は従来どおり全セクション適用
+- `getPresets()`: 保存済みプリセットの一覧を取得（`{ id, name, createdAt, sections, groups?, settings }`の配列）
+- `savePreset(name, sections, groups)`: 選択セクション＋子グループ（`{ background: ['type','blur'] }` の形。一部だけ選んだセクションのみ）に対応する保存キーだけを組み立てて保存。`sections` 省略・空なら全セクション。**一部グループだけのセクションがあれば `preset.groups` も記録**（全グループなら省略＝旧形式互換）。名前は `resolvePresetName` で解決（F-4）
+- `resolvePresetName(name, existingNames?)` / `getNextAutoPresetName()`（**F-4**）: 空名なら「プリセット N」（N＝空き番号の最小、1始まり）、明示名が既存と衝突する間は末尾に ` 2` ` 3` …。**上書きはしない。** フォームの `placeholder` は `getNextAutoPresetName()` を表示
+- `getPresetSections(preset)`: 含むセクションのキー配列（`sections` 無しの旧プリセットは「全セクション」）
+- `getPresetGroups(preset)`: 「一部の子グループだけ保存した」セクションの `{ sec: [groupId…] }`（全グループ or 葉は含まない）。メタ表示の「（一部）」判定に使う
+- `deletePreset(id)` / `applyPreset(id)`: `applyPreset` は `updateState()` の deep-merge なので**含まれるキー（部分オブジェクト含む）だけ上書き**、含まれないものは現状維持。旧プリセット（全キー入り）は従来どおり全適用
 
-**UI連携（`uiController.js`）:** 「プリセット」タブの保存フォームに5つのセクションチェックボックス（`#presetSectionChecks`、既定は全チェック）を置き、チェックされた `data-section` を `savePreset(name, sections)` に渡す。0個なら `alert` で弾く。一覧の各行には、そのプリセットが含むセクション名（全部なら「すべて」）を小さく表示する。プリセット適用後は、`customTexts`配列の個数など非連続な変化が起こりうるため、Undo/Redoのスナップショット適用時と同様に`initializeUIFromState()`でUI全体を再構築する。
+**UI連携（`uiController.js` `renderPresetSectionChecks()`）:** 「プリセット」タブの保存フォームは `PRESET_SECTIONS` から**縦ツリー**（`#presetSectionChecks` = `.preset-tree`）で組み立てる（**F-3**）。親5行＝チェック＋アイコン（`#i-canvas` / `#i-photo-crop` / `#i-bg` / `#i-frame` / `#i-text`）＋対象名、背景・フレーム・テキストは子グループを畳んで持つ（シェブロンで開閉。既定は畳む）。**親チェックは3状態**（全 ✓／無 空／一部 −）。親クリックは「全部 ON でなければ全 ON、全 ON なら全 OFF」。子を1つ外すと親は自動で −。保存時 `collectPresetSelection()` が `{ sections, groups }` を集約して `savePreset` へ。0個なら `alert`。保存後は名前欄だけクリア＋`placeholder` 更新、**チェック状態はユーザーが残したまま維持**。一覧の各行メタは含むセクション名（一部グループだけのセクションは「◯◯（一部）」＋`title` に内訳。全部なら「すべて」）。プリセット適用・削除後は `initializeUIFromState()` 全再構築（＝チェックは全 ON に戻る）。
 
 ### 5.20 presets/colorHistoryStore.js
 カラーピッカーで選んだ色の履歴（MRU順、最大12件）を`localStorage`（キー: `kakomi_colorHistory`）に保持するモジュール。背景色・影・縁取り・撮影日/Exif/自由テキストの文字色など、アプリ内の全カラーピッカーが共通の履歴を共有する。
@@ -1051,6 +1062,7 @@ Blobをダウンロード
 - ✅ **G-2**: 別画像への差し替え時は `cropSettings.rect`→全体・`photoViewParams`→中央にリセット（比率制約は維持して再フィット）。背景・フレーム・出力比率・余白・テキストは引き継ぐ（`setImage`。5.2節）
 - ✅ **E-7**: ファイル選択の小枠を廃し、`.canvas-area` 全体をドロップ受付に。未読込時は中央にドロップダイアログ、読み込み後はキャンバス。上部バーに「画像を開く」ボタン（`#openImageButton`）（3.1節・6.1節）
 - ✅ **F-2**: プリセット保存時にタブ単位5セクション（`PRESET_SECTIONS`）のチェックで保存項目を選択。適用は含まれるキーだけ上書き（5.19節）
+- ✅ **F-3 / F-4 / F-5（フェーズ7 バケット3）**: 保存フォームを `renderPresetSectionChecks()` の縦ツリーに（親5＋背景・フレーム・テキストの子グループ、3状態の親チェック）。名前は空なら「プリセット N」（空き番号の最小）・衝突は連番・上書きなし（`resolvePresetName`）。`PRESET_SECTIONS` にドット付きパスの `groups` を導入し、`savePreset(name, sections, groups)` が部分オブジェクトを組み立て、`applyPreset` は deep-merge のまま。旧プリセット移行不要（5.19節）
 
 既知の不具合の解消（`docs/session-log-2026-08-28.md`）:
 - ✅ **G-3**（レイアウトタブ開閉のトランジション中に画面全体が一瞬下にずれて戻る）: 極小幅のパネル内容が縦に伸び、`.app-container`（`min-height:100vh`）が下方向に膨張していた。`@media (min-width:1025px)` で `.app-container { height:100dvh; min-height:0; overflow:hidden }` にしてデスクトップ3カラム時のシェル高をビューポートに固定（内側は各自スクロール）。1024px 以下の縦積みには適用しない。G-1 の残り 2px も解消（3.1節）

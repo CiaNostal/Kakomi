@@ -14,22 +14,62 @@ import { migrateCropSettings } from '../utils/cropRect.js';
 const STORAGE_KEY = 'kakomi_presets';
 
 /**
- * F-2: プリセットの「保存する項目」をタブ単位の5セクションに分ける。
- * 各セクションは EDITABLE_SETTINGS_KEYS のサブセットに対応する。
- * （合計で EDITABLE_SETTINGS_KEYS を過不足なくカバーしている。）
+ * F-2 / F-5: プリセットの「保存する項目」をタブ単位の5セクションに分ける。
+ * さらに背景・フレーム・テキストは「効く所だけ」の子グループ（`groups`）を持つ（F-5）。
+ * 子を持たないセクション（キャンバス・写真のトリミング）は `keys` を直接持つ葉。
+ *
+ * `keys` の要素はドット無しの状態キー（例 `backgroundColor`）か、ドット付きパス（例
+ * `frameSettings.border`）。ドット付きは savePreset が部分オブジェクトを組み立て、applyPreset
+ * 側の updateState deep-merge で既存値の上にマージされる（移行関数不要）。
+ * label は「保存済み」一覧のセクション表示に出る（uiController.js）。E-8 でレール／レイアウトタブと用語統一。
  */
 export const PRESET_SECTIONS = {
-    // label は「保存済み」一覧のセクション表示に出る（uiController.js）。E-8 でレール／レイアウトタブと用語統一。
     output: { label: 'キャンバス', keys: ['outputTargetAspectRatioString', 'baseMarginPercent', 'outputSettings'] },
     crop: { label: '写真のトリミング', keys: ['cropSettings', 'photoViewParams'] },
-    background: { label: '背景', keys: ['backgroundColor', 'backgroundType', 'imageBlurBackgroundParams'] },
-    frame: { label: 'フレーム', keys: ['frameSettings'] },
-    text: { label: 'テキスト', keys: ['textSettings'] },
+    background: {
+        label: '背景',
+        groups: {
+            type: { label: 'タイプ（単色／ぼかし）', keys: ['backgroundType'] },
+            color: { label: '色', keys: ['backgroundColor'] },
+            blur: { label: 'ぼかしの見え方・色調・位置', keys: ['imageBlurBackgroundParams'] },
+        },
+    },
+    frame: {
+        label: 'フレーム',
+        groups: {
+            corner: { label: '角丸（角のスタイル）', keys: ['frameSettings.cornerStyle', 'frameSettings.cornerRadiusPercent', 'frameSettings.superellipseN'] },
+            border: { label: '線（縁取り）', keys: ['frameSettings.border'] },
+            shadow: { label: '影', keys: ['frameSettings.shadowEnabled', 'frameSettings.shadowType', 'frameSettings.shadowParams'] },
+        },
+    },
+    text: {
+        label: 'テキスト',
+        groups: {
+            date: { label: '撮影日', keys: ['textSettings.date'] },
+            exif: { label: 'Exif', keys: ['textSettings.exif'] },
+            custom: { label: '自由テキスト（すべて）', keys: ['textSettings.customTexts'] },
+        },
+    },
 };
 
-// 開発時のドリフト検知: PRESET_SECTIONS が EDITABLE_SETTINGS_KEYS を過不足なくカバーしているか。
+/** セクション定義の葉キー（ドット付き含む）を全部集める。 */
+function allKeysOfSection(secDef) {
+    if (secDef.keys) return secDef.keys.slice();
+    return Object.values(secDef.groups).flatMap(g => g.keys);
+}
+
+/** 保存キー（ドット付き含む）をトップレベルの状態キーへ丸める（`frameSettings.border` → `frameSettings`）。 */
+function topLevelKey(keyPath) {
+    const dot = keyPath.indexOf('.');
+    return dot === -1 ? keyPath : keyPath.slice(0, dot);
+}
+
+// 開発時のドリフト検知: PRESET_SECTIONS の葉キー（トップレベルに丸めたもの）が
+// EDITABLE_SETTINGS_KEYS を過不足なくカバーしているか。
 {
-    const covered = new Set(Object.values(PRESET_SECTIONS).flatMap(s => s.keys));
+    const covered = new Set(
+        Object.values(PRESET_SECTIONS).flatMap(allKeysOfSection).map(topLevelKey)
+    );
     const missing = EDITABLE_SETTINGS_KEYS.filter(k => !covered.has(k));
     const extra = [...covered].filter(k => !EDITABLE_SETTINGS_KEYS.includes(k));
     if (missing.length || extra.length) {
@@ -37,16 +77,78 @@ export const PRESET_SECTIONS = {
     }
 }
 
-/** セクション key の配列を、対応する設定 key の配列へ展開する。 */
-function sectionsToKeys(sections) {
+/**
+ * セクション key の配列（＋任意の子グループ選択）を、保存キー（ドット付き含む）の配列へ展開する。
+ * @param {string[]} sections 保存するセクション key。省略・空なら全セクション。
+ * @param {Object<string,string[]>} [groups] セクション key → 選んだ子グループ id の配列。
+ *   グループを持つセクションで `groups[sec]` が無ければ、そのセクションは全グループ扱い。
+ */
+function sectionsToKeys(sections, groups) {
     const valid = (Array.isArray(sections) && sections.length)
         ? sections.filter(s => PRESET_SECTIONS[s])
         : Object.keys(PRESET_SECTIONS);
+    const g = (groups && typeof groups === 'object') ? groups : {};
     const keys = [];
+    const usedGroups = {};
     for (const s of valid) {
-        for (const k of PRESET_SECTIONS[s].keys) keys.push(k);
+        const def = PRESET_SECTIONS[s];
+        if (!def.groups) {
+            keys.push(...def.keys);
+            continue;
+        }
+        const chosen = Array.isArray(g[s]) && g[s].length
+            ? g[s].filter(id => def.groups[id])
+            : Object.keys(def.groups);
+        for (const id of chosen) keys.push(...def.groups[id].keys);
+        // 一部だけ選んだセクションだけ groups に記録する（全部なら省略＝旧形式互換）。
+        if (chosen.length && chosen.length < Object.keys(def.groups).length) {
+            usedGroups[s] = chosen;
+        }
     }
-    return { sections: valid, keys };
+    return { sections: valid, groups: usedGroups, keys };
+}
+
+/** 状態オブジェクトからドット付きパスの値を取り出す（浅いコピー）。 */
+function getByPath(obj, path) {
+    return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
+}
+
+/** target にドット付きパスで値を書き込む（途中のオブジェクトは作る）。 */
+function setByPath(target, path, value) {
+    const parts = path.split('.');
+    let o = target;
+    for (let i = 0; i < parts.length - 1; i++) {
+        if (o[parts[i]] == null || typeof o[parts[i]] !== 'object') o[parts[i]] = {};
+        o = o[parts[i]];
+    }
+    o[parts[parts.length - 1]] = value;
+}
+
+/**
+ * 未入力なら「プリセット N」（N＝空き番号の最小、1 始まり。F-4）、
+ * 明示名なら既存と衝突する間 ` 2` ` 3` … を足した名前を返す。**上書きはしない。**
+ * @param {string} rawName
+ * @param {string[]} [existingNames] 省略時は現在保存済みの名前一覧
+ */
+export function resolvePresetName(rawName, existingNames) {
+    const taken = new Set(
+        Array.isArray(existingNames) ? existingNames : loadPresets().map(p => p.name)
+    );
+    const trimmed = (typeof rawName === 'string') ? rawName.trim() : '';
+    if (!trimmed) {
+        let n = 1;
+        while (taken.has(`プリセット ${n}`)) n++;
+        return `プリセット ${n}`;
+    }
+    if (!taken.has(trimmed)) return trimmed;
+    let n = 2;
+    while (taken.has(`${trimmed} ${n}`)) n++;
+    return `${trimmed} ${n}`;
+}
+
+/** 次に自動で振られるプリセット名（フォームの placeholder 用）。 */
+export function getNextAutoPresetName() {
+    return resolvePresetName('');
 }
 
 function loadPresets() {
@@ -87,26 +189,29 @@ export function getPresets() {
 
 /**
  * 現在の編集設定を新しいプリセットとして保存する。
- * @param {string} name プリセット名（空の場合は「無題のプリセット」）
- * @param {string[]} [sections] 保存するセクション（PRESET_SECTIONS のキー）。
- *   省略・空配列なら全セクション（旧挙動）。
+ * @param {string} name プリセット名。空なら「プリセット N」を自動採番（F-4）。既存と衝突する
+ *   明示名には ` 2` ` 3` … を付ける。**上書きはしない。**
+ * @param {string[]} [sections] 保存するセクション（PRESET_SECTIONS のキー）。省略・空配列なら全セクション。
+ * @param {Object<string,string[]>} [groups] セクション key → 選んだ子グループ id（F-5）。一部だけ選んだ
+ *   セクションのみ渡せばよい（全部選んだセクションは省略で「全グループ」扱い）。
  * @returns {Object|null} 保存されたプリセット。localStorageへの保存に失敗した場合はnull
  */
-export function savePreset(name, sections) {
+export function savePreset(name, sections, groups) {
     const state = getState();
-    const { sections: usedSections, keys } = sectionsToKeys(sections);
+    const { sections: usedSections, groups: usedGroups, keys } = sectionsToKeys(sections, groups);
     const settings = {};
-    for (const key of keys) {
-        settings[key] = state[key];
+    for (const keyPath of keys) {
+        setByPath(settings, keyPath, getByPath(state, keyPath));
     }
+    const presets = loadPresets();
     const preset = {
         id: generateId(),
-        name: (typeof name === 'string' && name.trim()) ? name.trim() : '無題のプリセット',
+        name: resolvePresetName(name, presets.map(p => p.name)),
         createdAt: Date.now(),
         sections: usedSections,
         settings
     };
-    const presets = loadPresets();
+    if (Object.keys(usedGroups).length) preset.groups = usedGroups;
     presets.push(preset);
     return persistPresets(presets) ? preset : null;
 }
@@ -122,6 +227,23 @@ export function getPresetSections(preset) {
         return preset.sections.filter(s => PRESET_SECTIONS[s]);
     }
     return Object.keys(PRESET_SECTIONS);
+}
+
+/**
+ * プリセットが「一部の子グループだけ」保存しているセクションの一覧を返す
+ * （`{ background: ['type','blur'] }` の形。全グループ保存 or 葉セクションは含まれない）。
+ * 「保存済み」一覧のメタ表示で「背景（色以外）」のように出すために使う。
+ */
+export function getPresetGroups(preset) {
+    const g = (preset && preset.groups && typeof preset.groups === 'object') ? preset.groups : {};
+    const out = {};
+    for (const [sec, ids] of Object.entries(g)) {
+        const def = PRESET_SECTIONS[sec];
+        if (def && def.groups && Array.isArray(ids)) {
+            out[sec] = ids.filter(id => def.groups[id]);
+        }
+    }
+    return out;
 }
 
 /**

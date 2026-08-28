@@ -457,15 +457,10 @@
                     <div id="tab-preset" class="tab-pane">
                         <fieldset>
                             <legend>プリセットを保存</legend>
-                            <!-- E-8: レール／レイアウトタブと用語を統一（キャンバス／写真のトリミング／テキスト）。
-                                 二重四角アイコン（#i-canvas / #i-photo-crop）はフォーム整形（F-3）で縦リスト化する際に付ける。 -->
-                            <div class="preset-section-checks" id="presetSectionChecks">
-                                <label><input type="checkbox" data-section="output" checked>キャンバス</label>
-                                <label><input type="checkbox" data-section="crop" checked>写真のトリミング</label>
-                                <label><input type="checkbox" data-section="background" checked>背景</label>
-                                <label><input type="checkbox" data-section="frame" checked>フレーム</label>
-                                <label><input type="checkbox" data-section="text" checked>テキスト</label>
-                            </div>
+                            <!-- F-3 / F-5: 保存する項目のチェックは uiController.renderPresetSectionChecks() が
+                                 PRESET_SECTIONS から縦リストで組み立てる（親5セクション＋背景／フレーム／テキストの子）。
+                                 E-8 の用語（キャンバス／写真のトリミング）＋ A-12 の二重四角アイコンもそこで付く。 -->
+                            <div class="preset-tree" id="presetSectionChecks"></div>
                             <div class="form-row-simple">
                                 <input type="text" id="presetNameInput" placeholder="プリセット名" style="flex: 1;">
                                 <button type="button" id="savePresetButton">保存</button>

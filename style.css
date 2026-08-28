@@ -1100,25 +1100,90 @@ fieldset div span {
     color: var(--ink-faint);
 }
 
-/* F-2: 保存する項目のチェックボックス一覧 */
-.preset-section-checks {
+/* F-3 / F-5: 保存する項目のチェック（親5セクション＋背景・フレーム・テキストの子）を縦リストで。 */
+.preset-tree {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem 0.9rem;
+    flex-direction: column;
     margin-bottom: 0.7rem;
 }
 
-.preset-section-checks label {
-    display: inline-flex;
+.preset-node-row {
+    display: flex;
     align-items: center;
-    gap: 0.35rem;
-    font-size: 0.82rem;
+    gap: 0.5rem;
+    padding: 0.34rem 0.15rem;
+    font-size: 0.85rem;
     color: var(--ink-dim);
     cursor: pointer;
 }
 
-.preset-section-checks input[type="checkbox"] {
+.preset-node-row.parent {
+    color: var(--ink);
+}
+
+.preset-node-row input[type="checkbox"] {
     flex-shrink: 0;
+    margin: 0;
+}
+
+.preset-node-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: var(--ink-faint);
+}
+
+.preset-node-label {
+    flex: 1;
+    min-width: 0;
+    text-align: left; /* fieldset div span の text-align:right を打ち消す */
+}
+
+.preset-node-toggle {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ink-faint);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+}
+
+.preset-node-toggle:hover {
+    background-color: var(--surface-muted);
+    color: var(--ink-dim);
+}
+
+.preset-chevron {
+    width: 13px;
+    height: 13px;
+    transition: transform 0.15s ease;
+}
+
+.preset-node-toggle[aria-expanded="true"] .preset-chevron {
+    transform: rotate(90deg);
+}
+
+.preset-node-children {
+    display: flex;
+    flex-direction: column;
+    margin-left: 0.55rem;
+    padding-left: 0.7rem;
+    border-left: 1px solid var(--border);
+}
+
+.preset-node-row.child {
+    font-size: 0.8rem;
+    padding: 0.26rem 0.15rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .preset-chevron { transition: none; }
 }
 
 .preset-row-apply {

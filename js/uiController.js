@@ -9,7 +9,7 @@ import { requestEnterCropMode } from './interaction/canvasInteraction.js';
 import { enhanceAsScrubInput } from './ui/scrubInput.js';
 import { attachColorHistory } from './ui/colorSwatches.js';
 import { createRatioPicker, ratioOptionsFor } from './ui/ratioPicker.js';
-import { getPresets, savePreset, deletePreset, applyPreset, PRESET_SECTIONS, getPresetSections } from './presets/presetStore.js';
+import { getPresets, savePreset, deletePreset, applyPreset, PRESET_SECTIONS, getPresetSections, getPresetGroups, getNextAutoPresetName } from './presets/presetStore.js';
 import { decodeExifString } from './exifHandler.js';
 
 export const uiElements = {
@@ -434,7 +434,8 @@ export function initializeUIFromState() {
     renderTextLayersList();
     renderTextLayerSettingsPanel();
 
-    // プリセット一覧
+    // プリセット（保存フォームの項目チェック ＋ 保存済み一覧）
+    renderPresetSectionChecks();
     renderPresetsList();
 
     toggleBackgroundSettingsVisibility();
@@ -852,6 +853,132 @@ function syncTextLayerLiveInputs(state) {
 
 // --- プリセット（編集設定のテンプレート保存）のUI ---
 
+// F-3 / F-5: 「プリセットを保存」の項目チェックを、PRESET_SECTIONS から縦リストで組み立てる。
+// 親＝5セクション（3状態チェック）、子＝背景／フレーム／テキストの「効く所だけ」。
+// キャンバス・写真のトリミングは葉。子は既定で畳んでおく（F-5 の確認 Q4）。
+const PRESET_SECTION_ICONS = {
+    output: '#i-canvas',
+    crop: '#i-photo-crop',
+    background: '#i-bg',
+    frame: '#i-frame',
+    text: '#i-text',
+};
+const CHEVRON_SVG =
+    '<svg class="preset-chevron" viewBox="0 0 24 24" aria-hidden="true">' +
+    '<path d="M8 5l8 7-8 7" fill="none" stroke="currentColor" stroke-width="2.4" ' +
+    'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+function renderPresetSectionChecks() {
+    const root = uiElements.presetSectionChecks;
+    if (!root) return;
+    root.innerHTML = '';
+
+    for (const [secKey, def] of Object.entries(PRESET_SECTIONS)) {
+        const node = document.createElement('div');
+        node.className = 'preset-node';
+        const iconRef = PRESET_SECTION_ICONS[secKey] || '#i-preset';
+
+        if (!def.groups) {
+            // 葉セクション: ラベル全体がチェックボックスのトグル。
+            const label = document.createElement('label');
+            label.className = 'preset-node-row';
+            label.innerHTML =
+                `<input type="checkbox" data-section="${secKey}" checked>` +
+                `<svg class="preset-node-icon" aria-hidden="true"><use href="${iconRef}"></use></svg>` +
+                `<span class="preset-node-label">${def.label}</span>`;
+            node.appendChild(label);
+            root.appendChild(node);
+            continue;
+        }
+
+        node.classList.add('has-children');
+        const groupIds = Object.keys(def.groups);
+        const row = document.createElement('div');
+        row.className = 'preset-node-row parent';
+        row.innerHTML =
+            `<input type="checkbox" data-section="${secKey}" data-parent checked>` +
+            `<svg class="preset-node-icon" aria-hidden="true"><use href="${iconRef}"></use></svg>` +
+            `<span class="preset-node-label">${def.label}</span>` +
+            `<button type="button" class="preset-node-toggle" aria-expanded="false" ` +
+            `aria-label="${def.label} の内訳">${CHEVRON_SVG}</button>`;
+        node.appendChild(row);
+
+        const kids = document.createElement('div');
+        kids.className = 'preset-node-children';
+        kids.hidden = true;
+        for (const gid of groupIds) {
+            const gl = document.createElement('label');
+            gl.className = 'preset-node-row child';
+            gl.innerHTML =
+                `<input type="checkbox" data-section="${secKey}" data-group="${gid}" checked>` +
+                `<span class="preset-node-label">${def.groups[gid].label}</span>`;
+            kids.appendChild(gl);
+        }
+        node.appendChild(kids);
+        root.appendChild(node);
+
+        const parentCb = row.querySelector('input[data-parent]');
+        const childCbs = Array.from(kids.querySelectorAll('input[data-group]'));
+        const syncParent = () => {
+            const n = childCbs.filter(c => c.checked).length;
+            parentCb.checked = n > 0;
+            parentCb.indeterminate = n > 0 && n < childCbs.length;
+        };
+        // 親クリック: 「まだ全部ONではない」→ 全ON、「全部ON」→ 全OFF（indeterminate からも常に全ONへ）。
+        // click は既定トグルの後に発火するので、childCbs の状態でどちらへ倒すか決める。
+        parentCb.addEventListener('click', () => {
+            const target = childCbs.some(c => !c.checked);
+            childCbs.forEach(c => { c.checked = target; });
+            parentCb.checked = target;
+            parentCb.indeterminate = false;
+        });
+        childCbs.forEach(c => c.addEventListener('change', syncParent));
+
+        const toggleBtn = row.querySelector('.preset-node-toggle');
+        const setOpen = (open) => {
+            kids.hidden = !open;
+            toggleBtn.setAttribute('aria-expanded', String(open));
+        };
+        toggleBtn.addEventListener('click', () => setOpen(kids.hidden));
+        // ラベル文字クリックでも開閉（チェックボックス・アイコンは除く）。
+        row.addEventListener('click', (e) => {
+            if (e.target.closest('input, .preset-node-toggle')) return;
+            setOpen(kids.hidden);
+        });
+    }
+
+    updatePresetNamePlaceholder();
+}
+
+/** F-4: 名前欄の placeholder を「次に自動で振られる名前」にする。 */
+function updatePresetNamePlaceholder() {
+    if (uiElements.presetNameInput) {
+        uiElements.presetNameInput.placeholder = getNextAutoPresetName();
+    }
+}
+
+/** 保存フォームのチェック状態を { sections, groups } に集約する（savePreset へ渡す形）。 */
+function collectPresetSelection() {
+    const root = uiElements.presetSectionChecks;
+    const sections = [];
+    const groups = {};
+    if (!root) return { sections: Object.keys(PRESET_SECTIONS), groups };
+    for (const [secKey, def] of Object.entries(PRESET_SECTIONS)) {
+        if (!def.groups) {
+            const cb = root.querySelector(`input[data-section="${secKey}"]:not([data-group]):not([data-parent])`);
+            if (cb && cb.checked) sections.push(secKey);
+        } else {
+            const childCbs = Array.from(root.querySelectorAll(`input[data-section="${secKey}"][data-group]`));
+            const chosen = childCbs.filter(c => c.checked).map(c => c.dataset.group);
+            if (chosen.length > 0) {
+                sections.push(secKey);
+                if (chosen.length < childCbs.length) groups[secKey] = chosen;
+            }
+        }
+    }
+    return { sections, groups };
+}
+
 /** 保存済みプリセットの一覧を再描画する。保存・削除・（Undo/Redoなどによる）UI全体再構築時に呼ぶ。 */
 function renderPresetsList() {
     const container = uiElements.presetsListContainer;
@@ -877,14 +1004,27 @@ function renderPresetsList() {
         label.textContent = preset.name;
         nameWrap.appendChild(label);
 
-        // F-2: このプリセットが含むセクションを小さく表示する。
-        const sectionLabels = getPresetSections(preset).map(s => PRESET_SECTIONS[s].label);
+        // F-2 / F-5: このプリセットが含むセクションを小さく表示する。
+        // 子グループを一部だけ保存したセクションは「背景（一部）」＋ ツールチップに内訳。
+        const secKeys = getPresetSections(preset);
+        const partialGroups = getPresetGroups(preset);
+        const shortParts = secKeys.map(s => {
+            const base = PRESET_SECTIONS[s].label;
+            return partialGroups[s] ? `${base}（一部）` : base;
+        });
+        const fullParts = secKeys.map(s => {
+            const base = PRESET_SECTIONS[s].label;
+            if (!partialGroups[s]) return base;
+            const gl = partialGroups[s].map(id => PRESET_SECTIONS[s].groups[id].label).join('・');
+            return `${base}（${gl}）`;
+        });
         const meta = document.createElement('span');
         meta.className = 'preset-row-meta';
-        meta.textContent = sectionLabels.length === Object.keys(PRESET_SECTIONS).length
+        meta.textContent = (secKeys.length === Object.keys(PRESET_SECTIONS).length
+            && Object.keys(partialGroups).length === 0)
             ? 'すべて'
-            : sectionLabels.join('・');
-        meta.title = sectionLabels.join('・');
+            : shortParts.join('・');
+        meta.title = fullParts.join('・');
         nameWrap.appendChild(meta);
 
         row.appendChild(nameWrap);
@@ -910,6 +1050,7 @@ function renderPresetsList() {
             if (confirm(`プリセット「${preset.name}」を削除しますか?`)) {
                 deletePreset(preset.id);
                 renderPresetsList();
+                updatePresetNamePlaceholder();
             }
         });
         row.appendChild(delBtn);
@@ -1366,18 +1507,17 @@ export function setupEventListeners(redrawCallback) {
     if (uiElements.savePresetButton) {
         uiElements.savePresetButton.addEventListener('click', () => {
             const name = uiElements.presetNameInput ? uiElements.presetNameInput.value : '';
-            // F-2: チェックされたセクションだけ保存する。
-            const sections = uiElements.presetSectionChecks
-                ? Array.from(uiElements.presetSectionChecks.querySelectorAll('input[type="checkbox"]:checked'))
-                    .map(cb => cb.dataset.section)
-                : Object.keys(PRESET_SECTIONS);
+            // F-2 / F-5: チェックされたセクション＋子グループだけ保存する。
+            const { sections, groups } = collectPresetSelection();
             if (sections.length === 0) {
                 alert('保存する項目を1つ以上選択してください。');
                 return;
             }
-            const preset = savePreset(name, sections);
+            const preset = savePreset(name, sections, groups);
             if (preset) {
+                // 名前欄はクリアするが、項目チェックはユーザーが残した状態のまま維持する。
                 if (uiElements.presetNameInput) uiElements.presetNameInput.value = '';
+                updatePresetNamePlaceholder();
                 renderPresetsList();
             } else {
                 alert('プリセットの保存に失敗しました。ブラウザのストレージ容量を確認してください。');
