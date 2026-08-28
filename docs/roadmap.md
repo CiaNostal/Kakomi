@@ -64,6 +64,7 @@
 | D-1 | テキスト追加ワークフローを「＋ テキストを追加 → 作成フォームで内容を組み立て → 追加でキャンバスに出る」の順に再設計（スコープB。撮影日・Exif も「テキスト」の1種＝内容欄に差し込む動的トークンとして作る） | `session-log-2026-08-28-4.md` |
 | D-3 | 撮影日・Exif・自由テキストを1本の `textSettings.layers[]` に統合。`kind` フィールドは持たず「Exif を含むか」等は `content` から導出。フォント・大きさ・不透明度・位置・回転など見た目の設定は種類を問わず共通の1セット。旧形式プリセットは `migrateTextSettings()` が `applyPreset` の入口で変換 | `session-log-2026-08-28-4.md` |
 | C-1 | 角丸「半径」と超楕円「次数n」を1つの「丸み」スライダー（`#frameRoundness`、0-100、右ほど丸い）に統合。角のスタイルは2択（角丸/超楕円、「なし」廃止＝丸み0 が実質「なし」）。角丸は `半径% = 丸み/2`、超楕円は角の詰まり `F=2^(-1/n)` を等間隔に刻む非線形マッピング（丸み0→n40、丸み100→n3。逆関数でプリセット位置復元）。モード切替は丸み位置を保持。`createSuperellipsePath` は `Math.round` を撤去し clamp のみ（非整数 n 可）。`layoutCalculator`・データモデル・Undo・`presetStore` は無変更 | `session-log-2026-08-28-5.md` |
+| A-5 | crop モード中は「キャンバスの外側」（`.canvas-area` のパディング／出力比率が縦長・横長のときのレターボックス）をクリックしてもクロップを確定できる。`initCanvasInteraction()` が `previewCanvas.closest('.canvas-area')` に `pointerdown`/`pointerup` を張り、`e.target !== previewCanvas` かつ crop モードのときだけ canvas 本体と同じ「短いタップ」判定で `exitCrop()`。select モードは無反応（キャンバス外クリックでの選択解除は対象外）。`?debug` 用に `window.__kakomiGetPhotoEditMode` を追加 | `session-log-2026-08-29.md` |
 
 ダブルクリックでオフセットをリセットする案は「他の操作が暴発しそう」としてユーザー判断で見送り。
 
@@ -175,7 +176,8 @@ phase7b1-regress 18/18・phase7b2 27/27・phase7b3 24/24。実装後に A-13「�
 34. **B-6** 背景タイプに「別画像」を追加。規模見積もりは後日。
 
 **バケット後の積み残し:** ~~C-1（超楕円スライダーの体感等間隔マッピング）~~ ✅ 完了（`docs/session-log-2026-08-28-5.md`）／
-A-5（クロップ確定をキャンバス外クリックでも）／A-4（クロップ後の写真を回転）／A-3（クロップ時に元画像を回転。最大規模）。
+~~A-5（クロップ確定をキャンバス外クリックでも）~~ ✅ 完了（`docs/session-log-2026-08-29.md`）／
+A-4（クロップ後の写真を回転）／A-3（クロップ時に元画像を回転。最大規模）。
 
 ---
 
@@ -210,14 +212,15 @@ A-5（クロップ確定をキャンバス外クリックでも）／A-4（ク�
 **検討メモ（暫定）:** テキストの回転ハンドル（`textHandleStore` / `interactionRegistry` / `utils/geometry.js` の `rotatePoint`）の仕組みを写真にも適用。
 A-3（切り出し元の回転）と A-4（出力枠内の回転）はレイヤーが違うので、両方要るか片方でよいか整理する。
 
-### A-5. クロップ確定のクリック対象を「キャンバスの外」まで広げる
+### A-5.（完了）
 
-**要望:** 現在は「クロップ枠の外 **かつ** キャンバスの中」で確定。キャンバス外の余白（`.canvas-area`）クリックでも確定したい。
-
-**現状:** 確定は `previewCanvas` の `pointerup`（`canvasInteraction.js`、`cropExitCandidate`）でのみ検出。キャンバス外は別要素でイベントが来ない。
-
-**検討メモ（暫定）:** `.canvas-area` かドキュメントレベルに「crop モード中だけ有効な pointerdown リスナー」を足し、
-`previewCanvas` の外側クリックで `exitCrop()`。既存の「キャンバス外クリックで選択解除」との整合に注意。**難しければ要相談。**
+crop モード中は `.canvas-area` の余白（パディング／レターボックス）クリックでもクロップを確定できる。
+`initCanvasInteraction()` が `previewCanvas.closest('.canvas-area')` に `pointerdown`/`pointerup` を張り、
+crop モード中かつ `e.target !== previewCanvas` のとき、canvas 本体と同じ「短いタップ」判定
+（`CLICK_MOVE_THRESHOLD` / `CLICK_TAP_MS`）を満たせば `photoEditModeStore.exitCrop()`。select モードでは
+何もしない（キャンバス外クリックでの選択解除は別機能なので対象外）。リスナーは `.canvas-area` に限定するので
+設定パネル・上部バー・比率タイルのクリックは従来どおり crop を抜けさせない。`?debug` スモーク用に
+`window.__kakomiGetPhotoEditMode` を追加。詳細は「完了済み」表と `docs/session-log-2026-08-29.md`。
 
 ### A-9. → G-2 へ集約
 
@@ -556,6 +559,11 @@ no-op に、`uiController.applyCropAspect` を内接 `fitRectToAspect` → 外�
 - **C-1 完了**（`docs/session-log-2026-08-28-5.md`。角丸／超楕円を「丸み」スライダー1本に統合、超楕円は
   角の詰まり `F=2^(-1/n)` 等間隔マッピング。c1-test 37/37 ＋ phase7b4 / phase7b4-regress / phase5 / g1 回帰全通し。
   ユーザーのブラウザ目視は次回）。
+- **A-5 完了**（`docs/session-log-2026-08-29.md`。crop モード中は `.canvas-area` の余白クリックでもクロップ確定。
+  `initCanvasInteraction()` が `.canvas-area` に薄い pointerdown/up リスナーを追加、`?debug` に
+  `window.__kakomiGetPhotoEditMode` を追加。a5-test 14/14 ＋ g1 13/13・phase5 25/25・c1 37/37・phase7b4 41/41・
+  phase7b4-regress 16/16 回帰全通し。ユーザーのブラウザ目視も確認済み・push 済み）。**次はバケット5（B-6
+  背景に別画像、登録のみ）** → 積み残し A-4（クロップ後の写真を回転）／A-3（クロップ時に元画像を回転・最大規模）。
 - 比率タイルピッカー（`js/ui/ratioPicker.js`）は「形で見せて選ぶ」の再利用ネタ（C-1 で採った「感覚に合わせて曲げる」も同系）。
 - 「タブでプレビュー操作の意味を変える」系は、`tabManager.getActiveTab()` ＋ `canvasInteraction.js` の分岐に足していける。
   フェーズ4 で「パネルを畳んだ（`getActiveTab()`＝`null`）」状態が加わった＝写真ドラッグは枠内配置にフォールバックする。

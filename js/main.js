@@ -74,6 +74,9 @@ export async function requestRedraw() {
 // 本番の挙動には一切影響しない（Playwright スモークが cropSettings 等を検査するのに使う）。
 if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug')) {
     window.__kakomiGetState = getState;
+    // 写真の編集サブモード（'select' / 'crop'）。A-5 スモークが「キャンバス外クリックで
+    // クロップ確定」を検査するのに使う。
+    window.__kakomiGetPhotoEditMode = photoEditModeStore.getMode;
 }
 
 // DOMContentLoadedイベントでアプリケーションを初期化

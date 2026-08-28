@@ -386,6 +386,35 @@ export function initCanvasInteraction(canvas) {
     });
     canvas.addEventListener('pointercancel', () => { pointerDownCtx = null; endDrag(); });
 
+    // A-5: crop モード中は「キャンバスの外側」（.canvas-area のパディングや、
+    // 出力比率が縦長／横長のときにキャンバス周囲へできるレターボックス）をクリックしても
+    // クロップを確定できるようにする。previewCanvas 自身へのクリックは上の pointerup が
+    // 扱う（クロップ枠の外 → exitCrop）ため、ここではキャンバス以外の要素へ落ちた
+    // クリックだけを拾う。select モードでは何もしない（キャンバス外クリックでの選択解除は
+    // 別機能なので A-5 の対象外）。
+    const cropArea = canvas.closest('.canvas-area');
+    if (cropArea) {
+        let areaDownCtx = null;
+        cropArea.addEventListener('pointerdown', (e) => {
+            if (e.target === canvas || !photoEditModeStore.isCropMode()) {
+                areaDownCtx = null;
+                return;
+            }
+            areaDownCtx = { clientX: e.clientX, clientY: e.clientY, downTime: performance.now() };
+        });
+        cropArea.addEventListener('pointerup', (e) => {
+            const ad = areaDownCtx;
+            areaDownCtx = null;
+            if (!ad || !photoEditModeStore.isCropMode()) return;
+            // canvas 上の pointerup と同じ「短いタップ」判定を使う。
+            const moved = Math.hypot(e.clientX - ad.clientX, e.clientY - ad.clientY);
+            const heldMs = performance.now() - ad.downTime;
+            if (moved > CLICK_MOVE_THRESHOLD || heldMs > CLICK_TAP_MS) return;
+            photoEditModeStore.exitCrop();
+        });
+        cropArea.addEventListener('pointercancel', () => { areaDownCtx = null; });
+    }
+
     // 矢印キーによる微調整（Shiftで10px相当、通常は1px相当。ドラッグと同じ「プレビュー上のpx」単位で扱う）
     document.addEventListener('keydown', (e) => {
         if (isEditableElement(document.activeElement)) return; // 入力欄編集中はナッジしない
