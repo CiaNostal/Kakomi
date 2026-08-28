@@ -109,9 +109,10 @@ export const controlsConfig = {
     // レイアウト設定タブ
     baseMarginPercent: { defaultValue: 5, min: 0, max: 300, step: 0.5 }, // number input（写真短辺に対する%。大きめの余白も置けるよう上限300%）
     // A-10: スライダーの見かけは「大きさ」（写真短辺がキャンバス短辺に占める割合%）。
-    // 内部は baseMarginPercent のまま。size = 100 / (1 + 2*margin/100)。
-    // size=100 → margin=0（最大）、size≈90.9 → margin=5（既定）、size=14 → margin≈300。
-    photoSize: { defaultValue: 90.9090909, min: 14, max: 100, step: 0.5 },
+    // 内部は baseMarginPercent のまま。size = 100 / (1 + margin/45)。
+    // size=100 → margin=0（最大）、size=90 → margin=5（既定）、size=15（下限）→ margin=255。
+    // 下限 15 は marginToSize(300)≈13.0% より上なので、スライダー全域が実 margin に 1:1 対応する（不感帯なし）。
+    photoSize: { defaultValue: 90, min: 15, max: 100, step: 0.5 },
     // 背景編集タブ
     backgroundType: { defaultValue: 'color' }, // radio button のデフォルト選択値
     backgroundColor: { defaultValue: '#ffffff' }, // color input

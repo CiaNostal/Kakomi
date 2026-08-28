@@ -156,13 +156,14 @@ function cropRectWithPan(rect, panX, panY) {
 // A-10:「大きさ」スライダーの見かけ値（写真短辺がキャンバス短辺に占める割合%）と、
 // 内部の baseMarginPercent（写真短辺に対する余白%）の相互変換。表示・入力の反転だけで、
 // レイアウト計算（layoutCalculator）には一切手を入れていない。
-// size = 100 / (1 + 2*margin/100)。margin=0 → 100%、margin=5 → 約90.9%、margin=300 → 約14.3%。
+// size = 100 / (1 + margin/45)。margin=0 → 100%、margin=5（既定）→ ちょうど 90%、margin=300 → 約13%。
+// スライダーの下限は 15%（marginToSize(300)≈13% より上なので、全域が実 margin に 1:1 対応する）。
 function marginToSize(marginPercent) {
-    return 100 / (1 + 2 * (Math.max(0, Number(marginPercent) || 0) / 100));
+    return 100 / (1 + (Math.max(0, Number(marginPercent) || 0) / 45));
 }
 function sizeToMargin(sizePercent) {
     const s = Math.min(100, Math.max(1, Number(sizePercent) || 100));
-    return Math.min(300, Math.max(0, 50 * (100 - s) / s));
+    return Math.min(300, Math.max(0, 45 * (100 - s) / s));
 }
 
 // G-4: カスタム幅高さ欄を「明示的にカスタムモードに入っているあいだ」表示し続けるための粘着フラグ。
@@ -1279,6 +1280,10 @@ export function setupEventListeners(redrawCallback) {
         });
         const resetPhotoSize = () => {
             updateState({ baseMarginPercent: marginDefault });
+            // dblclick／ダブルタップはスライダーにフォーカスが乗るので、updateSliderValueDisplays の
+            // activeElement ガード（ドラッグ中に .value を上書きしないための分岐）に阻まれて
+            // つまみ位置が戻らない。ここで明示的に size 値へ同期する（値・表示・描画は既に直っている）。
+            uiElements.baseMarginPercentInput.value = String(marginToSize(marginDefault));
             updateSliderValueDisplays();
             redrawCallback();
         };
