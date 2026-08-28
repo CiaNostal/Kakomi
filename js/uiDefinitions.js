@@ -134,9 +134,13 @@ export const controlsConfig = {
     textOpacity: { defaultValue: 1, min: 0, max: 1, step: 0.01 }, // 1=くっきり／0=透明。UIラベルは「不透明度」
 
     // フレーム加工タブ
-    frameCornerStyle: { defaultValue: 'none' }, // ラジオボタンまたはselect用
-    frameCornerRadiusPercent: { defaultValue: 0, min: 0, max: 50, step: 1 }, // %
-    frameSuperellipseN: { defaultValue: 4, min: 3, max: 40, step: 1 },    // 整数
+    frameCornerStyle: { defaultValue: 'rounded' }, // C-1: 2択（rounded / superellipse）。現状コードからの参照はないが整合のため
+    // C-1: 角丸／超楕円を1本の「丸み」スライダー（0-100、右ほど丸い）に統合。
+    // frameRoundness がスライダー要素の min/max/step/既定を駆動する（見かけ値）。
+    // frameCornerRadiusPercent / frameSuperellipseN は保存キーのクランプ・リセット用に残す。
+    frameRoundness: { defaultValue: 0, min: 0, max: 100, step: 1 }, // 見かけ値（0-100）
+    frameCornerRadiusPercent: { defaultValue: 0, min: 0, max: 50, step: 1 }, // %（保存キー）
+    frameSuperellipseN: { defaultValue: 40, min: 2, max: 40, step: 0.01 },    // 次数n（保存キー、連続値）
 
     frameShadowEnabled: { defaultValue: false }, // チェックボックス
     frameShadowType: { defaultValue: 'drop' },   // ラジオボタンまたはselect用 ('none', 'drop', 'inner')

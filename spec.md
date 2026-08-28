@@ -202,9 +202,9 @@ Kakomi/
     height: number
   },
   frameSettings: {                    // フレーム加工設定
-    cornerStyle: 'none' | 'rounded' | 'superellipse',
-    cornerRadiusPercent: number,
-    superellipseN: number,
+    cornerStyle: 'rounded' | 'superellipse',  // C-1: 「なし」は廃止（丸み0 が実質「なし」）。'none' は旧プリセット互換で描画側のみ残す
+    cornerRadiusPercent: number,       // 角丸の半径%（0-50）。UI「丸み」スライダー(0-100)の 1/2
+    superellipseN: number,             // 超楕円の次数（連続値、2-40）。UI「丸み」スライダーからは非線形マッピングで算出（C-1、7.4節）
     shadowEnabled: boolean,
     shadowType: 'drop' | 'inner',
     shadowParams: {
@@ -317,7 +317,9 @@ UI要素の制御とイベントハンドリングを担当します。
 - Canvasドラッグ中の座標欄（横位置/縦位置）・拡大/回転ハンドル操作中のサイズ・回転角の値だけは、`syncTextLayerLiveInputs(state)` が軽量に `.value` のみ更新し、パネル全体は再構築しない（`create` モード中は下書きが state と無関係のため早期 return）。横位置/縦位置/回転の数値欄は `enhanceAsScrubInput()` でスクラブ／タイプ入力対応。
 
 **フレーム加工パネルの開閉表現:**
-角丸/超楕円のパラメータ行・影/縁取りの詳細設定は、以前は`style.display = 'none'/''`による即時の表示切り替えだったが、CSSの`grid-template-rows`トランジション（`.accordion`/`.accordion.open`、`style.css`）による滑らかな開閉に変更した。`updateFrameSettingsVisibility()`はこれに合わせて対象要素への`classList.toggle('open', ...)`に変更しているが、値の読み書きロジック自体（`addOptionChangeListener`等）は変更していない。
+影/縁取りの詳細設定は、以前は`style.display = 'none'/''`による即時の表示切り替えだったが、CSSの`grid-template-rows`トランジション（`.accordion`/`.accordion.open`、`style.css`）による滑らかな開閉に変更した。`updateFrameSettingsVisibility()`はこれに合わせて対象要素への`classList.toggle('open', ...)`に変更しているが、値の読み書きロジック自体（`addOptionChangeListener`等）は変更していない。
+C-1 で角丸/超楕円のモード別パラメータ行（半径 / 次数n の2アコーディオン）は廃止し、両モード共通の「丸み」スライダー1本を常時表示（静的な `<div class="accordion open">` で既存 CSS を流用）にした。`updateFrameSettingsVisibility()` から角丸/超楕円コンテナのトグルは削除済み。
+フレームタブは `<fieldset>` ではなく `<div class="frame-card">` を使うため、`fieldset div.form-row-slider`（3列グリッド）／`fieldset div.form-row-simple`（flex）系のセレクタが効かず `.form-row-slider` が素の block になってスライダーのつまみが行からはみ出していた。`style.css` でこれらのセレクタに `.frame-card div.form-row-slider` / `.frame-card div.form-row-simple` を並記し、レイアウト／背景タブと同じ「ラベル｜スライダー｜値」の3列表示に揃えた（影・縁取りアコーディオン内の行も同様に整う）。
 
 ### 5.4 layoutCalculator.js
 レイアウト計算を担当します。写真の切り出し領域、出力Canvasサイズ、写真の配置位置を計算します。
@@ -396,6 +398,8 @@ UI要素の制御とイベントハンドリングを担当します。
 - 媒介変数表示を使用: `x(t) = a * sgn(cos(t)) * |cos(t)|^(2/n)`
 - 第一象限を計算し、対称性を利用して全象限を描画
 - 次数nにより形状を制御（n=2で楕円、nが大きいと四角に近づく）
+- `nParam` は `[2, 40]` にクランプするのみで**整数化しない**（C-1）。UI の「丸み」スライダーが
+  非線形マッピングで連続値の n を渡すため。媒介変数計算は非整数 n をそのまま扱える。
 
 **影の実装:**
 - **ドロップシャドウ**: オフスクリーンCanvasを使用して影を生成し、ぼかしを適用
@@ -753,6 +757,7 @@ Blobをダウンロード
 - **基準余白 / 「大きさ」スライダー**: 内部値`baseMarginPercent`は構図調整後の写真の短辺に対する%（0-300%）で不変。
   - この値は「最小限の余白量」の目安。実際の余白は、出力画像の目標アスペクト比を維持するために、この基準値よりも一部が自動的に広がる場合がある。
   - **UI 表記は「大きさ」（`docs/roadmap.md` A-10）**: スライダー（`#baseMarginPercent`。`controlsConfig.photoSize` の min15/max100/step0.5 で駆動）は「写真短辺がキャンバス短辺に占める割合%」を見かけ値として扱い、**右に倒すほど写真が大きくなる**（＝余白が減る）。`marginToSize(m) = 100/(1+m/45)`（m=0→100%、m=5→ちょうど90%、m=300→約13%）と逆変換`sizeToMargin(s) = 45(100-s)/s`で`baseMarginPercent`と1対1対応。既定 margin=5 がちょうど 90% になるよう分母を 45 に選んである。スライダー下限 15% は `marginToSize(300)≈13%` より上なので、全域が実 `baseMarginPercent`（0〜255）に 1:1 対応する（不感帯なし。内部ロジックには手を入れず range 属性だけで解決）。`updateSliderValueDisplays()`が表示・入力欄同期を、専用の`input`／`dblclick`（既定 margin 5＝size 90 へ）リスナーが保存を担う（汎用`addNumericInputListener`は使わない）。`updateSliderValueDisplays()`はドラッグ中に値が飛ばないよう「スライダーにフォーカスがあるあいだは`.value`を書き換えない」ガードを持つため、`dblclick`／ダブルタップのリセットハンドラは`updateState`後に`baseMarginPercentInput.value`へ`marginToSize(5)`を明示代入してつまみ位置を戻す。四隅■ハンドルのドラッグ（`commitMarginResizeByDrag`）でも同じ表示に反映される。レイアウト計算（`layoutCalculator`）には一切手を入れていない。
+  - **同じ「UI 値 ≠ 保存値」パターンの他の例**: フレームタブの「丸み」スライダー（C-1、7.4節）。0-100 の見かけ値を、角丸モードでは `cornerRadiusPercent`、超楕円モードでは `superellipseN` へ非線形変換して保存する。
 - **写真位置調整**: 出力画像のフレーム内で、写真をどこに配置するか（`photoViewParams`、X/Y とも 0.0=端〜0.5=中央〜1.0=端）
   - **数値スライダー（`#photoPosX/Y`）は 2026年8月のフェーズ2で撤去（`docs/roadmap.md` A-1）**。`photoViewParams` はデータとしては維持し、**プレビュー上で写真を直接ドラッグして調整する**（`interaction/adapters/photoAdapter.js`。ドラッグ中はキャンバス中央線・端・他オブジェクトへのスナップも働く）。パネルには「**大きさと配置をリセット**」ボタン（`#resetPhotoPlacement`。旧「配置をリセット」。`docs/roadmap.md` A-15）があり、`photoViewParams` を中央へ・クロップ矩形のパンを中央へ・`baseMarginPercent` を既定 5（表示 90%）へ戻す（切り抜き範囲のサイズ・比率は変えない。押下後 `updateSliderValueDisplays()` で「大きさ」スライダーも同期）。「大きさと配置」セクションにあった説明文は A-16 で削除。
   - **注意:** 仕様書v1では「9点から選択」とあるが、現在の実装ではプレビュードラッグによる連続的な位置調整となっている
@@ -804,10 +809,22 @@ Blobをダウンロード
 - オフセット調整を適用
 
 ### 7.4 フレーム加工
-- **角のスタイル**:
-  - なし: 通常の矩形
-  - 角丸: 半径を%で指定（0-50%）
-  - 超楕円: 次数nを指定（3-40）
+- **角のスタイル**（C-1 で「角丸 / 超楕円」の2択に。旧「なし」は廃止＝下記「丸み」0 が実質「なし」。
+  `<input type="radio" name="frameCornerStyle">` は `frameCornerStyleRounded` / `frameCornerStyleSuperellipse` の2つ）:
+  - 角丸: 円弧で角を丸める
+  - 超楕円: 連続曲率で角を丸める（`|x/a|ⁿ + |y/a|ⁿ = 1`。n=2 で楕円、大きいほど四角に近づく）
+- **丸み**（C-1、両モード共通の1スライダー `#frameRoundness`。ラベル「丸み:」、表示値 `#frameRoundnessValue` は 0-100）:
+  - 見かけ値 **0-100、右ほど丸い**（step 1、`controlsConfig.frameRoundness`）。保存キーは選択中モードに応じて
+    `frameSettings.cornerRadiusPercent`（角丸）または `frameSettings.superellipseN`（超楕円）。
+  - **角丸**: `cornerRadiusPercent = 丸み / 2`（線形。丸み100 → 半径50%）。
+  - **超楕円**: 角の詰まり具合 `F(n) = 2^(-1/n)` を等間隔に刻む「体感で等間隔」マッピング。
+    `F(丸み) = F(40) + (丸み/100)·(F(3) − F(40))`、`n = −1 / log₂F`。丸み0 → n=40（ほぼ矩形、角が約1.7%だけ出る）、
+    丸み100 → n=3（もっとも丸い超楕円）。逆関数 `nToRoundness(n)` でプリセット／Undo からスライダー位置を復元。
+  - **モード切替（角丸 ⇄ 超楕円）は「丸み」位置を保ったまま**、新モードの丸め関数へ変換して保存キーへ書き戻す。
+  - `uiController.js` の `roundnessToRadius` / `radiusToRoundness` / `roundnessToN` / `nToRoundness` / `currentRoundness`
+    が変換を担い、`#frameRoundness` 専用の `input` / `dblclick`（丸み0へ）リスナーが保存を担う（A-10「大きさ」と
+    同じ「UI 値 ≠ 保存値」パターン。汎用 `addNumericInputListener` は使わない）。`layoutCalculator` / `frameRenderer`
+    には手を入れない。旧プリセットの `cornerStyle: 'none'` は角丸／丸み0 として表示し、スライダー操作で 'rounded' へ昇格する。
 - **影**:
   - タイプ: 外側（ドロップ）または内側（インナー）
   - オフセットX/Y: -25%〜25%（写真短辺基準）。スライダーに加え、**「フレーム」タブを開いていて影が有効（`shadowEnabled`）なとき、プレビュー上で写真本体をドラッグして直接動かせる**（`interaction/adapters/shadowAdapter.js`、5.16節「タブ別ドラッグ」）。Shiftドラッグで軸ロック、0 付近で 0 にスナップ＋赤い中央ガイド。影が無効なときはドラッグしても何も起こらない

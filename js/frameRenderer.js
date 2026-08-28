@@ -18,11 +18,10 @@ function createSuperellipsePath(ctx, x, y, width, height, nParam) {
     const centerX = x + a;
     const centerY = y + b;
 
-    // n の値を安全な範囲に丸める・制限する (整数化も)
-    // UI側で3-20に制限されている想定だが、念のためここでも。
-    // n=2で楕円、nが1に近いと星形に、大きいと四角に近づく。
-    // 仕様書ではn=3から20の整数。
-    const n = Math.max(2, Math.min(40, Math.round(nParam))); // n=2も許容して楕円も描けるようにし、上限を少し余裕を持たせる(UI側で3-20を制御)
+    // n の値を安全な範囲に制限する（clamp のみ）。
+    // C-1: UI 側の「丸み」スライダーが非線形マッピングで連続値の n を渡すため、ここで整数化しない
+    //（媒介変数計算は非整数 n をそのまま扱える）。n=2 で楕円、大きいほど四角に近づく。有効範囲 [2, 40]。
+    const n = Math.max(2, Math.min(40, Number(nParam) || 2));
 
     const points = [];
     // 媒介変数表示: x(t) = a * sgn(cos(t)) * |cos(t)|^(2/n), y(t) = b * sgn(sin(t)) * |sin(t)|^(2/n)

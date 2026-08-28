@@ -57,9 +57,12 @@ let editState = {
     // フレーム加工関連の設定を追加
     frameSettings: {
         // 角のスタイル関連
-        cornerStyle: 'none',
-        cornerRadiusPercent: 10,
-        superellipseN: 10,
+        // C-1: 角のスタイルは「角丸 / 超楕円」の2択（「なし」は廃止＝丸み0 が実質「なし」）。
+        // 既定は 角丸 / 丸み0（cornerRadiusPercent 0）＝見た目は旧「なし」と同一。
+        // superellipseN の既定 40 は超楕円モードの丸み0（ほぼ矩形）に対応する。
+        cornerStyle: 'rounded',
+        cornerRadiusPercent: 0,
+        superellipseN: 40,
         // 影関連
         shadowEnabled: false,
         shadowType: 'drop',

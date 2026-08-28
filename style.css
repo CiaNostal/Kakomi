@@ -446,8 +446,12 @@ fieldset legend .legend-text {
     margin-top: 1.1rem;
 }
 
-/* スライダーや3列構成の行のためのスタイル */
-fieldset div.form-row-slider {
+/* スライダーや3列構成の行のためのスタイル。
+   フレームタブは <fieldset> ではなく <div class="frame-card"> を使うため、同じセレクタを並記して
+   レイアウト／背景タブと同じ「ラベル｜スライダー｜値」の3列表示に揃える（C-1: そうしないと
+   range 入力が行を丸ごと使い、つまみが行の端からはみ出す）。 */
+fieldset div.form-row-slider,
+.frame-card div.form-row-slider {
     margin-bottom: 0.8rem;
     display: grid;
     grid-template-columns: 100px 1fr 60px;
@@ -455,18 +459,21 @@ fieldset div.form-row-slider {
     align-items: center;
 }
 
-fieldset div.form-row-slider input[type="range"] {
+fieldset div.form-row-slider input[type="range"],
+.frame-card div.form-row-slider input[type="range"] {
     width: 100%;
 }
 
-fieldset div.form-row-slider span {
+fieldset div.form-row-slider span,
+.frame-card div.form-row-slider span {
     text-align: right;
     font-family: var(--font-mono);
 }
 
 /* 「出力フォーマット」のようなシンプルな2列（またはラベル、入力、単位の3列）の行のためのスタイル。
    flex-wrapで、狭い幅でも収まりきらない場合は折り返す（はみ出し防止のフォールバック）。 */
-fieldset div.form-row-simple {
+fieldset div.form-row-simple,
+.frame-card div.form-row-simple {
     margin-bottom: 0.8rem;
     display: flex;
     flex-wrap: wrap;
@@ -475,12 +482,15 @@ fieldset div.form-row-simple {
     gap: 0.5rem 0.8rem;
 }
 
-fieldset div.form-row-simple label {
+fieldset div.form-row-simple label,
+.frame-card div.form-row-simple label {
     flex-shrink: 0;
 }
 
 fieldset div.form-row-simple select,
-fieldset div.form-row-simple input[type="number"] {
+fieldset div.form-row-simple input[type="number"],
+.frame-card div.form-row-simple select,
+.frame-card div.form-row-simple input[type="number"] {
     flex-grow: 1;
     min-width: 80px;
 }
@@ -527,7 +537,8 @@ fieldset div.form-row-simple input[type="number"] {
     color: var(--accent);
 }
 
-fieldset div.form-row-simple span {
+fieldset div.form-row-simple span,
+.frame-card div.form-row-simple span {
     flex-shrink: 0;
     margin-left: 0.3rem;
     font-family: var(--font-mono);

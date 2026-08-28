@@ -314,15 +314,8 @@
                                     </svg></span>
                                 <span class="frame-card-title">角のスタイル</span>
                             </div>
+                            <!-- C-1: 角のスタイルは「角丸 / 超楕円」の2択。「なし」は廃止（丸み0 が実質「なし」）。 -->
                             <div class="corner-segmented">
-                                <label class="segment">
-                                    <input type="radio" id="frameCornerStyleNone" name="frameCornerStyle"
-                                        value="none">
-                                    <span class="segment-icon"><svg>
-                                            <use href="#i-corner-none"></use>
-                                        </svg></span>
-                                    なし
-                                </label>
                                 <label class="segment">
                                     <input type="radio" id="frameCornerStyleRounded" name="frameCornerStyle"
                                         value="rounded">
@@ -340,24 +333,15 @@
                                     超楕円
                                 </label>
                             </div>
-                            <div id="frameCornerRoundedSettingsContainer" class="accordion">
+                            <!-- C-1: 角丸・超楕円で共通の「丸み」スライダー（0-100、右ほど丸い）。
+                                 モードで丸め方の関数を切り替える（uiController.js roundnessToRadius / roundnessToN）。 -->
+                            <div class="accordion open">
                                 <div class="accordion-inner">
                                     <div class="accordion-body">
                                         <div class="form-row-slider">
-                                            <label for="frameCornerRadiusPercent">半径 (%):</label>
-                                            <input type="range" id="frameCornerRadiusPercent">
-                                            <span id="frameCornerRadiusPercentValue">0%</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div id="frameCornerSuperellipseSettingsContainer" class="accordion">
-                                <div class="accordion-inner">
-                                    <div class="accordion-body">
-                                        <div class="form-row-slider">
-                                            <label for="frameSuperellipseN">次数 n:</label>
-                                            <input type="range" id="frameSuperellipseN">
-                                            <span id="frameSuperellipseNValue">4</span>
+                                            <label for="frameRoundness">丸み:</label>
+                                            <input type="range" id="frameRoundness">
+                                            <span id="frameRoundnessValue">0</span>
                                         </div>
                                     </div>
                                 </div>

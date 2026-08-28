@@ -72,15 +72,12 @@ export const uiElements = {
     jpgQualityValueSpan: document.getElementById('jpgQualityValue'),
 
     // フレーム加工タブ
-    frameCornerStyleNoneRadio: document.getElementById('frameCornerStyleNone'),
+    // C-1: 角のスタイルは「角丸 / 超楕円」の2択。「なし」ラジオと、モード別の2つの
+    // アコーディオン（半径 / 次数n）は廃止し、常時表示の「丸み」スライダー1本に統合。
     frameCornerStyleRoundedRadio: document.getElementById('frameCornerStyleRounded'),
     frameCornerStyleSuperellipseRadio: document.getElementById('frameCornerStyleSuperellipse'),
-    frameCornerRoundedSettingsContainer: document.getElementById('frameCornerRoundedSettingsContainer'),
-    frameCornerRadiusPercentSlider: document.getElementById('frameCornerRadiusPercent'),
-    frameCornerRadiusPercentValueSpan: document.getElementById('frameCornerRadiusPercentValue'),
-    frameCornerSuperellipseSettingsContainer: document.getElementById('frameCornerSuperellipseSettingsContainer'),
-    frameSuperellipseNSlider: document.getElementById('frameSuperellipseN'),
-    frameSuperellipseNValueSpan: document.getElementById('frameSuperellipseNValue'),
+    frameRoundnessSlider: document.getElementById('frameRoundness'),
+    frameRoundnessValueSpan: document.getElementById('frameRoundnessValue'),
     frameShadowEnabledCheckbox: document.getElementById('frameShadowEnabled'),
     frameShadowSettingsContainer: document.getElementById('frameShadowSettingsContainer'),
     frameShadowTypeDropRadio: document.getElementById('frameShadowTypeDrop'),
@@ -167,6 +164,47 @@ function marginToSize(marginPercent) {
 function sizeToMargin(sizePercent) {
     const s = Math.min(100, Math.max(1, Number(sizePercent) || 100));
     return Math.min(300, Math.max(0, 45 * (100 - s) / s));
+}
+
+// C-1: フレーム「丸み」スライダー（0-100、右ほど丸い）の相互変換。角丸モードと超楕円モードで
+// 「丸め方の関数」を切り替える。UI 表示値は 0-100 のままで、保存キー（frameSettings.cornerRadiusPercent
+// / frameSettings.superellipseN）へは各モードの関数で変換して書き戻す。frameRenderer には手を入れない
+// （A-10「大きさ」スライダーと同じ「UI 値 ≠ 保存値」パターン。汎用 addNumericInputListener は使わない）。
+const SUPERELLIPSE_N_SQUARE = 40; // 丸み0 の端（ほぼ矩形。角が約1.7%だけ出る）
+const SUPERELLIPSE_N_ROUND = 3;   // 丸み100 の端（もっとも丸い超楕円。現行 UI 下限に一致）
+const cornerFill = (n) => Math.pow(2, -1 / n);          // 角の詰まり具合 F = 2^(-1/n)
+const F_SQUARE = cornerFill(SUPERELLIPSE_N_SQUARE);
+const F_ROUND = cornerFill(SUPERELLIPSE_N_ROUND);
+
+// 超楕円: 丸み(0-100) → 次数 n。F を等間隔に刻む（形の変化が体感で等間隔になる）。
+function roundnessToN(roundness) {
+    const r = Math.min(100, Math.max(0, Number(roundness) || 0)) / 100;
+    const F = F_SQUARE + r * (F_ROUND - F_SQUARE);
+    const n = -1 / (Math.log(F) / Math.LN2);
+    return Math.min(40, Math.max(2, n));
+}
+// 超楕円: 次数 n → 丸み(0-100)。roundnessToN の逆関数。プリセット／Undo からスライダー位置を復元する。
+function nToRoundness(n) {
+    const F = cornerFill(Math.min(40, Math.max(2, Number(n) || SUPERELLIPSE_N_SQUARE)));
+    const r = (F - F_SQUARE) / (F_ROUND - F_SQUARE);
+    return Math.min(100, Math.max(0, Math.round(r * 100)));
+}
+// 角丸: 丸み(0-100) ⇄ 半径%(0-50)。線形（従来スライダーの2倍リスケール）。
+function roundnessToRadius(roundness) {
+    return Math.min(50, Math.max(0, (Number(roundness) || 0) / 2));
+}
+function radiusToRoundness(radiusPercent) {
+    return Math.min(100, Math.max(0, Math.round((Number(radiusPercent) || 0) * 2)));
+}
+// 現在の角のスタイルでの「丸み」表示値（0-100）。
+// 旧 'none' プリセット（丸めなし。cornerRadiusPercent が休眠値として残っていることがある）は
+// 丸み0 として扱う（角丸ラジオを選択状態にしつつスライダーは0。スライダーを動かした時点で
+// applyRoundness が 'rounded' へ昇格させる）。
+function currentRoundness(fs) {
+    if (fs.cornerStyle === 'none') return 0;
+    return fs.cornerStyle === 'superellipse'
+        ? nToRoundness(fs.superellipseN)
+        : radiusToRoundness(fs.cornerRadiusPercent);
 }
 
 // G-4: カスタム幅高さ欄を「明示的にカスタムモードに入っているあいだ」表示し続けるための粘着フラグ。
@@ -456,11 +494,11 @@ export function initializeUIFromState() {
 
     // フレーム加工設定
     const fs = state.frameSettings;
-    if (uiElements.frameCornerStyleNoneRadio) uiElements.frameCornerStyleNoneRadio.checked = (fs.cornerStyle === 'none');
-    if (uiElements.frameCornerStyleRoundedRadio) uiElements.frameCornerStyleRoundedRadio.checked = (fs.cornerStyle === 'rounded');
+    // C-1: 角のスタイルは2択（角丸 / 超楕円）。旧「なし」プリセットは角丸として表示する（丸み0）。
+    if (uiElements.frameCornerStyleRoundedRadio) uiElements.frameCornerStyleRoundedRadio.checked = (fs.cornerStyle !== 'superellipse');
     if (uiElements.frameCornerStyleSuperellipseRadio) uiElements.frameCornerStyleSuperellipseRadio.checked = (fs.cornerStyle === 'superellipse');
-    setupInputAttributesAndValue(uiElements.frameCornerRadiusPercentSlider, 'frameCornerRadiusPercent', fs.cornerRadiusPercent);
-    setupInputAttributesAndValue(uiElements.frameSuperellipseNSlider, 'frameSuperellipseN', fs.superellipseN);
+    // 「丸み」スライダー（0-100）。属性は frameRoundness config、値は現モードの保存値から変換。
+    setupInputAttributesAndValue(uiElements.frameRoundnessSlider, 'frameRoundness', currentRoundness(fs));
 
     if (uiElements.frameShadowEnabledCheckbox) uiElements.frameShadowEnabledCheckbox.checked = fs.shadowEnabled;
     if (uiElements.frameShadowTypeDropRadio) uiElements.frameShadowTypeDropRadio.checked = (fs.shadowType === 'drop');
@@ -524,11 +562,14 @@ export function updateSliderValueDisplays() {
         uiElements.jpgQualityValueSpan.textContent = `${state.outputSettings.quality}`;
     }
     const fs = state.frameSettings;
-    if (uiElements.frameCornerRadiusPercentValueSpan && uiElements.frameCornerRadiusPercentSlider) {
-        uiElements.frameCornerRadiusPercentValueSpan.textContent = `${fs.cornerRadiusPercent}%`;
-    }
-    if (uiElements.frameSuperellipseNValueSpan && uiElements.frameSuperellipseNSlider) {
-        uiElements.frameSuperellipseNValueSpan.textContent = fs.superellipseN;
+    // C-1: 「丸み」スライダー（0-100）。表示値・つまみ位置とも現モードの保存値から変換して同期する。
+    // ドラッグ中（スライダーにフォーカスあり）は .value を書き換えない（A-10 と同じガード）。
+    if (uiElements.frameRoundnessValueSpan && uiElements.frameRoundnessSlider) {
+        const roundness = currentRoundness(fs);
+        uiElements.frameRoundnessValueSpan.textContent = String(roundness);
+        if (document.activeElement !== uiElements.frameRoundnessSlider) {
+            uiElements.frameRoundnessSlider.value = String(roundness);
+        }
     }
     if (uiElements.frameShadowOffsetXValueSpan) uiElements.frameShadowOffsetXValueSpan.textContent = `${fs.shadowParams.offsetX}%`;
     if (uiElements.frameShadowOffsetYValueSpan) uiElements.frameShadowOffsetYValueSpan.textContent = `${fs.shadowParams.offsetY}%`;
@@ -561,12 +602,7 @@ export function toggleBackgroundSettingsVisibility() {
  */
 function updateFrameSettingsVisibility() {
     const frameState = getState().frameSettings;
-    if (uiElements.frameCornerRoundedSettingsContainer) {
-        uiElements.frameCornerRoundedSettingsContainer.classList.toggle('open', frameState.cornerStyle === 'rounded');
-    }
-    if (uiElements.frameCornerSuperellipseSettingsContainer) {
-        uiElements.frameCornerSuperellipseSettingsContainer.classList.toggle('open', frameState.cornerStyle === 'superellipse');
-    }
+    // C-1: 角丸／超楕円のモード別アコーディオンは廃止（「丸み」スライダーは常時表示）。
     if (uiElements.frameShadowSettingsContainer) {
         uiElements.frameShadowSettingsContainer.classList.toggle('open', frameState.shadowEnabled);
     }
@@ -1655,11 +1691,72 @@ export function setupEventListeners(redrawCallback) {
         });
     }
     addNumericInputListener(uiElements.jpgQualitySlider, 'jpgQuality', 'outputSettings', 'quality');
-    addOptionChangeListener(uiElements.frameCornerStyleNoneRadio, 'frameSettings', 'none', 'cornerStyle');
-    addOptionChangeListener(uiElements.frameCornerStyleRoundedRadio, 'frameSettings', 'rounded', 'cornerStyle');
-    addOptionChangeListener(uiElements.frameCornerStyleSuperellipseRadio, 'frameSettings', 'superellipse', 'cornerStyle');
-    addNumericInputListener(uiElements.frameCornerRadiusPercentSlider, 'frameCornerRadiusPercent', 'frameSettings', 'cornerRadiusPercent');
-    addNumericInputListener(uiElements.frameSuperellipseNSlider, 'frameSuperellipseN', 'frameSettings', 'superellipseN');
+    // C-1: 角のスタイル切替（角丸 ⇄ 超楕円）。現在の「丸み」位置（スライダーの見かけ値）を保ったまま、
+    // 新モードの丸め関数へ変換して保存キーへ書き戻す。汎用 addOptionChangeListener は使わない
+    // （モード間で丸み位置を引き継ぐ変換が要るため）。
+    const wireCornerStyleRadio = (element, styleValue) => {
+        if (!element) return;
+        element.addEventListener('change', (e) => {
+            if (!e.target.checked) return;
+            const roundness = uiElements.frameRoundnessSlider
+                ? (Number(uiElements.frameRoundnessSlider.value) || 0)
+                : currentRoundness(getState().frameSettings);
+            const frameSettings = { cornerStyle: styleValue };
+            if (styleValue === 'superellipse') frameSettings.superellipseN = roundnessToN(roundness);
+            else frameSettings.cornerRadiusPercent = roundnessToRadius(roundness);
+            updateState({ frameSettings });
+            updateFrameSettingsVisibility();
+            updateSliderValueDisplays();
+            redrawCallback();
+        });
+    };
+    wireCornerStyleRadio(uiElements.frameCornerStyleRoundedRadio, 'rounded');
+    wireCornerStyleRadio(uiElements.frameCornerStyleSuperellipseRadio, 'superellipse');
+
+    // C-1: 「丸み」スライダー専用の配線（0-100 → 現モードの保存キーへ変換）。A-10「大きさ」と同じ方式。
+    if (uiElements.frameRoundnessSlider) {
+        const roundnessConfig = controlsConfig.frameRoundness;
+        const applyRoundness = (roundness) => {
+            const fs = getState().frameSettings;
+            if (fs.cornerStyle === 'superellipse') {
+                updateState({ frameSettings: { superellipseN: roundnessToN(roundness) } });
+            } else {
+                // 'rounded'（および旧 'none' の昇格）。cornerStyle も明示して 'none' から確実に移行する。
+                updateState({ frameSettings: { cornerStyle: 'rounded', cornerRadiusPercent: roundnessToRadius(roundness) } });
+            }
+        };
+        uiElements.frameRoundnessSlider.addEventListener('input', (e) => {
+            let r = parseFloat(e.target.value);
+            if (isNaN(r)) r = roundnessConfig ? roundnessConfig.defaultValue : 0;
+            if (roundnessConfig) {
+                if (roundnessConfig.min !== undefined) r = Math.max(roundnessConfig.min, r);
+                if (roundnessConfig.max !== undefined) r = Math.min(roundnessConfig.max, r);
+            }
+            e.target.value = String(r);
+            applyRoundness(r);
+            updateSliderValueDisplays();
+            redrawCallback();
+        });
+        const resetRoundness = () => {
+            const d = roundnessConfig ? roundnessConfig.defaultValue : 0;
+            applyRoundness(d);
+            // dblclick／ダブルタップはスライダーにフォーカスが乗るので、updateSliderValueDisplays の
+            // activeElement ガードでつまみ位置が戻らない。ここで明示的に同期する（A-10 と同じ対処）。
+            uiElements.frameRoundnessSlider.value = String(d);
+            updateSliderValueDisplays();
+            redrawCallback();
+        };
+        uiElements.frameRoundnessSlider.addEventListener('dblclick', resetRoundness);
+        let lastRoundnessTap = 0;
+        uiElements.frameRoundnessSlider.addEventListener('touchstart', (event) => {
+            const now = Date.now();
+            if (now - lastRoundnessTap < 300 && now - lastRoundnessTap > 0) {
+                event.preventDefault();
+                resetRoundness();
+            }
+            lastRoundnessTap = now;
+        });
+    }
     addOptionChangeListener(uiElements.frameShadowEnabledCheckbox, 'frameSettings', 'shadowEnabled');
     addOptionChangeListener(uiElements.frameShadowTypeDropRadio, 'frameSettings', 'drop', 'shadowType');
     addOptionChangeListener(uiElements.frameShadowTypeInnerRadio, 'frameSettings', 'inner', 'shadowType');
