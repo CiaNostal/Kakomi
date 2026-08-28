@@ -3,8 +3,9 @@ import { getState, updateState, addCustomTextLayer, removeCustomTextLayer, updat
 import { controlsConfig, googleFonts, exifTagDefinitions } from './uiDefinitions.js';
 import { loadGoogleFonts } from './textRenderer.js';
 import { stripCustomPrefix } from './layoutCalculator.js';
-import { parseAspectRatio, fitRectToAspect, resolveCropRect } from './utils/cropRect.js';
+import { growRectToAspect, resolveCropRect, resolveCropAspectValue } from './utils/cropRect.js';
 import * as selectionStore from './interaction/selectionStore.js';
+import { requestEnterCropMode } from './interaction/canvasInteraction.js';
 import { enhanceAsScrubInput } from './ui/scrubInput.js';
 import { attachColorHistory } from './ui/colorSwatches.js';
 import { createRatioPicker, ratioOptionsFor } from './ui/ratioPicker.js';
@@ -152,15 +153,35 @@ function cropRectWithPan(rect, panX, panY) {
     return { x: (1 - rect.w) * panX, y: (1 - rect.h) * panY, w: rect.w, h: rect.h };
 }
 
+// A-10:「大きさ」スライダーの見かけ値（写真短辺がキャンバス短辺に占める割合%）と、
+// 内部の baseMarginPercent（写真短辺に対する余白%）の相互変換。表示・入力の反転だけで、
+// レイアウト計算（layoutCalculator）には一切手を入れていない。
+// size = 100 / (1 + 2*margin/100)。margin=0 → 100%、margin=5 → 約90.9%、margin=300 → 約14.3%。
+function marginToSize(marginPercent) {
+    return 100 / (1 + 2 * (Math.max(0, Number(marginPercent) || 0) / 100));
+}
+function sizeToMargin(sizePercent) {
+    const s = Math.min(100, Math.max(1, Number(sizePercent) || 100));
+    return Math.min(300, Math.max(0, 50 * (100 - s) / s));
+}
+
+// G-4: カスタム幅高さ欄を「明示的にカスタムモードに入っているあいだ」表示し続けるための粘着フラグ。
+// カスタムタイル押下／カスタム欄編集で true、別タイル押下で false。入力中に既存比率へ一致しても
+// 欄が閉じてフォーカスが飛ばないようにする。
+let outputCustomMode = false;
+let cropCustomMode = false;
+
 // アスペクト比の選択を cropSettings に反映する。現在のクロップ矩形の中心を保ったまま、
-// その比率に一致する最大の矩形へ再フィットする（'free' なら矩形はそのまま）。
+// その比率へ「外接方向」で合わせる（`growRectToAspect`）。同じ比率の連打で冪等、別々の比率を
+// 交互に選んでも画像サイズで頭打ちになり 1px へ収束しない（G-6 の続報対策）。'free' は矩形そのまま。
+// 'original' は元画像のアスペクト比で固定する（`resolveCropAspectValue`。A-11）。
 function applyCropAspect(aspectRatioString) {
     const state = getState();
     const rect = resolveCropRect(state.cropSettings, state.originalWidth, state.originalHeight);
-    const aspectValue = parseAspectRatio(aspectRatioString);
+    const aspectValue = resolveCropAspectValue(aspectRatioString, state.originalWidth, state.originalHeight);
     const imgAspect = (state.originalWidth > 0 && state.originalHeight > 0)
         ? state.originalWidth / state.originalHeight : 1;
-    const newRect = aspectValue == null ? rect : fitRectToAspect(rect, aspectValue, imgAspect);
+    const newRect = aspectValue == null ? rect : growRectToAspect(rect, aspectValue, imgAspect);
     updateState({ cropSettings: { aspectRatio: aspectRatioString, rect: newRect } });
 }
 
@@ -174,9 +195,11 @@ function ensureRatioPickers() {
                 if (value === 'custom') {
                     // 「カスタム」タイルは幅高さ入力欄を出すだけ（この時点では state を変えない）。
                     // 実際の反映は入力欄の編集時に updateAspectRatioFromInputs が行う。
+                    outputCustomMode = true;
                     updateOutputCustomVisibility();
                     return;
                 }
+                outputCustomMode = false; // G-4: プリセットタイルを選んだらカスタムモードを抜ける
                 const parts = value.split(':');
                 if (parts.length === 2 && uiElements.customAspectRatioWidthInput
                     && uiElements.customAspectRatioHeightInput) {
@@ -195,10 +218,14 @@ function ensureRatioPickers() {
             onSelect: (value) => {
                 if (value === 'custom') {
                     // 「カスタム」タイルは幅高さ入力欄を出すだけ。反映は入力欄の編集時。
+                    cropCustomMode = true;
                     updateCropCustomVisibility();
                     return;
                 }
-                if (value !== 'free') {
+                cropCustomMode = false; // G-4: プリセットタイルを選んだらカスタムモードを抜ける
+                // A-11:「オリジナル」＝元画像のアスペクト比で固定（Lightroom と同義）。
+                // 他のプリセット比率と同じ経路で、比率だけ画像から導く（applyCropAspect が処理）。
+                if (value !== 'free' && value !== 'original') {
                     const parts = value.split(':');
                     if (parts.length === 2 && uiElements.cropCustomAspectRatioWidthInput
                         && uiElements.cropCustomAspectRatioHeightInput) {
@@ -214,17 +241,18 @@ function ensureRatioPickers() {
     }
 }
 
-// カスタム幅高さ入力欄は「カスタム」タイル選択中だけ表示する。
+// カスタム幅高さ入力欄は「カスタムモード中」または「カスタムタイルが実効的に押されている」あいだ表示する。
+// G-4: 前者（粘着フラグ）があるので、入力値がたまたま既存比率に一致しても欄は閉じない＝フォーカスが飛ばない。
 function updateOutputCustomVisibility() {
     if (!uiElements.customAspectRatioContainer) return;
-    const isCustom = outputRatioPicker && outputRatioPicker.getValue() === 'custom';
-    uiElements.customAspectRatioContainer.classList.toggle('hidden', !isCustom);
+    const show = outputCustomMode || (outputRatioPicker && outputRatioPicker.getValue() === 'custom');
+    uiElements.customAspectRatioContainer.classList.toggle('hidden', !show);
 }
 
 function updateCropCustomVisibility() {
     if (!uiElements.cropCustomAspectRatioContainer) return;
-    const isCustom = cropRatioPicker && cropRatioPicker.getValue() === 'custom';
-    uiElements.cropCustomAspectRatioContainer.classList.toggle('hidden', !isCustom);
+    const show = cropCustomMode || (cropRatioPicker && cropRatioPicker.getValue() === 'custom');
+    uiElements.cropCustomAspectRatioContainer.classList.toggle('hidden', !show);
 }
 
 // カスタム幅高さ入力欄 → 出力アスペクト比 state（＋タイルの押下状態）を更新する。
@@ -235,8 +263,10 @@ function updateAspectRatioFromInputs() {
     const height = parseFloat(uiElements.customAspectRatioHeightInput.value);
     if (!isNaN(width) && !isNaN(height) && width > 0 && height > 0) {
         const aspectRatioString = `${width}:${height}`;
+        outputCustomMode = true; // 入力欄を編集した＝カスタムモード
         updateState({ outputTargetAspectRatioString: aspectRatioString });
-        if (outputRatioPicker) outputRatioPicker.setValue(aspectRatioString); // 一致が無ければ custom へ
+        // G-4: keepCustom で、既存比率に一致しても「カスタム」タイルの押下状態を維持する。
+        if (outputRatioPicker) outputRatioPicker.setValue(aspectRatioString, { keepCustom: true });
         updateOutputCustomVisibility();
         if (moduleRedraw) moduleRedraw();
     }
@@ -249,8 +279,10 @@ function updateCropAspectRatioFromInputs() {
     const height = parseFloat(uiElements.cropCustomAspectRatioHeightInput.value);
     if (!isNaN(width) && !isNaN(height) && width > 0 && height > 0) {
         const aspectRatioString = `${width}:${height}`;
+        cropCustomMode = true; // 入力欄を編集した＝カスタムモード
         applyCropAspect(aspectRatioString);
-        if (cropRatioPicker) cropRatioPicker.setValue(aspectRatioString);
+        // G-4: keepCustom で、既存比率に一致しても「カスタム」タイルの押下状態を維持する。
+        if (cropRatioPicker) cropRatioPicker.setValue(aspectRatioString, { keepCustom: true });
         updateCropCustomVisibility();
         if (moduleRedraw) moduleRedraw();
     }
@@ -274,7 +306,7 @@ function syncOutputAspectUI(state) {
                 uiElements.customAspectRatioHeightInput.value = String(height);
             }
         }
-        if (outputRatioPicker) outputRatioPicker.setValue(cleanAspectRatio);
+        if (outputRatioPicker) outputRatioPicker.setValue(cleanAspectRatio, { keepCustom: outputCustomMode });
     } else if (outputRatioPicker) {
         outputRatioPicker.setValue(null);
     }
@@ -284,6 +316,7 @@ function syncOutputAspectUI(state) {
 // 切り抜き比率タイル ＋ カスタム幅高さ入力欄を state に同期する（initializeUIFromState から使用）。
 function syncCropAspectUI(state) {
     ensureRatioPickers();
+    syncOriginalTileShape(state); // 「オリジナル」タイルの形を現在の画像アスペクトに合わせる
     const cropAspect = state.cropSettings.aspectRatio;
     if (cropAspect && cropAspect !== 'free' && cropAspect !== 'original') {
         const parts = cropAspect.split(':');
@@ -297,11 +330,29 @@ function syncCropAspectUI(state) {
                 uiElements.cropCustomAspectRatioHeightInput.value = String(height);
             }
         }
-        if (cropRatioPicker) cropRatioPicker.setValue(cropAspect);
+        if (cropRatioPicker) cropRatioPicker.setValue(cropAspect, { keepCustom: cropCustomMode });
     } else if (cropRatioPicker) {
-        cropRatioPicker.setValue('free');
+        // 'original'（元画像比で固定）と 'free'（制約なし）はそれぞれのタイルを押下表示にする（A-11）。
+        cropRatioPicker.setValue(cropAspect === 'original' ? 'original' : 'free');
     }
     updateCropCustomVisibility();
+}
+
+// 「オリジナル」タイルのミニ長方形を、読み込み中の画像のアスペクト比に合わせて描く（A-11）。
+// 比率タイルは ensureRatioPickers で一度だけ生成されるため、画像ロード／差し替えのたびにここで更新する。
+function syncOriginalTileShape(state) {
+    if (!uiElements.cropAspectRatioPicker) return;
+    const i = uiElements.cropAspectRatioPicker.querySelector('.ratio-tile[data-value="original"] .ratio-tile-shape i');
+    if (!i) return;
+    const w = state.originalWidth;
+    const h = state.originalHeight;
+    if (!(w > 0) || !(h > 0)) { i.style.width = '40px'; i.style.height = '40px'; return; }
+    const BOX = 46;
+    const ratio = w / h;
+    const sw = ratio >= 1 ? BOX : BOX * ratio;
+    const sh = ratio >= 1 ? BOX / ratio : BOX;
+    i.style.width = `${Math.max(8, Math.round(sw * 10) / 10)}px`;
+    i.style.height = `${Math.max(8, Math.round(sh * 10) / 10)}px`;
 }
 
 
@@ -338,7 +389,8 @@ export function initializeUIFromState() {
 
     // レイアウト設定
     syncOutputAspectUI(state);
-    setupInputAttributesAndValue(uiElements.baseMarginPercentInput, 'baseMarginPercent', state.baseMarginPercent);
+    // A-10: スライダーは「大きさ」（photoSize の min/max/step）で見せ、値は margin→size 変換して入れる。
+    setupInputAttributesAndValue(uiElements.baseMarginPercentInput, 'photoSize', marginToSize(state.baseMarginPercent));
 
     // 背景設定
     if (uiElements.bgTypeColorRadio) uiElements.bgTypeColorRadio.checked = (state.backgroundType === 'color');
@@ -396,10 +448,12 @@ export function updateSliderValueDisplays() {
     // cropSettings.rect のパンと photoViewParams はプレビュー操作からのみ動かし、
     // 数値表示は持たない。
     if (uiElements.baseMarginPercentValueSpan && uiElements.baseMarginPercentInput) {
-        uiElements.baseMarginPercentValueSpan.textContent = `${state.baseMarginPercent}%`;
+        // A-10: 表示は「大きさ」%（＝写真短辺がキャンバス短辺に占める割合）。内部 baseMarginPercent から変換。
+        const sizePercent = marginToSize(state.baseMarginPercent);
+        uiElements.baseMarginPercentValueSpan.textContent = `${Math.round(sizePercent)}%`;
         // select モードの四隅■ハンドルのドラッグでもこの値は変わりうるため、入力欄の値もあわせて同期する。
         if (document.activeElement !== uiElements.baseMarginPercentInput) {
-            uiElements.baseMarginPercentInput.value = state.baseMarginPercent;
+            uiElements.baseMarginPercentInput.value = String(sizePercent);
         }
     }
     if (uiElements.bgScaleValueSpan && uiElements.bgScaleSlider) {
@@ -1168,6 +1222,18 @@ export function setupEventListeners(redrawCallback) {
         });
     }
 
+    // 「トリミング」セクション内をクリックしたら、写真を選択して crop モードへ自動で入る
+    // （プレビュー上で選択済み写真を再タップするのと同じ。frozenFrame スナップショットは
+    // requestEnterCropMode が作る）。数値入力欄（カスタム幅高さ）のクリックは除外して、
+    // 数値入力中にクロップオーバーレイが割り込まないようにする。Esc / Enter で select に戻る。
+    const cropSection = document.getElementById('cropSection');
+    if (cropSection) {
+        cropSection.addEventListener('click', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            requestEnterCropMode();
+        });
+    }
+
     // --- 出力アスペクト比（タイルピッカー） ---
     // タイルの onSelect は ensureRatioPickers で配線済み。カスタム幅高さ入力欄と⇄ボタンのみ配線する。
     if (uiElements.customAspectRatioWidthInput) {
@@ -1193,7 +1259,40 @@ export function setupEventListeners(redrawCallback) {
         });
     }
 
-    addNumericInputListener(uiElements.baseMarginPercentInput, 'baseMarginPercent', 'baseMarginPercent');
+    // A-10:「大きさ」スライダー専用の配線。見かけ値（size%）→ 内部 baseMarginPercent へ変換して保存する。
+    // 汎用 addNumericInputListener は使わない（configKey が実キーと 1:1 でないため）。
+    if (uiElements.baseMarginPercentInput) {
+        const sizeConfig = controlsConfig.photoSize;
+        const marginDefault = controlsConfig.baseMarginPercent.defaultValue;
+        uiElements.baseMarginPercentInput.addEventListener('input', (e) => {
+            let size = parseFloat(e.target.value);
+            if (isNaN(size)) size = sizeConfig ? sizeConfig.defaultValue : marginToSize(marginDefault);
+            if (sizeConfig) {
+                if (sizeConfig.min !== undefined) size = Math.max(sizeConfig.min, size);
+                if (sizeConfig.max !== undefined) size = Math.min(sizeConfig.max, size);
+            }
+            e.target.value = String(size);
+            const marginPercent = Math.round(sizeToMargin(size) * 100) / 100;
+            updateState({ baseMarginPercent: marginPercent });
+            updateSliderValueDisplays();
+            redrawCallback();
+        });
+        const resetPhotoSize = () => {
+            updateState({ baseMarginPercent: marginDefault });
+            updateSliderValueDisplays();
+            redrawCallback();
+        };
+        uiElements.baseMarginPercentInput.addEventListener('dblclick', resetPhotoSize);
+        let lastSizeTap = 0;
+        uiElements.baseMarginPercentInput.addEventListener('touchstart', (event) => {
+            const now = Date.now();
+            if (now - lastSizeTap < 300 && now - lastSizeTap > 0) {
+                event.preventDefault();
+                resetPhotoSize();
+            }
+            lastSizeTap = now;
+        });
+    }
     // ... (その他すべての addNumericInputListener と addColorInputListener の呼び出し) ...
     // 「配置をリセット」: 枠内位置（photoViewParams）を中央へ、かつクロップ矩形のパンを中央へ戻す。
     // 切り抜き範囲のサイズ・比率は変えない（docs/roadmap.md A-1）。

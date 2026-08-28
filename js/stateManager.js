@@ -1,6 +1,6 @@
 // js/stateManager.js
 import { googleFonts } from './uiDefinitions.js'; // Google Fontsリストをインポート
-import { parseAspectRatio, fitRectToAspect, isValidRect, FULL_RECT } from './utils/cropRect.js';
+import { fitRectToAspect, isValidRect, FULL_RECT, resolveCropAspectValue } from './utils/cropRect.js';
 
 /**
  * stateManager.js
@@ -314,7 +314,8 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
     if (!isValidRect(crop.rect)) {
         crop.rect = { ...FULL_RECT };
     }
-    const aspectValue = parseAspectRatio(crop.aspectRatio);
+    // A-11: aspectRatio が 'original' なら新しい画像のアスペクト比で解決する（差し替え時も追従）。
+    const aspectValue = resolveCropAspectValue(crop.aspectRatio, img.width, img.height);
     const rectIsFull = crop.rect.x === 0 && crop.rect.y === 0 && crop.rect.w === 1 && crop.rect.h === 1;
     if (aspectValue != null && rectIsFull && img.width > 0 && img.height > 0) {
         crop.rect = fitRectToAspect(crop.rect, aspectValue, img.width / img.height);

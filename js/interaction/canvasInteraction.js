@@ -68,6 +68,36 @@ function distance(x1, y1, x2, y2) {
 }
 
 /**
+ * crop モードに入る。現在のプレビュー座標（写真ボックス・スケール・クロップ矩形）を
+ * frozenFrame としてスナップショットし、以降 crop モード中の描画・当たり判定の基準にする。
+ * プレビュー上での「選択済み写真の再タップ」からも、レイアウトタブの「トリミング」パネルの
+ * クリック（uiController）からも呼ばれる。写真が未ロードなら何もしない。
+ *
+ * **すでに crop モードのときは何もしない。** frozenFrame は「select モードのレイアウト（写真は
+ * クロップ後でも枠いっぱいに拡大表示される）」を基準にしているので、crop モード中に取り直すと、
+ * 枠いっぱいの photoBox0 と縮んだ rect0 から whole を逆算する際に元画像が一段拡大される。
+ * これを繰り返すと画像が無限に拡大してクロップ枠が消える（`docs/roadmap.md` G-6）。
+ * @returns {boolean} crop モードに入れた（またはすでに入っていた）か
+ */
+export function requestEnterCropMode() {
+    if (photoEditModeStore.isCropMode()) return true;
+    const photoBox = interactionRegistry.getById('photo');
+    if (!photoBox) return false;
+    // パネルクリック経由では写真がまだ選択されていないことがある。crop モードの描画・当たり判定は
+    // selectedId === 'photo' を前提にしているので、先に写真を選択しておく。
+    if (selectionStore.getSelectedId() !== 'photo') {
+        selectionStore.setSelectedId('photo');
+    }
+    const ctx = getLastPreviewContext() || {};
+    photoEditModeStore.enterCrop({
+        scale: ctx.scale || 1,
+        photoBox0: { x: photoBox.x, y: photoBox.y, width: photoBox.width, height: photoBox.height },
+        rect0: photoAdapter.getCropRect()
+    });
+    return true;
+}
+
+/**
  * previewCanvasにポインタ操作（クリック選択・ドラッグ）とキーボードnudgeを配線する。
  * main.js からアプリ初期化時に一度だけ呼び出す。
  * @param {HTMLCanvasElement} canvas
@@ -333,18 +363,8 @@ export function initCanvasInteraction(canvas) {
         clearActiveGuides();
     };
 
-    // crop モードに入る。現在のプレビュー座標（写真ボックス・スケール・クロップ矩形）を
-    // frozenFrame としてスナップショットし、以降 crop モード中の描画・当たり判定の基準にする。
-    function enterCropMode() {
-        const photoBox = interactionRegistry.getById('photo');
-        if (!photoBox) return;
-        const { scale } = getLastPreviewContext();
-        photoEditModeStore.enterCrop({
-            scale: scale || 1,
-            photoBox0: { x: photoBox.x, y: photoBox.y, width: photoBox.width, height: photoBox.height },
-            rect0: photoAdapter.getCropRect()
-        });
-    }
+    // crop モードに入る（frozenFrame スナップショット作成は requestEnterCropMode に集約）。
+    const enterCropMode = requestEnterCropMode;
 
     canvas.addEventListener('pointerup', (e) => {
         const pd = pointerDownCtx;
@@ -373,8 +393,8 @@ export function initCanvasInteraction(canvas) {
     document.addEventListener('keydown', (e) => {
         if (isEditableElement(document.activeElement)) return; // 入力欄編集中はナッジしない
 
-        // Esc: crop モードを抜けて select モードへ戻す（出力枠は変えない）
-        if (e.key === 'Escape' && photoEditModeStore.isCropMode()) {
+        // Esc / Enter: crop モードを抜けて select モードへ戻す（出力枠は変えない）
+        if ((e.key === 'Escape' || e.key === 'Enter') && photoEditModeStore.isCropMode()) {
             e.preventDefault();
             photoEditModeStore.exitCrop();
             return;

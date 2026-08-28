@@ -1375,6 +1375,10 @@ fieldset div span {
     border-style: dashed;
 }
 
+/* A-11「オリジナル」＝元画像のアスペクト比で固定（Lightroom と同義）。ミニ長方形は
+   uiController.syncOriginalTileShape() が読み込み中の画像の縦横比に合わせて描く。
+   本格的なアイコン整理は A-12（レイアウトタブの構造見直し）で行う。 */
+
 .ratio-tile-label {
     font-size: 0.72rem;
     font-weight: 600;

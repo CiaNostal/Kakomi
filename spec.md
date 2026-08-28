@@ -181,7 +181,7 @@ Kakomi/
     offsetY: number                   // 0-1の範囲
   },
   outputTargetAspectRatioString: string, // 出力アスペクト比
-  baseMarginPercent: number,         // 余白（%）
+  baseMarginPercent: number,         // 余白（写真短辺に対する%、0-300）。UIスライダーは「大きさ」表記でこの逆数的な見かけ値を扱う（A-10）
   backgroundColor: string,            // 背景色（HEX）
   backgroundType: 'color' | 'imageBlur', // 背景タイプ
   imageBlurBackgroundParams: {        // ぼかし背景パラメータ
@@ -279,9 +279,11 @@ UI要素の制御とイベントハンドリングを担当します。
 
 **比率タイルピッカー（出力アスペクト比・切り抜き比率。`docs/roadmap.md` A-1）:**
 以前はどちらも`<select>`（出力＝`#outputAspectRatio`、切り抜き＝`#cropAspectRatio`）だったが、比率の形が想像しづらいという要望で、比率そのものの形をミニ長方形で描いて選ぶタイル型 UI（`js/ui/ratioPicker.js`の`createRatioPicker()`）に置き換えた。
-- 選択肢と**並び順**は`js/ui/ratioPicker.js`の`RATIO_FAMILIES`（比率の「正準順序」＋各エントリの`pickers: ['output'|'crop']`）が唯一の情報源。`ratioOptionsFor('output')` / `ratioOptionsFor('crop')`でそのピッカー用の配列を得る。両ピッカーで同じ比率が同じ相対順序に並ぶ（フェーズ3で共通化。`docs/roadmap.md` A-7。以前は`uiController.js`に別々の並びで定義されていた）。出力＝1:1／4:5／3:4／16:9／1.91:1／L判(89:127)／カスタム、切り抜き＝フリー／1:1／3:4／4:3／16:9／9:16／カスタム。各タイルは`<button class="ratio-tile" data-value aria-pressed>`で、内側の`<i>`要素の幅・高さを比率どおりに（46px 内接で）設定して形を見せる。「フリー」タイルは破線。カスタム幅高さ入力欄は折り返さないコンパクトな1行（`.ratio-custom-row`。フェーズ3で`.form-row-simple`から変更）。
-- ピッカーは`ensureRatioPickers()`が一度だけ生成する（`initializeUIFromState()`が`setupEventListeners()`より先に走るため、両方から呼べるようにしてある）。`onSelect(value)`で、プリセット比率なら`updateState({ outputTargetAspectRatioString })`／`applyCropAspect(value)`を呼ぶ。**「カスタム」タイルはカスタム幅高さ入力欄（`#customAspectRatioContainer`／`#cropCustomAspectRatioContainer`）を表示するだけで、その時点では state を変えない**（反映は入力欄の編集時に`updateAspectRatioFromInputs()`／`updateCropAspectRatioFromInputs()`が行う）。カスタム欄は「カスタム」タイル選択中だけ表示（`updateOutputCustomVisibility()`／`updateCropCustomVisibility()`が`.hidden`をトグル）。
-- state → UI の同期は`syncOutputAspectUI(state)`／`syncCropAspectUI(state)`が担い、`picker.setValue(value)`で該当タイルを押下状態にする（一致するタイルが無ければ「カスタム」タイルにフォールバック）。
+- 選択肢と**並び順**は`js/ui/ratioPicker.js`の`RATIO_FAMILIES`（比率の「正準順序」＋各エントリの`pickers: ['output'|'crop']`）が唯一の情報源。`ratioOptionsFor('output')` / `ratioOptionsFor('crop')`でそのピッカー用の配列を得る。両ピッカーで同じ比率が同じ相対順序に並ぶ（フェーズ3で共通化。`docs/roadmap.md` A-7。以前は`uiController.js`に別々の並びで定義されていた）。出力＝1:1／4:5／3:4／16:9／1.91:1／L判(89:127)／カスタム、切り抜き＝**オリジナル**／フリー／1:1／3:4／4:3／16:9／9:16／カスタム。各タイルは`<button class="ratio-tile" data-value aria-pressed>`で、内側の`<i>`要素の幅・高さを比率どおりに（46px 内接で）設定して形を見せる。「フリー」タイルは破線、「オリジナル」タイルは二重線（`.is-original`。A-11、暫定意匠）。カスタム幅高さ入力欄は折り返さないコンパクトな1行（`.ratio-custom-row`。フェーズ3で`.form-row-simple`から変更）。
+- **「オリジナル」タイル（切り抜きのみ。`docs/roadmap.md` A-11）**: **切り抜き比率を元画像のアスペクト比で固定する**（Lightroom のクロップ「オリジナル」と同義。3:4 の画像なら 3:4 で固定）。選択すると`cropSettings.aspectRatio = 'original'`を保存し、他のプリセット比率と同じ経路（`applyCropAspect`）で中心維持のまま矩形を元画像比へ合わせる。**`rect`の全体リセットや`photoViewParams`の初期化はしない。** `aspectRatio`の数値解決は`utils/cropRect.js`の`resolveCropAspectValue(aspectRatio, imgW, imgH)`（`'original'` → `imgW/imgH`、`'free'`/空/画像未ロード → null、それ以外 → `parseAspectRatio`）が担い、`photoAdapter.getCropConstraint`（crop モードの隅ドラッグ制約）・`stateManager.setImage`（画像ロード／差し替え時の再フィット。`'original'`は新画像の比へ自動追従）・`uiController.applyCropAspect`の3か所で使う。タイルのミニ長方形は`uiController.syncOriginalTileShape()`が読み込み中の画像の縦横比で描く。押下表示は`aspectRatio === 'original'`のときのみ（`aspectRatio === 'free'`なら「フリー」）。<br>※「切り抜きをまるごとリセット」する操作は別途必要だが、回転（A-4）実装後に用意する。
+- ピッカーは`ensureRatioPickers()`が一度だけ生成する（`initializeUIFromState()`が`setupEventListeners()`より先に走るため、両方から呼べるようにしてある）。`onSelect(value)`で、プリセット比率なら`updateState({ outputTargetAspectRatioString })`／`applyCropAspect(value)`を呼ぶ。**「カスタム」タイルはカスタム幅高さ入力欄（`#customAspectRatioContainer`／`#cropCustomAspectRatioContainer`）を表示するだけで、その時点では state を変えない**（反映は入力欄の編集時に`updateAspectRatioFromInputs()`／`updateCropAspectRatioFromInputs()`が行う）。カスタム欄は**「カスタムモード中」**（`outputCustomMode`／`cropCustomMode`。カスタムタイル押下・カスタム欄編集で`true`、別タイル押下で`false`）または「カスタム」タイルが実効的に押されているあいだ表示する（`updateOutputCustomVisibility()`／`updateCropCustomVisibility()`が`.hidden`をトグル）。
+- **G-4（カスタム値が既存比率に一致してもカスタム欄が閉じずフォーカスが飛ばない。`docs/roadmap.md` G-4）**: 以前はカスタム幅高さの値がプリセットタイルと同じ比率（例 4:5）になると`setValue`がそのタイルを押下→`getValue()`が`'custom'`でなくなり→カスタム欄（幅高さ入力欄と⇄ボタンを含む）が`display:none`になり、フォーカス中の子要素からフォーカスが外れていた（⇄の連打も不可）。対処＝上記の粘着フラグ`*CustomMode`と、`picker.setValue(value, { keepCustom: true })`（一致しても「カスタム」タイルの押下を維持）。プログラムからは`.focus()`を一切呼ばない。
+- state → UI の同期は`syncOutputAspectUI(state)`／`syncCropAspectUI(state)`が担い、`picker.setValue(value, { keepCustom: *CustomMode })`で該当タイルを押下状態にする（一致するタイルが無ければ「カスタム」タイルにフォールバック）。
 
 **写真の配置スライダーの撤去（`docs/roadmap.md` A-1）:**
 「切り抜き位置（横／縦）」（`#cropOffsetX/Y`）・「枠内位置（横位置／縦位置）」（`#photoPosX/Y`）のスライダー計4本を UI から撤去した。`cropSettings.rect`のパンと`photoViewParams`は**データモデルとしては維持**し、プレビュー上のジェスチャー（本体ドラッグ、crop モードの本体ドラッグ、四隅ハンドル）からのみ操作する。パネルには「配置をリセット」ボタン（`#resetPhotoPlacement`）だけを置き、押すと`photoViewParams`を中央（0.5, 0.5）へ、かつクロップ矩形のパンを中央へ戻す（切り抜き範囲のサイズ・比率は変えない）。
@@ -504,7 +506,8 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 - **写真の四隅ハンドルとトリミングモード（5.24節・5.25節、7.2節「オンキャンバス・トリミング」参照）**: 写真選択中は`photoEditModeStore`のモード（`select`/`crop`）で挙動を切り替える。
   - `pointerdown`で、テキストハンドルと同様に通常のオブジェクト当たり判定より先に`photoCropStore.getCropHandles()`の四隅座標を距離判定する（半径`HANDLE_HIT_RADIUS`）。**select モード**でヒット → `dragState.mode = 'photoResize'`（開始点と「中心→掴んだ隅」方向の単位ベクトルを保持し、`pointermove`で符号付き投影量を`photoAdapter.commitMarginResizeByDrag()`に渡し`baseMarginPercent`を増減。中心からの距離比を使う旧方式は「中心を通り越すと余白が逆に減る」不具合があったため置き換えた）。**crop モード**でヒット → `dragState.mode = 'cropRectResize'`（掴んだ隅と`frozenFrame.whole`のサイズから`rect`の差分を計算し`resizeCropRect()`→`photoAdapter.commitCropRect()`）。crop モードでクロップ窓の内側なら`dragState.mode = 'cropPan'`（`rect.x/y`をドラッグ方向へ平行移動）。
   - `pointerup`で、**pointerdown からの移動量が`CLICK_MOVE_THRESHOLD`(4px)未満、かつ押下時間が`CLICK_TAP_MS`(400ms)未満**のときだけ「短いタップ」とみなす: select モードで選択済みの写真本体タップ → `photoEditModeStore.enterCrop()`（現在のプレビュー座標を`frozenFrame`にスナップショット）。crop モードでクロップ窓の外のタップ → `photoEditModeStore.exitCrop()`（出力枠は変えない）。**動かさずに長押ししてから離した場合はモード切替が発動しない**（`pointerDownCtx.downTime` を `performance.now()` で記録して判定。以前は移動量だけを見ていたため、単なる長押しでも切り替わっていた）。`CLICK_TAP_MS` は手触りを見て調整可。
-  - `Escape`キーでも crop モードを抜ける。crop モード中は矢印キーがクロップ矩形のパンになる。
+  - `Escape` / `Enter` キーでも crop モードを抜ける（`docs/roadmap.md` A-13）。crop モード中は矢印キーがクロップ矩形のパンになる。`Enter` は入力欄フォーカス中（`isEditableElement`）には効かない（keydown の先頭 return）。
+  - **レイアウトタブの「トリミング」セクション（`#cropSection`）内をクリックしても crop モードに入る**（`docs/roadmap.md` A-13）。`uiController` が `#cropSection` の `click` で `canvasInteraction.requestEnterCropMode()` を呼ぶ（プレビュー上で選択済み写真を再タップするのと同じ経路。写真が未選択なら先に選択する）。カスタム幅高さの数値入力欄（`<input>` / `<textarea>`）のクリックは除外。`requestEnterCropMode()` は `enterCrop()` の frozenFrame スナップショット作成を集約したモジュール関数で、プレビュータップ側の `enterCropMode` もこれを使う。**すでに crop モードのときは何もしない**（`isCropMode()` なら即 return。`docs/roadmap.md` G-6）——frozenFrame は select モードのレイアウト基準なので、crop 済み（`rect0` が小さい）状態で取り直すと `cropModeGeometry` の `whole = photoBox0 / rect0` が一段拡大し、繰り返すと元画像が無限に拡大してクロップ枠が消える。
   - 写真本体（ハンドル以外）の select モードでのドラッグは従来どおり`photoAdapter`の`move`処理（`photoViewParams`更新）。
 - **プレビュー上のホイール操作**: 現在は未使用（`previewCanvas`に`wheel`リスナーを付けていない）。以前は select モードで写真上のホイールが`baseMarginPercent`（余白）を増減していたが、四隅■ハンドルのドラッグで余白を直接いじれるようになったため冗長・誤操作の元として削除した（`docs/roadmap.md` A-6。`photoAdapter.commitMarginDelta()`と定数`MARGIN_WHEEL_STEP`も撤去）。「背景タブでホイール→背景拡大倍率」（`docs/roadmap.md` B-2）も検討したが、誤操作の元になるとしてユーザー判断で不採用。本体ドラッグ側だけタブで切り替える（上記「タブ別ドラッグ」）
 - **選択変更と再描画（設計上の注記）:** `selectionStore`の選択状態変更（`setSelectedId()`）自体は`editState`の変更ではないため、`stateManager.js`の通常の状態変更リスナー（`requestRedraw`等）を経由しない。ドラッグを伴わない純粋なクリック選択（`pointerdown`直後に一度も`pointermove`が発火しないケース）でも選択ハイライトやハンドルが即座に表示されるよう、`main.js`が`selectionStore.onSelectionChange(() => requestRedraw())`を明示的に登録している。
@@ -704,10 +707,10 @@ Blobをダウンロード
 - **`cropSettings.rect`**: 切り抜き矩形を「元画像に対する割合」 `{ x, y, w, h }`（いずれも 0–1、x/y が左上、w/h がサイズ）で保持する。これが唯一の表現。
 - **`cropSettings.aspectRatio`**: 切り抜き矩形に課す比率制約。
   - `'free'`: 制約なし（自由比率、UI上は「フリー（自由比率）」）。既定値。
-  - `'1:1'`, `'4:3'`, `'16:9'` など、または `'幅:高さ'` のカスタム: その比率でしか矩形をリサイズできない。比率を選ぶと、そのとき現在の矩形の中心を保ったまま、その比率に一致する最大の矩形へ再フィットする（`utils/cropRect.js` の `fitRectToAspect`）。
+  - `'1:1'`, `'4:3'`, `'16:9'` など、または `'幅:高さ'` のカスタム: その比率でしか矩形をリサイズできない。比率を選ぶと、そのとき現在の矩形の中心を保ったまま、その比率へ**外接方向**で合わせる（`utils/cropRect.js` の `growRectToAspect`＝現在の矩形を含む最小の比率一致矩形。[0,1] 超は比率保持で頭打ち。既にその比率なら完全 no-op）。以前は `fitRectToAspect`（内接＝比率を選ぶたびに縮む）だったが、A-13 で比率タイルのクリックが crop モード遷移も兼ねるようになり、別々の比率を続けて押すとクロップ枠が 1px へ収束する不具合（`docs/roadmap.md` G-6 続報）が顕在化したため外接方式に変更した。`fitRectToAspect` は `stateManager.setImage` の画像ロード時再フィット（全体矩形から）でのみ使う。
 
 **操作方法:**
-- **プレビュー上（オンキャンバス）**: 5.16〜5.17節・7.2節「オンキャンバス・トリミング」参照。写真を選択した状態でもう一度クリックすると「トリミングモード」に入り、四隅の L 字ハンドルで切り抜き範囲を指定、写真本体ドラッグで切り抜き範囲を平行移動、写真の外をクリックまたは Esc で確定する。
+- **プレビュー上（オンキャンバス）**: 5.16〜5.17節・7.2節「オンキャンバス・トリミング」参照。写真を選択した状態でもう一度クリック（またはレイアウトタブの「トリミング」セクション内をクリック）すると「トリミングモード」に入り、四隅の L 字ハンドルで切り抜き範囲を指定、写真本体ドラッグで切り抜き範囲を平行移動、写真の外をクリックまたは Esc / Enter で確定する。
 - **「レイアウト」パネルの UI**: 「切り抜き比率」は比率タイルピッカー（`#cropAspectRatioPicker`。`フリー` / 各比率 / カスタム幅高さ＋⇄。2026年8月のフェーズ2で `<select id="cropAspectRatio">` から置き換え。5.3節「比率タイルピッカー」参照）。**「切り抜き位置（横／縦）」スライダーはフェーズ2で撤去**（`docs/roadmap.md` A-1）。`rect` のパンはプレビュー上のジェスチャー（crop モードの本体ドラッグ・矢印キー）と「配置をリセット」ボタン（`#resetPhotoPlacement`。`uiController.js` の `cropRectWithPan(rect, 0.5, 0.5)` で中央へ）からのみ動かす。
 
 **実装詳細:**
@@ -722,9 +725,9 @@ Blobをダウンロード
     - 内部的には `outputTargetAspectRatioString` に `"custom:"` プレフィックスを付けた古い形式の後方互換処理（プレフィックス除去）が残っているが、現在のUIはプレフィックスなしの `"幅:高さ"` 形式で保存する。
   - `layoutCalculator.js` は特別な値 `"original_photo"`（入力写真の比率をそのまま使う）にも対応しているが、現在のタイルにはこの項目がなく、UIから選択する手段はない。
   - これが最終的なJPEGのアスペクト比となる
-- **基準余白**: 構図調整後の写真の短辺に対する%で指定（0-300%）。スライダー（`#baseMarginPercent`）は据え置き。
-  - この値は「最小限の余白量」の目安
-  - 実際の余白は、出力画像の目標アスペクト比を維持するために、この基準値よりも一部が自動的に広がる場合がある
+- **基準余白 / 「大きさ」スライダー**: 内部値`baseMarginPercent`は構図調整後の写真の短辺に対する%（0-300%）で不変。
+  - この値は「最小限の余白量」の目安。実際の余白は、出力画像の目標アスペクト比を維持するために、この基準値よりも一部が自動的に広がる場合がある。
+  - **UI 表記は「大きさ」（`docs/roadmap.md` A-10）**: スライダー（`#baseMarginPercent`。`controlsConfig.photoSize` の min14/max100/step0.5 で駆動）は「写真短辺がキャンバス短辺に占める割合%」を見かけ値として扱い、**右に倒すほど写真が大きくなる**（＝余白が減る）。`marginToSize(m) = 100/(1+2m/100)`（m=0→100%、m=5→約90.9%、m=300→約14.3%）と逆変換`sizeToMargin`で`baseMarginPercent`と1対1対応。`updateSliderValueDisplays()`が表示・入力欄同期を、専用の`input`／`dblclick`（既定 margin 5 へ）リスナーが保存を担う（汎用`addNumericInputListener`は使わない）。四隅■ハンドルのドラッグ（`commitMarginResizeByDrag`）でも同じ表示に反映される。レイアウト計算（`layoutCalculator`）には一切手を入れていない。
 - **写真位置調整**: 出力画像のフレーム内で、写真をどこに配置するか（`photoViewParams`、X/Y とも 0.0=端〜0.5=中央〜1.0=端）
   - **数値スライダー（`#photoPosX/Y`）は 2026年8月のフェーズ2で撤去（`docs/roadmap.md` A-1）**。`photoViewParams` はデータとしては維持し、**プレビュー上で写真を直接ドラッグして調整する**（`interaction/adapters/photoAdapter.js`。ドラッグ中はキャンバス中央線・端・他オブジェクトへのスナップも働く）。パネルには「配置をリセット」ボタン（`#resetPhotoPlacement`）があり、`photoViewParams` を中央へ、かつクロップ矩形のパンを中央へ戻す（切り抜き範囲のサイズ・比率は変えない）。
   - **注意:** 仕様書v1では「9点から選択」とあるが、現在の実装ではプレビュードラッグによる連続的な位置調整となっている
@@ -737,11 +740,11 @@ Blobをダウンロード
 
 | | select モード（通常） | crop モード（トリミング編集中） |
 |---|---|---|
-| 四隅ハンドル | ■（白塗り・黒フチ）。ドラッグ＝**余白 `baseMarginPercent` の増減**（外へ引く＝余白減＝写真が枠いっぱいへ。写真のピクセル数・写る範囲は不変）。「中心→掴んだ隅」方向への符号付き移動量で余白を動かす（`photoAdapter.commitMarginResizeByDrag`。中心を通り越しても反転せず、移動量に比例。感度は `MARGIN_RESIZE_FACTOR`） | L 字（白塗り・黒フチ）。ドラッグ＝**クロップ矩形 `cropSettings.rect` の変更**（掴んだ隅だけ動く。比率制約時は連動。`resizeCropRect`→`photoAdapter.commitCropRect`） |
+| 四隅ハンドル | ■（白塗り・黒フチ）。ドラッグ＝**余白 `baseMarginPercent` の増減**（外へ引く＝余白減＝写真が枠いっぱいへ。写真のピクセル数・写る範囲は不変）。「中心→掴んだ隅」方向への符号付き移動量で余白を動かす（`photoAdapter.commitMarginResizeByDrag`。中心を通り越しても反転せず、移動量に比例。感度は `MARGIN_RESIZE_FACTOR`） | L 字（白塗り・黒フチ）。ドラッグ＝**クロップ矩形 `cropSettings.rect` の変更**（掴んだ隅だけ動く。比率制約時は連動。`resizeCropRect`→`photoAdapter.commitCropRect`）。**比率固定で拡大していくと写真の端で止まり、比率固定は崩れない（`docs/roadmap.md` G-5）**——`resizeCropRect`が、掴んだ隅の対角を固定したまま矩形が[0,1]に収まる最大の幅（`h=w/R`も含む）で頭打ちにする。以前は末尾の`clampRect`が幅と高さを独立に丸めるため、短辺が端に当たると比率が壊れて画面枠いっぱいまで拡大できていた。 |
 | 写真本体ドラッグ | 出力枠内での写真位置（`photoViewParams`）。従来どおり | クロップ矩形の平行移動（`rect.x/y`。ドラッグ方向にクロップ窓が動く） |
 | 表示 | フレーム装飾（角丸・影・縁取り）込みで写真を描画＋■ハンドル | クロップ矩形の内側だけ明るく、外側を暗くマスクした周辺減光オーバーレイ＋三分割グリッド（rule of thirds）＋L字ハンドル。枠線・グリッド・ハンドルは黒フチ＋白で明暗どちらの背景でも視認できる |
 | ホイール／矢印キー | ホイールは未使用、矢印＝`photoViewParams` の nudge | ホイール無効、矢印＝クロップ矩形のパン（本体ドラッグと同じ向き） |
-| 抜け方 | 選択済みの写真をもう一度クリック → crop へ | 写真の外をクリック／Esc → select へ戻る。**出力枠（`outputTargetAspectRatioString`）は変えない**。枠は固定のまま、切り抜かれた写真がそのクロップ比率の形で枠の中に配置される（横長にクロップすれば写真が横長の帯になり、上下に余白がつく） |
+| 抜け方 | 選択済みの写真をもう一度クリック／**レイアウトタブの「トリミング」セクション内をクリック**（`#cropSection`。数値入力欄を除く。A-13）→ crop へ | 写真の外をクリック／**Esc / Enter**（A-13）→ select へ戻る。**出力枠（`outputTargetAspectRatioString`）は変えない**。枠は固定のまま、切り抜かれた写真がそのクロップ比率の形で枠の中に配置される（横長にクロップすれば写真が横長の帯になり、上下に余白がつく） |
 
 **設計上の要点（フリーズフレーム）:** Kakomi は「出力枠＝写真＋余白、余白は写真短辺に対する％」というモデルのため、クロップ矩形を変えても画面上の写真ボックスの大きさはほぼ変わらない（余白が比例して縮むだけ。`session-log-2026-08-27.md` 2.2節）。このままライブに再レイアウトすると「内側へドラッグしているのに枠が縮まない」体験になる。そこで crop モードに入った瞬間のプレビュースケールと写真ボックス矩形・クロップ矩形を `photoEditModeStore.frozenFrame` にスナップショットし、crop モード中の描画・当たり判定はこれを基準に固定する（`canvasRenderer.js` の `drawCropModeOverlay`）。モード終了時に通常描画へ戻り、`calculateLayout` が最終 `rect` で一度だけリフローして収束する（PowerPoint の「確定」に相当）。
 

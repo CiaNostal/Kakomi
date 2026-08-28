@@ -10,7 +10,7 @@
  */
 import { getState, updateState } from '../../stateManager.js';
 import { controlsConfig } from '../../uiDefinitions.js';
-import { resolveCropRect, parseAspectRatio } from '../../utils/cropRect.js';
+import { resolveCropRect, resolveCropAspectValue } from '../../utils/cropRect.js';
 
 // select モードの四隅 ■ ハンドルのドラッグ感度。
 // 掴んだ隅を「中心→隅の方向」へ写真短辺ぶん動かすと、baseMarginPercent が
@@ -74,7 +74,10 @@ const photoAdapter = {
         const state = getState();
         const imgAspectValue = (state.originalWidth > 0 && state.originalHeight > 0)
             ? state.originalWidth / state.originalHeight : 1;
-        return { aspectValue: parseAspectRatio(state.cropSettings.aspectRatio), imgAspectValue };
+        return {
+            aspectValue: resolveCropAspectValue(state.cropSettings.aspectRatio, state.originalWidth, state.originalHeight),
+            imgAspectValue
+        };
     },
 
     /** select モードの四隅 ■ ハンドルのドラッグ開始時点の baseMarginPercent。 */

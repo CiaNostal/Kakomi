@@ -16,6 +16,7 @@
 // 各エントリの `pickers` に含まれるピッカーだけがそのタイルを出す（同じ比率が同じ相対順序で並ぶ）。
 // 選択肢を足す／どちらのピッカーに出すかを変えるのはこの配列だけを触ればよい。
 export const RATIO_FAMILIES = [
+    { value: 'original', label: 'オリジナル', sub: '元の比率', original: true, pickers: ['crop'] },
     { value: 'free', label: 'フリー', sub: '自由', free: true, pickers: ['crop'] },
     { value: '1:1', label: '1:1', sub: '正方形', pickers: ['output', 'crop'] },
     { value: '4:5', label: '4:5', sub: 'IG縦', pickers: ['output'] },
@@ -61,7 +62,7 @@ function shapeDims(value) {
 
 /**
  * @param {HTMLElement} container タイルを入れる要素（中身はクリアされる）
- * @param {{ options: Array<{value:string,label:string,sub?:string,custom?:boolean,free?:boolean}>,
+ * @param {{ options: Array<{value:string,label:string,sub?:string,custom?:boolean,free?:boolean,original?:boolean}>,
  *           onSelect: (value:string)=>void }} opts
  * @returns {{ setValue:(v:string)=>void, getValue:()=>(string|null), element:HTMLElement }}
  */
@@ -73,9 +74,13 @@ export function createRatioPicker(container, { options, onSelect }) {
     const hasCustom = options.some(opt => opt.custom);
     let current = null;
 
-    function select(value) {
+    // keepCustom: true のとき、value がプリセットタイルと一致しても「カスタム」タイルを
+    // 押下状態のままにする（G-4: カスタム幅高さ編集中に既存比率へ一致してもカスタム欄を閉じない）。
+    function select(value, { keepCustom = false } = {}) {
         let target = value;
-        if (!tiles.has(target)) {
+        if (keepCustom && hasCustom) {
+            target = 'custom';
+        } else if (!tiles.has(target)) {
             target = hasCustom ? 'custom' : null;
         }
         current = target;
@@ -90,6 +95,7 @@ export function createRatioPicker(container, { options, onSelect }) {
         btn.className = 'ratio-tile';
         if (opt.free) btn.classList.add('is-free');
         if (opt.custom) btn.classList.add('is-custom');
+        if (opt.original) btn.classList.add('is-original');
         btn.dataset.value = opt.value;
         btn.setAttribute('aria-pressed', 'false');
         btn.setAttribute('aria-label', opt.sub ? `${opt.label}（${opt.sub}）` : opt.label);
@@ -97,7 +103,7 @@ export function createRatioPicker(container, { options, onSelect }) {
         const shape = document.createElement('span');
         shape.className = 'ratio-tile-shape';
         const bar = document.createElement('i');
-        const dims = (opt.free || opt.custom) ? { w: 40, h: 40 } : shapeDims(opt.value);
+        const dims = (opt.free || opt.custom || opt.original) ? { w: 40, h: 40 } : shapeDims(opt.value);
         bar.style.width = `${dims.w}px`;
         bar.style.height = `${dims.h}px`;
         shape.appendChild(bar);

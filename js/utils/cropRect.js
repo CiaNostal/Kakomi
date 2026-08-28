@@ -36,6 +36,23 @@ export function parseAspectRatio(str) {
 }
 
 /**
+ * cropSettings.aspectRatio を数値比（幅/高さ、元画像ピクセル基準）に解決する。
+ * `'original'` は「元画像のアスペクト比で固定」を意味し、`imgW/imgH` を返す（Lightroom の
+ * クロップ「オリジナル」と同義。`docs/roadmap.md` A-11）。`'free'` / 空 / 不正・画像未ロードは
+ * null（制約なし）。それ以外は `parseAspectRatio` に委譲する。
+ * @param {string} aspectRatio
+ * @param {number} imgW
+ * @param {number} imgH
+ * @returns {number|null}
+ */
+export function resolveCropAspectValue(aspectRatio, imgW, imgH) {
+    if (aspectRatio === 'original') {
+        return (imgW > 0 && imgH > 0) ? imgW / imgH : null;
+    }
+    return parseAspectRatio(aspectRatio);
+}
+
+/**
  * 値が有効なクロップ矩形（0–1 の割合、正のサイズ、[0,1] にほぼ収まっている）かどうか。
  * @param {*} r
  * @returns {boolean}
@@ -89,6 +106,44 @@ export function fitRectToAspect(r, aspectValue, imgAspectValue) {
     if (h > 1) { h = 1; w = h * R; }
     w = Math.min(w, 1);
     h = Math.min(h, 1);
+
+    const x = Math.min(1 - w, Math.max(0, cx - w / 2));
+    const y = Math.min(1 - h, Math.max(0, cy - h / 2));
+    return { x, y, w, h };
+}
+
+/**
+ * 矩形の中心を保ったまま、指定した比率に一致する矩形へ「外接方向」で合わせる。
+ * `fitRectToAspect` が現在の矩形に内接（比率を選ぶたびに縮む）なのに対し、こちらは
+ * **現在の矩形を含む最小の比率一致矩形**を作り、[0,1] を超える場合だけ比率を保って縮小する。
+ *
+ * これを比率タイル選択（`uiController.applyCropAspect`）に使うことで:
+ *  - 同じ比率を連打しても矩形が変わらない（真に冪等）。
+ *  - 別々の比率を交互に選んでも、画像サイズで頭打ちになり 1px へ収束しない（G-6 の続報対策）。
+ * @param {{x:number,y:number,w:number,h:number}} r
+ * @param {number|null} aspectValue - 望むクロップ比率（幅/高さ、元画像ピクセル基準）。null ならクランプのみ
+ * @param {number} imgAspectValue - 元画像の 幅/高さ（ピクセル基準）
+ * @returns {{x:number,y:number,w:number,h:number}}
+ */
+export function growRectToAspect(r, aspectValue, imgAspectValue) {
+    if (aspectValue == null || !isFinite(imgAspectValue) || imgAspectValue <= 0) {
+        return clampRect(r);
+    }
+    const R = aspectValue / imgAspectValue; // 割合空間での w/h
+    // すでにその比率（誤差込み）なら何もしない＝完全な冪等。
+    if (r.w > 0 && r.h > 0 && Math.abs((r.w / r.h) - R) < 1e-4) {
+        return clampRect(r);
+    }
+    const cx = r.x + r.w / 2;
+    const cy = r.y + r.h / 2;
+
+    let w, h;
+    if (r.w / r.h > R) { w = r.w; h = w / R; } // 横に広い → 高さを伸ばして含む
+    else { h = r.h; w = h * R; }               // 縦に長い → 幅を伸ばして含む
+
+    // [0,1] を超えたら比率を保ったまま縮小（＝画像で頭打ち）。
+    if (w > 1) { h = h / w; w = 1; }
+    if (h > 1) { w = w / h; h = 1; }
 
     const x = Math.min(1 - w, Math.max(0, cx - w / 2));
     const y = Math.min(1 - h, Math.max(0, cy - h / 2));
@@ -187,7 +242,15 @@ export function resizeCropRect(startRect, corner, fdx, fdy, aspectValue, imgAspe
         const R = aspectValue / imgAspectValue; // 割合空間での w/h
         const anchorX = movingLeft ? x2 : x1;
         const anchorY = movingTop ? y2 : y1;
-        const w = rect.w;
+
+        // 幅を主として高さを比率から導く。
+        // G-5: アンカー（掴んだ隅の対角）を固定したまま矩形が [0,1] に収まる最大の w で頭打ちにする。
+        // これを超えて広げようとしても隅が写真の端で止まり、比率固定は崩れない。
+        // （従来は clampRect が w と h を独立に丸めるため、端に当たると比率が壊れて画面枠まで伸びていた。）
+        const maxWByX = movingLeft ? anchorX : (1 - anchorX);
+        const maxWByY = (movingTop ? anchorY : (1 - anchorY)) * R;
+        const minW = Math.max(MIN, MIN * R);
+        const w = Math.max(minW, Math.min(rect.w, maxWByX, maxWByY));
         const h = w / R;
         rect = {
             x: movingLeft ? anchorX - w : anchorX,
