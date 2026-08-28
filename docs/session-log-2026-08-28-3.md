@@ -1,4 +1,4 @@
-# 開発セッションログ: バケット1 目視確認＋A-10 微調整、バケット2（E-8 / A-12）、バケット3（F-3 / F-4 / F-5）実装（2026-08-28）
+# 開発セッションログ: バケット1 目視確認＋A-10 微調整、バケット2（E-8/A-12）・3（F-3/F-4/F-5）・3.5（A-14/E-9/A-15/A-16）実装（2026-08-28）
 
 `docs/session-log-2026-08-28-2.md`（フェーズ7 改訂＋バケット1 実装）の続き。
 - §2〜4: バケット1（A-10 / A-11 / A-13 / G-4 / G-5 / G-6）のユーザー目視確認。A-10「大きさ」スライダーの
@@ -6,7 +6,9 @@
 - §5: バケット2 ＝ E-8（用語統一）＋ A-12（レイアウトタブ3セクションのアイコン付き見出し）。モックアップ合意 → 実装。
 - §6: バケット3 ＝ F-3（保存フォームの縦ツリー化）＋ F-4（プリセット名の連番）＋ F-5（保存項目の2階層チェック）。
   モックアップ合意 → 実装。
-- コミット: バケット1 = `3db3ab9`、バケット2 = `be7ecb2`（push 済み）。バケット3 は未コミット。
+- §7: バケット3.5 ＝ A-14（比率タイルピッカーを Lightroom Web 風に）＋ E-9（サブラベル全廃）＋ A-15（「大きさと
+  配置をリセット」に改名＋大きさも戻す）＋ A-16（説明文削除）。モックアップ4版 → 実装。
+- コミット: バケット1 = `3db3ab9`、バケット2 = `be7ecb2`、バケット3 = `937fdab`（push 済み）。バケット3.5 は未コミット。
 
 ## 1. セッション開始時の同期
 
@@ -219,18 +221,87 @@ range 属性2つの差し替えなので、Playwright スモークの通過を�
   `phase7b1-regress.js` 16/16 変わらず。
 - **`phase7b3-shot.js`**: `phase7b3-collapsed.png`（親5行）／`phase7b3-expanded.png`（全展開＋背景「色」OFF で親 −）。
 
-## 7. 現状のステータス
+## 7. バケット3.5 ＝ A-14（比率ピッカー刷新）＋ E-9（サブラベル全廃）＋ A-15 / A-16
 
-- **バケット1（A-10 / A-11 / A-13 / G-4 / G-5 / G-6）完了。ユーザーのブラウザ目視も確認済み**
-  （A-10 は初期値 90% / 下限 15% / 上限 100% に微調整＋dblclick でつまみが戻らない不具合も修正）。
-- **バケット2（E-8 / A-12）＋ バケット3（F-3 / F-4 / F-5）実装・Playwright 検証済み**
-  （phase7b2 27/27・phase7b3 24/24、phase7b1 61/61・回帰 16/16）。**ユーザーのブラウザ目視は次回**
-  （レイアウトタブの3見出しとアイコン／用語の一貫性／プリセット保存フォームのツリー・3状態チェック・
-  名前の連番・「（一部）」メタ）。
-- `spec.md`（3.1節レール／7.2節レイアウトタブ・A-12／5.19節 presetStore を F-3・F-4・F-5 対応に全面改稿／
-  実装済み一覧）と `docs/roadmap.md`（E-8 / A-12 / F-3 / F-4 / F-5 を「完了済み」表へ、詳細を（完了）スタブに、
-  フェーズ7 バケット2・3 を完了に、次はバケット4）を更新済み。
-- コミット状況: バケット1 = `3db3ab9`、バケット2 = `be7ecb2`（いずれも push 済み）。**バケット3 分は未コミット**。
+バケット3 の後、ユーザーから「レイアウトタブのアスペクト比の箇所が選びにくい（縦横混在）。Lightroom Web の
+クロップ UI に寄せたい」という追加フィードバック。モックアップを4版まで回して確定（Lightroom の縦横比リスト
+画像の添付を受けて rev.2、サブラベル全廃＋16:10 追加で rev.3、回転ボタンを momentary＋アイコン修正で rev.4）。
+
+### A-14: `js/ui/ratioPicker.js` を「向きを畳んだ比率ファミリー」方式に作り替え
+
+- `RATIO_FAMILIES` を `{ id, p, q, pickers, square?/named?/original?/free?/custom? }` の配列に（`p ≤ q` の縦向き正準。
+  配列の並び＝表示順＝Lightroom と同じ「数字が小さい順」。`L判` は数字を持たないので配列内の固定位置＝`4:5` と
+  `9:16` の間）。
+  - キャンバス: `1:1` `2:3` `3:4` `4:5` `lban`(89:127) `9:16` `10:16` `custom`
+  - トリミング: `original` `free` `1:1` `2:3` `3:4` `9:16` `10:16` `custom`
+  - 旧 `1.91:1` 削除、`16:10`（`id:'10:16'`）・`3:2`（`id:'2:3'`）追加。
+- `createRatioPicker(container, { families, orientation='portrait', onSelect })` に。ピッカーは `orientation` を
+  内部 UI 状態で持ち、`labelFor(family, orientation)`（`4×5` の `×` 表記。縦=`p×q`／横=`q×p`。`square`→`1×1`、
+  `named`/特殊→`label`）と `shapeFor`（46px 内接、向きに応じ w/h 入替）でタイルを描く。`data-value` は
+  ファミリー `id`（向き非依存）。
+- 公開ヘルパー: `orientedValueOf(family, orientation)`（→ 保存文字列）、`familyFromValue(value, families)`
+  （保存文字列 → `{ family, orientation }`。比率は縦向き正準 `min/max` で 1e-3 許容の数値マッチ）、
+  `isOrientableFamily(family)`（1×1・特殊は false）。
+- `setValue(value, {keepCustom})`: `familyFromValue` で導出した向きが現在と違えば `renderTileContents()` で
+  描き直してから押下反映（G-4 の `keepCustom` は従来どおり）。`toggleOrientation()`: 向き反転＋全タイル描き直し。
+- サブラベル（`sub`）は全廃（E-9）。`.ratio-tile-sub` は生成しない。
+
+### uiController / index.html / style.css
+
+- `index.html`: 「キャンバス」「写真のトリミング」の `<legend>` を `<svg.legend-icon>` ＋ `<span.legend-text>` ＋
+  回転ボタン `<button id="outputRotateButton" class="ratio-rotate-btn">` / `#cropRotateButton`（`<use href="#i-rotate">`）
+  の3要素に。カスタム欄の ⇄ ボタン（`#swapAspectRatio` / `#cropSwapAspectRatio`）を削除。
+- スプライトに `#i-rotate`（四角形の右上に回転矢印。Lightroom のクロップ縦横比スワップに寄せる。従来案の
+  「四角の上に90°の弧」はゴミ箱ボタンに見えるとの指摘で不採用）。
+- `js/uiController.js`:
+  - `ensureRatioPickers` の `options:` → `families:`。
+  - `rotateRatioPicker(kind)`（モジュール関数）: `picker.toggleOrientation()` → crop は `syncOriginalTileShape` を
+    貼り直し → 選択中が普通の比率ファミリーなら `orientedValueOf` で反転文字列を作り `updateState` /
+    `applyCropAspect` ＋ カスタム欄の値も更新／カスタム選択中なら幅高さ入力を入替 →
+    `updateAspectRatioFromInputs` / `updateCropAspectRatioFromInputs`／`1×1`・フリー・オリジナルは向きだけ反転。
+  - `#outputRotateButton` / `#cropRotateButton` の click に配線。旧 ⇄ ボタンのハンドラ（`swapAspectRatioButton` /
+    `cropSwapAspectRatioButton`）と `uiElements` エントリを削除。
+  - `#cropSection` の click 除外を `INPUT`/`TEXTAREA` → `e.target.closest('input, textarea, button')` に
+    （回転ボタンのクリックで crop モードに入らないように）。
+  - `syncCropAspectUI`: `setValue` が向き変更で再描画しうるので `syncOriginalTileShape(state)` を setValue の**後**へ移動。
+- `style.css`: `.legend-text { flex:1 }` ＋ `.ratio-rotate-btn`（26px・`:hover` でアクセント・押下状態なし）。
+- 向きは常に保存文字列から導出し永続化しない。`editState` のキー・`layoutCalculator`・各レンダラは無変更。
+
+### A-15 / A-16
+
+- **A-15**: `index.html` のボタン文字「配置をリセット」→「大きさと配置をリセット」。`uiController` の
+  `#resetPhotoPlacement` ハンドラに `baseMarginPercent: controlsConfig.baseMarginPercent.defaultValue`（5）を追加、
+  末尾で `updateSliderValueDisplays()`（スライダーも 90% に同期。ボタンクリックはスライダーにフォーカスしないので
+  A-10 の activeElement ガードには当たらない）。
+- **A-16**: 「大きさと配置」`<fieldset>` の `<p class="custom-text-drag-hint">写真をドラッグで配置。四隅の■で…</p>` を削除。
+
+### 検証（Playwright + Chromium 1.62.1）
+
+- **新規 `kakomi-devtools/phase7b35-test.js` = 26/26 パス**: 選択肢の並び・`data-value`（キャンバス
+  `1:1,2:3,3:4,4:5,lban,9:16,10:16,custom`／トリミング `original,free,1:1,2:3,3:4,9:16,10:16,custom`）／
+  ラベルが `×` 表記＆縦向きデフォルト（`1×1,2×3,…,10×16,カスタム`）／`1.91:1` 削除・`10:16` 追加／サブラベル 0 個／
+  回転ボタン在・旧 ⇄ ボタン無し／`3×4` クリック→state `3:4`→回転→`4:3`＋タイルが横長（`2×3`→`3×2`）＋ファミリー
+  押下維持→回転で戻る／`1×1` 選択中の回転は state 不変／state `16:9` → `9:16` ファミリー押下＋ラベル `16×9`
+  （横長導出）／crop も同様／オリジナル選択中の回転は `original` のまま＋ミニ長方形が画像比を保つ／カスタム
+  `7:3`→回転で `3:7`＋入力欄も入替／リセットボタン改名／説明文 `<p>` 無し／リセットで `baseMarginPercent`→5・
+  `photoViewParams`→中央・スライダー→90／コンソールエラー無し。
+- **回帰**: `phase7b1-test.js` の G-4 ⇄ 連打テストを回転ボタン（`#outputRotateButton`）に置換して 61/61。
+  `phase7b1-regress.js` は「16:9 タイル」を「縦長 `9:16` タイル → 回転で `16:9`」に書き換えて 18/18（+2）。
+  `phase7b2-test.js` 27/27・`phase7b3-test.js` 24/24 変わらず。
+- **`phase7b35-shot.js`**: `phase7b35-portrait.png`（縦向き一覧）／`phase7b35-landscape.png`（両ピッカー回転後）。
+
+## 8. 現状のステータス
+
+- **バケット1（A-10 / A-11 / A-13 / G-4 / G-5 / G-6）完了。ユーザーのブラウザ目視も確認済み**。
+- **バケット2（E-8 / A-12）＋ バケット3（F-3 / F-4 / F-5）＋ バケット3.5（A-14 / E-9 / A-15 / A-16）実装・
+  Playwright 検証済み**（phase7b1 61/61・phase7b1-regress 18/18・phase7b2 27/27・phase7b3 24/24・phase7b35 26/26）。
+  **ユーザーのブラウザ目視は次回**（レイアウトタブの3見出し・用語・プリセットツリー・比率ピッカーの向き
+  切り替えと回転ボタンの手触り・「大きさと配置をリセット」）。
+- `spec.md`（3.1／5.3 比率タイルピッカーを A-14 対応に全面改稿／7.2／5.19／実装済み一覧）と `docs/roadmap.md`
+  （E-8 / A-12 / F-3 / F-4 / F-5 / A-14 / E-9 / A-15 / A-16 を「完了済み」表へ、詳細を（完了）スタブに、
+  フェーズ7 バケット2・3・3.5 を完了に、次はバケット4）を更新済み。
+- コミット状況: バケット1 = `3db3ab9`、バケット2 = `be7ecb2`、バケット3 = `937fdab`（いずれも push 済み）。
+  **バケット3.5 分は未コミット**。
 - **次はバケット4 = D-1・D-3（テキスト追加ワークフロー再設計。独立フェーズ・スコープB＝データモデルを
   単一 `textLayers[]`＋`kind` に統合。要モックアップ。既存 localStorage プリセットの移行関数が要る）**。
 - その後: バケット5（B-6 登録のみ）→ 積み残し（A-5 / A-4 / A-3 / C-1）。

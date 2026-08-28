@@ -8,7 +8,7 @@ import * as selectionStore from './interaction/selectionStore.js';
 import { requestEnterCropMode } from './interaction/canvasInteraction.js';
 import { enhanceAsScrubInput } from './ui/scrubInput.js';
 import { attachColorHistory } from './ui/colorSwatches.js';
-import { createRatioPicker, ratioOptionsFor } from './ui/ratioPicker.js';
+import { createRatioPicker, ratioOptionsFor, RATIO_FAMILIES, orientedValueOf, isOrientableFamily } from './ui/ratioPicker.js';
 import { getPresets, savePreset, deletePreset, applyPreset, PRESET_SECTIONS, getPresetSections, getPresetGroups, getNextAutoPresetName } from './presets/presetStore.js';
 import { decodeExifString } from './exifHandler.js';
 
@@ -28,10 +28,10 @@ export const uiElements = {
     // レイアウト設定タブ - 構図調整（クロップ）
     // 切り抜き比率はタイル型ピッカー（js/ui/ratioPicker.js）。以前は <select id="cropAspectRatio">。
     cropAspectRatioPicker: document.getElementById('cropAspectRatioPicker'),
+    cropRotateButton: document.getElementById('cropRotateButton'),
     cropCustomAspectRatioContainer: document.getElementById('cropCustomAspectRatioContainer'),
     cropCustomAspectRatioWidthInput: document.getElementById('cropCustomAspectRatioWidth'),
     cropCustomAspectRatioHeightInput: document.getElementById('cropCustomAspectRatioHeight'),
-    cropSwapAspectRatioButton: document.getElementById('cropSwapAspectRatio'),
     // 「切り抜き位置」「枠内位置」のスライダーは撤去（docs/roadmap.md A-1）。
     // cropSettings.rect のパンと photoViewParams はデータとして保持し、プレビュー操作からのみ動かす。
     resetPhotoPlacementButton: document.getElementById('resetPhotoPlacement'),
@@ -39,10 +39,10 @@ export const uiElements = {
     // レイアウト設定タブ
     // 出力アスペクト比もタイル型ピッカー。以前は <select id="outputAspectRatio">。
     outputAspectRatioPicker: document.getElementById('outputAspectRatioPicker'),
+    outputRotateButton: document.getElementById('outputRotateButton'),
     customAspectRatioContainer: document.getElementById('customAspectRatioContainer'),
     customAspectRatioWidthInput: document.getElementById('customAspectRatioWidth'),
     customAspectRatioHeightInput: document.getElementById('customAspectRatioHeight'),
-    swapAspectRatioButton: document.getElementById('swapAspectRatio'),
     baseMarginPercentInput: document.getElementById('baseMarginPercent'),
     baseMarginPercentValueSpan: document.getElementById('baseMarginPercentValue'),
 
@@ -191,7 +191,7 @@ function applyCropAspect(aspectRatioString) {
 function ensureRatioPickers() {
     if (!outputRatioPicker && uiElements.outputAspectRatioPicker) {
         outputRatioPicker = createRatioPicker(uiElements.outputAspectRatioPicker, {
-            options: ratioOptionsFor('output'),
+            families: ratioOptionsFor('output'),
             onSelect: (value) => {
                 if (value === 'custom') {
                     // 「カスタム」タイルは幅高さ入力欄を出すだけ（この時点では state を変えない）。
@@ -215,7 +215,7 @@ function ensureRatioPickers() {
     }
     if (!cropRatioPicker && uiElements.cropAspectRatioPicker) {
         cropRatioPicker = createRatioPicker(uiElements.cropAspectRatioPicker, {
-            options: ratioOptionsFor('crop'),
+            families: ratioOptionsFor('crop'),
             onSelect: (value) => {
                 if (value === 'custom') {
                     // 「カスタム」タイルは幅高さ入力欄を出すだけ。反映は入力欄の編集時。
@@ -240,6 +240,49 @@ function ensureRatioPickers() {
             }
         });
     }
+}
+
+// A-14: 見出しの回転ボタン。押すたびにピッカーの向き（縦長／横長）を反転する momentary ボタン
+// （トグルの ON/OFF 状態は持たない）。選択中が普通の比率ファミリーなら保存文字列を W:H ↔ H:W に、
+// カスタム選択中なら幅高さ入力欄を入れ替える。1×1・フリー・オリジナルは向きだけ反転して値は据え置き。
+function rotateRatioPicker(kind) {
+    const picker = kind === 'output' ? outputRatioPicker : cropRatioPicker;
+    if (!picker) return;
+    picker.toggleOrientation();
+    // toggleOrientation は全タイルを描き直すので、「オリジナル」タイルの形（画像アスペクト）を貼り直す。
+    if (kind === 'crop') syncOriginalTileShape(getState());
+    const id = picker.getSelectedId();
+    const customMode = kind === 'output' ? outputCustomMode : cropCustomMode;
+    const wInput = kind === 'output'
+        ? uiElements.customAspectRatioWidthInput : uiElements.cropCustomAspectRatioWidthInput;
+    const hInput = kind === 'output'
+        ? uiElements.customAspectRatioHeightInput : uiElements.cropCustomAspectRatioHeightInput;
+
+    if (id === 'custom' || customMode) {
+        if (wInput && hInput) {
+            const tmp = wInput.value;
+            wInput.value = hInput.value;
+            hInput.value = tmp;
+            if (kind === 'output') updateAspectRatioFromInputs();
+            else updateCropAspectRatioFromInputs();
+        }
+        return;
+    }
+    const family = RATIO_FAMILIES.find(f => f.id === id);
+    if (family && isOrientableFamily(family)) {
+        const value = orientedValueOf(family, picker.getOrientation());
+        const parts = value.split(':');
+        if (wInput) wInput.value = parts[0];
+        if (hInput) hInput.value = parts[1];
+        if (kind === 'output') {
+            updateState({ outputTargetAspectRatioString: value });
+        } else {
+            applyCropAspect(value);
+            syncOriginalTileShape(getState());
+        }
+        if (moduleRedraw) moduleRedraw();
+    }
+    // 1×1・フリー・オリジナル・未選択: 向きだけ反転済み。次に選ぶタイルが新しい向きで出る。
 }
 
 // カスタム幅高さ入力欄は「カスタムモード中」または「カスタムタイルが実効的に押されている」あいだ表示する。
@@ -317,7 +360,6 @@ function syncOutputAspectUI(state) {
 // 切り抜き比率タイル ＋ カスタム幅高さ入力欄を state に同期する（initializeUIFromState から使用）。
 function syncCropAspectUI(state) {
     ensureRatioPickers();
-    syncOriginalTileShape(state); // 「オリジナル」タイルの形を現在の画像アスペクトに合わせる
     const cropAspect = state.cropSettings.aspectRatio;
     if (cropAspect && cropAspect !== 'free' && cropAspect !== 'original') {
         const parts = cropAspect.split(':');
@@ -336,6 +378,9 @@ function syncCropAspectUI(state) {
         // 'original'（元画像比で固定）と 'free'（制約なし）はそれぞれのタイルを押下表示にする（A-11）。
         cropRatioPicker.setValue(cropAspect === 'original' ? 'original' : 'free');
     }
+    // 「オリジナル」タイルのミニ長方形を現在の画像アスペクトに合わせる。setValue で向きが変わると
+    // タイルが描き直され汎用プレースホルダに戻るため、setValue の後に実行する（A-14）。
+    syncOriginalTileShape(state);
     updateCropCustomVisibility();
 }
 
@@ -1344,61 +1389,40 @@ export function setupEventListeners(redrawCallback) {
 
     // --- 構図調整（クロップ）タブ ---
     // 切り抜き比率はタイルピッカー（ensureRatioPickers 内で onSelect を配線済み）。
-    // ここではカスタム幅高さ入力欄と⇄ボタンだけを配線する。
+    // ここではカスタム幅高さ入力欄と回転ボタンを配線する（A-14: 旧 ⇄ ボタンは回転ボタンに一本化）。
     if (uiElements.cropCustomAspectRatioWidthInput) {
         uiElements.cropCustomAspectRatioWidthInput.addEventListener('input', updateCropAspectRatioFromInputs);
     }
     if (uiElements.cropCustomAspectRatioHeightInput) {
         uiElements.cropCustomAspectRatioHeightInput.addEventListener('input', updateCropAspectRatioFromInputs);
     }
-    if (uiElements.cropSwapAspectRatioButton) {
-        uiElements.cropSwapAspectRatioButton.addEventListener('click', () => {
-            if (!uiElements.cropCustomAspectRatioWidthInput || !uiElements.cropCustomAspectRatioHeightInput) return;
-            const width = parseFloat(uiElements.cropCustomAspectRatioWidthInput.value);
-            const height = parseFloat(uiElements.cropCustomAspectRatioHeightInput.value);
-            if (!isNaN(width) && !isNaN(height) && width > 0 && height > 0) {
-                uiElements.cropCustomAspectRatioWidthInput.value = String(height);
-                uiElements.cropCustomAspectRatioHeightInput.value = String(width);
-                updateCropAspectRatioFromInputs();
-            }
-        });
+    if (uiElements.cropRotateButton) {
+        uiElements.cropRotateButton.addEventListener('click', () => rotateRatioPicker('crop'));
     }
 
     // 「トリミング」セクション内をクリックしたら、写真を選択して crop モードへ自動で入る
     // （プレビュー上で選択済み写真を再タップするのと同じ。frozenFrame スナップショットは
-    // requestEnterCropMode が作る）。数値入力欄（カスタム幅高さ）のクリックは除外して、
-    // 数値入力中にクロップオーバーレイが割り込まないようにする。Esc / Enter で select に戻る。
+    // requestEnterCropMode が作る）。数値入力欄（カスタム幅高さ）とボタン（回転ボタン等）の
+    // クリックは除外して、数値入力・回転操作中にクロップオーバーレイが割り込まないようにする。
+    // Esc / Enter で select に戻る。
     const cropSection = document.getElementById('cropSection');
     if (cropSection) {
         cropSection.addEventListener('click', (e) => {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            if (e.target.closest('input, textarea, button')) return;
             requestEnterCropMode();
         });
     }
 
     // --- 出力アスペクト比（タイルピッカー） ---
-    // タイルの onSelect は ensureRatioPickers で配線済み。カスタム幅高さ入力欄と⇄ボタンのみ配線する。
+    // タイルの onSelect は ensureRatioPickers で配線済み。カスタム幅高さ入力欄と回転ボタンを配線する。
     if (uiElements.customAspectRatioWidthInput) {
         uiElements.customAspectRatioWidthInput.addEventListener('input', updateAspectRatioFromInputs);
     }
     if (uiElements.customAspectRatioHeightInput) {
         uiElements.customAspectRatioHeightInput.addEventListener('input', updateAspectRatioFromInputs);
     }
-
-    // 反転ボタンのイベントリスナー
-    if (uiElements.swapAspectRatioButton) {
-        uiElements.swapAspectRatioButton.addEventListener('click', () => {
-            if (!uiElements.customAspectRatioWidthInput || !uiElements.customAspectRatioHeightInput) return;
-            const width = parseFloat(uiElements.customAspectRatioWidthInput.value);
-            const height = parseFloat(uiElements.customAspectRatioHeightInput.value);
-            if (!isNaN(width) && !isNaN(height) && width > 0 && height > 0) {
-                // 幅と高さを入れ替え
-                uiElements.customAspectRatioWidthInput.value = String(height);
-                uiElements.customAspectRatioHeightInput.value = String(width);
-                // 状態を更新
-                updateAspectRatioFromInputs();
-            }
-        });
+    if (uiElements.outputRotateButton) {
+        uiElements.outputRotateButton.addEventListener('click', () => rotateRatioPicker('output'));
     }
 
     // A-10:「大きさ」スライダー専用の配線。見かけ値（size%）→ 内部 baseMarginPercent へ変換して保存する。
@@ -1442,14 +1466,19 @@ export function setupEventListeners(redrawCallback) {
     // ... (その他すべての addNumericInputListener と addColorInputListener の呼び出し) ...
     // 「配置をリセット」: 枠内位置（photoViewParams）を中央へ、かつクロップ矩形のパンを中央へ戻す。
     // 切り抜き範囲のサイズ・比率は変えない（docs/roadmap.md A-1）。
+    // 「大きさと配置をリセット」（A-15）: 枠内位置とクロップ矩形のパンを中央へ戻すのに加えて、
+    // 大きさ（baseMarginPercent）も既定（5 ＝ 表示 90%）へ戻す。セクション名が「大きさと配置」なので
+    // 両方戻るのが直感的、というユーザー判断。切り抜き範囲のサイズ・比率は変えない。
     if (uiElements.resetPhotoPlacementButton) {
         uiElements.resetPhotoPlacementButton.addEventListener('click', () => {
             const state = getState();
             const rect = resolveCropRect(state.cropSettings, state.originalWidth, state.originalHeight);
             updateState({
                 photoViewParams: { offsetX: 0.5, offsetY: 0.5 },
-                cropSettings: { rect: cropRectWithPan(rect, 0.5, 0.5) }
+                cropSettings: { rect: cropRectWithPan(rect, 0.5, 0.5) },
+                baseMarginPercent: controlsConfig.baseMarginPercent.defaultValue
             });
+            updateSliderValueDisplays();
             redrawCallback();
         });
     }

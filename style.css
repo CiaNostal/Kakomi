@@ -391,6 +391,40 @@ fieldset legend .legend-icon {
     color: var(--ink-dim);
 }
 
+/* A-14: 見出しに「キャンバス」「写真のトリミング」の文字＋右端に縦横入れ替えボタンを並べるための伸縮ラッパ。 */
+fieldset legend .legend-text {
+    flex: 1;
+    min-width: 0;
+}
+
+/* A-14: アスペクト比の縦横を入れ替える回転ボタン（見出し右端）。押すたびに縦↔横が切り替わる
+   momentary ボタンで、押下（トグル）状態は持たない。 */
+.ratio-rotate-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+    color: var(--ink-dim);
+    cursor: pointer;
+}
+
+.ratio-rotate-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.ratio-rotate-btn svg {
+    display: block;
+    width: 15px;
+    height: 15px;
+}
+
 .subsection-heading {
     font-family: var(--font-cond);
     font-weight: 600;

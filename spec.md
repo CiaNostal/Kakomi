@@ -277,16 +277,24 @@ UI要素の制御とイベントハンドリングを担当します。
 - テキスト設定（撮影日・Exif情報・自由テキストレイヤーの追加/削除/個別設定。下記「文字レイヤーの統一UI」参照）
 - 出力設定（JPEG品質）
 
-**比率タイルピッカー（出力アスペクト比・切り抜き比率。`docs/roadmap.md` A-1）:**
-以前はどちらも`<select>`（出力＝`#outputAspectRatio`、切り抜き＝`#cropAspectRatio`）だったが、比率の形が想像しづらいという要望で、比率そのものの形をミニ長方形で描いて選ぶタイル型 UI（`js/ui/ratioPicker.js`の`createRatioPicker()`）に置き換えた。
-- 選択肢と**並び順**は`js/ui/ratioPicker.js`の`RATIO_FAMILIES`（比率の「正準順序」＋各エントリの`pickers: ['output'|'crop']`）が唯一の情報源。`ratioOptionsFor('output')` / `ratioOptionsFor('crop')`でそのピッカー用の配列を得る。両ピッカーで同じ比率が同じ相対順序に並ぶ（フェーズ3で共通化。`docs/roadmap.md` A-7。以前は`uiController.js`に別々の並びで定義されていた）。出力＝1:1／4:5／3:4／16:9／1.91:1／L判(89:127)／カスタム、切り抜き＝**オリジナル**／フリー／1:1／3:4／4:3／16:9／9:16／カスタム。各タイルは`<button class="ratio-tile" data-value aria-pressed>`で、内側の`<i>`要素の幅・高さを比率どおりに（46px 内接で）設定して形を見せる。「フリー」タイルは破線、「オリジナル」タイルは二重線（`.is-original`。A-11、暫定意匠）。カスタム幅高さ入力欄は折り返さないコンパクトな1行（`.ratio-custom-row`。フェーズ3で`.form-row-simple`から変更）。
+**比率タイルピッカー（出力アスペクト比＝「キャンバス」・切り抜き比率＝「写真のトリミング」。`docs/roadmap.md` A-1 / A-14）:**
+以前はどちらも`<select>`だったが、比率の形が想像しづらいという要望で、比率そのものの形をミニ長方形で描いて選ぶタイル型 UI（`js/ui/ratioPicker.js`の`createRatioPicker()`）に置き換えた。**A-14（2026-08-28、Lightroom Web のクロップ UI 参照）で「向きを畳んだ比率ファミリー」方式に作り替えた。**
+- **`RATIO_FAMILIES`（`js/ui/ratioPicker.js`）が唯一の情報源。**各エントリは向き中立の「比率ファミリー」で、`{ id, p, q, pickers, square?/named?/original?/free?/custom? }`（`p ≤ q` の縦向き正準比率）。配列の並び＝表示順（Lightroom と同じ「ラベルの数字が小さい順」。`L判` は数字を持たないので配列内の固定位置）。`ratioOptionsFor('output')` / `ratioOptionsFor('crop')` でそのピッカー用の配列を得る。
+  - キャンバス: `1×1` · `2×3` · `3×4` · `4×5` · `L判`(89:127) · `9×16` · `10×16` · カスタム
+  - 写真のトリミング: **オリジナル** · フリー · `1×1` · `2×3` · `3×4` · `9×16` · `10×16` · カスタム
+  - 旧「1.91:1」は削除、`16:10`（`id:'10:16'`）・`3:2`（`id:'2:3'`）を追加。
+- **向き（`orientation`: `'portrait'` / `'landscape'`）はピッカーの UI 状態**。タイルのラベル（`4×5` の `×` 表記）とミニ長方形（`<i>` の幅・高さを 46px 内接で比率どおりに）はこの向きで描く。初期の向きは現在の保存文字列（`outputTargetAspectRatioString` / `cropSettings.aspectRatio`）の W:H から導出（W>H で landscape、W<H で portrait、正方形は現状維持）。**永続化しない。**
+- **回転ボタン**（見出し `<legend>` 右端。`#outputRotateButton` / `#cropRotateButton`。スプライト `#i-rotate`＝四角の右上に回転矢印。**押すたびに縦↔横が切り替わる momentary ボタンで、押下（トグル）状態は描画しない**——hover のみ）。`picker.toggleOrientation()` で全タイルを縦横反転し、`uiController.rotateRatioPicker(kind)` が選択中ファミリーの保存文字列を `H:W` ↔ `W:H` に入れ替えて `updateState` / `applyCropAspect` で再適用。`1×1`・「フリー」・「オリジナル」は向きだけ反転して値は据え置き（「オリジナル」は元画像の向き基準）。**カスタム選択中の回転は幅高さの数値入力を入れ替える**（旧 `#swapAspectRatio` / `#cropSwapAspectRatio` の ⇄ ボタンは廃止しこれに一本化）。
+- **サブラベルは全廃（`docs/roadmap.md` E-9）**。タイルは「ラベル＋ミニ長方形」だけ。「インスタ」は正方形/4:5/ストーリーズ/リールで比率が違い一概に言えないため。
+- 各タイルは`<button class="ratio-tile" data-value aria-pressed>`（`data-value` はファミリー `id`＝向きに依存しない）。「フリー」タイルは破線、「オリジナル」タイルは二重線（`.is-original`）でミニ長方形は`uiController.syncOriginalTileShape()`が読み込み中の画像比で描く（`toggleOrientation`／`setValue` の再描画後に貼り直す）。カスタム幅高さ入力欄は折り返さない1行（`.ratio-custom-row`。⇄ ボタンは撤去）。
+- `editState` のキー・`layoutCalculator`・各レンダラは無変更（向きは常に文字列から導出）。
 - **「オリジナル」タイル（切り抜きのみ。`docs/roadmap.md` A-11）**: **切り抜き比率を元画像のアスペクト比で固定する**（Lightroom のクロップ「オリジナル」と同義。3:4 の画像なら 3:4 で固定）。選択すると`cropSettings.aspectRatio = 'original'`を保存し、他のプリセット比率と同じ経路（`applyCropAspect`）で中心維持のまま矩形を元画像比へ合わせる。**`rect`の全体リセットや`photoViewParams`の初期化はしない。** `aspectRatio`の数値解決は`utils/cropRect.js`の`resolveCropAspectValue(aspectRatio, imgW, imgH)`（`'original'` → `imgW/imgH`、`'free'`/空/画像未ロード → null、それ以外 → `parseAspectRatio`）が担い、`photoAdapter.getCropConstraint`（crop モードの隅ドラッグ制約）・`stateManager.setImage`（画像ロード／差し替え時の再フィット。`'original'`は新画像の比へ自動追従）・`uiController.applyCropAspect`の3か所で使う。タイルのミニ長方形は`uiController.syncOriginalTileShape()`が読み込み中の画像の縦横比で描く。押下表示は`aspectRatio === 'original'`のときのみ（`aspectRatio === 'free'`なら「フリー」）。<br>※「切り抜きをまるごとリセット」する操作は別途必要だが、回転（A-4）実装後に用意する。
 - ピッカーは`ensureRatioPickers()`が一度だけ生成する（`initializeUIFromState()`が`setupEventListeners()`より先に走るため、両方から呼べるようにしてある）。`onSelect(value)`で、プリセット比率なら`updateState({ outputTargetAspectRatioString })`／`applyCropAspect(value)`を呼ぶ。**「カスタム」タイルはカスタム幅高さ入力欄（`#customAspectRatioContainer`／`#cropCustomAspectRatioContainer`）を表示するだけで、その時点では state を変えない**（反映は入力欄の編集時に`updateAspectRatioFromInputs()`／`updateCropAspectRatioFromInputs()`が行う）。カスタム欄は**「カスタムモード中」**（`outputCustomMode`／`cropCustomMode`。カスタムタイル押下・カスタム欄編集で`true`、別タイル押下で`false`）または「カスタム」タイルが実効的に押されているあいだ表示する（`updateOutputCustomVisibility()`／`updateCropCustomVisibility()`が`.hidden`をトグル）。
-- **G-4（カスタム値が既存比率に一致してもカスタム欄が閉じずフォーカスが飛ばない。`docs/roadmap.md` G-4）**: 以前はカスタム幅高さの値がプリセットタイルと同じ比率（例 4:5）になると`setValue`がそのタイルを押下→`getValue()`が`'custom'`でなくなり→カスタム欄（幅高さ入力欄と⇄ボタンを含む）が`display:none`になり、フォーカス中の子要素からフォーカスが外れていた（⇄の連打も不可）。対処＝上記の粘着フラグ`*CustomMode`と、`picker.setValue(value, { keepCustom: true })`（一致しても「カスタム」タイルの押下を維持）。プログラムからは`.focus()`を一切呼ばない。
+- **G-4（カスタム値が既存比率に一致してもカスタム欄が閉じずフォーカスが飛ばない。`docs/roadmap.md` G-4）**: 以前はカスタム幅高さの値がプリセットタイルと同じ比率（例 4:5）になると`setValue`がそのタイルを押下→`getValue()`が`'custom'`でなくなり→カスタム欄が`display:none`になり、フォーカス中の子要素からフォーカスが外れていた。対処＝粘着フラグ`*CustomMode`と、`picker.setValue(value, { keepCustom: true })`（一致しても「カスタム」タイルの押下を維持）。プログラムからは`.focus()`を一切呼ばない。
 - state → UI の同期は`syncOutputAspectUI(state)`／`syncCropAspectUI(state)`が担い、`picker.setValue(value, { keepCustom: *CustomMode })`で該当タイルを押下状態にする（一致するタイルが無ければ「カスタム」タイルにフォールバック）。
 
 **写真の配置スライダーの撤去（`docs/roadmap.md` A-1）:**
-「切り抜き位置（横／縦）」（`#cropOffsetX/Y`）・「枠内位置（横位置／縦位置）」（`#photoPosX/Y`）のスライダー計4本を UI から撤去した。`cropSettings.rect`のパンと`photoViewParams`は**データモデルとしては維持**し、プレビュー上のジェスチャー（本体ドラッグ、crop モードの本体ドラッグ、四隅ハンドル）からのみ操作する。パネルには「配置をリセット」ボタン（`#resetPhotoPlacement`）だけを置き、押すと`photoViewParams`を中央（0.5, 0.5）へ、かつクロップ矩形のパンを中央へ戻す（切り抜き範囲のサイズ・比率は変えない）。
+「切り抜き位置（横／縦）」（`#cropOffsetX/Y`）・「枠内位置（横位置／縦位置）」（`#photoPosX/Y`）のスライダー計4本を UI から撤去した。`cropSettings.rect`のパンと`photoViewParams`は**データモデルとしては維持**し、プレビュー上のジェスチャー（本体ドラッグ、crop モードの本体ドラッグ、四隅ハンドル）からのみ操作する。パネルには「**大きさと配置をリセット**」ボタン（`#resetPhotoPlacement`。旧「配置をリセット」。`docs/roadmap.md` A-15）だけを置き、押すと`photoViewParams`を中央（0.5, 0.5）へ・クロップ矩形のパンを中央へ・**`baseMarginPercent`を既定 5（表示 90%）へ**戻す（切り抜き範囲のサイズ・比率は変えない）。「大きさと配置」セクションにあった説明文（`写真をドラッグで配置。四隅の■で大きさを調整。`）は A-16 で削除。
 
 **背景タブの整理（`docs/roadmap.md` B-1、軽微版）:**
 `<fieldset>`構成は保ったまま、拡大ぼかし背景の「明るさ」「彩度」スライダーを既定で閉じたネイティブ`<details id="bgToneAccordion">`（見出し「色調（明るさ・彩度）」）に入れた。X/Yオフセットのスライダー（`#bgOffsetX/Y`）は撤去し、「位置をリセット」ボタン（`#resetBgOffset`。`imageBlurBackgroundParams.offsetX/YPercent`を0に戻す）に置き換えた。位置調整は「背景」タブでのプレビュードラッグ（`backgroundAdapter`、5.17節）で行う。`imageBlurBackgroundParams`のデータモデルは変更なし。
@@ -722,7 +730,7 @@ Blobをダウンロード
 
 **操作方法:**
 - **プレビュー上（オンキャンバス）**: 5.16〜5.17節・7.2節「オンキャンバス・トリミング」参照。写真を選択した状態でもう一度クリック（またはレイアウトタブの「写真のトリミング」セクション内をクリック）すると「トリミングモード」に入り、四隅の L 字ハンドルで切り抜き範囲を指定、写真本体ドラッグで切り抜き範囲を平行移動、写真の外をクリックまたは Esc / Enter で確定する。
-- **「レイアウト」パネルの UI**: 「切り抜き比率」は比率タイルピッカー（`#cropAspectRatioPicker`。`フリー` / 各比率 / カスタム幅高さ＋⇄。2026年8月のフェーズ2で `<select id="cropAspectRatio">` から置き換え。5.3節「比率タイルピッカー」参照）。**「切り抜き位置（横／縦）」スライダーはフェーズ2で撤去**（`docs/roadmap.md` A-1）。`rect` のパンはプレビュー上のジェスチャー（crop モードの本体ドラッグ・矢印キー）と「配置をリセット」ボタン（`#resetPhotoPlacement`。`uiController.js` の `cropRectWithPan(rect, 0.5, 0.5)` で中央へ）からのみ動かす。
+- **「レイアウト」パネルの UI**: 「写真のトリミング」は比率タイルピッカー（`#cropAspectRatioPicker`。オリジナル / フリー / 各比率ファミリー / カスタム幅高さ ＋ 見出しの回転ボタン。5.3節「比率タイルピッカー」参照）。**「切り抜き位置（横／縦）」スライダーはフェーズ2で撤去**（`docs/roadmap.md` A-1）。`rect` のパンはプレビュー上のジェスチャー（crop モードの本体ドラッグ・矢印キー）と「大きさと配置をリセット」ボタン（`#resetPhotoPlacement`。`uiController.js` の `cropRectWithPan(rect, 0.5, 0.5)` で中央へ）からのみ動かす。
 
 **実装詳細:**
 - `layoutCalculator.js` の `calculateLayout()` が `utils/cropRect.js` の `resolveCropRect(cropSettings, originalW, originalH)` を呼んで矩形を得る。`resolveCropRect` は `cropSettings.rect` が有効ならそれを、旧 `zoom`/`offset` 形式ならその場で矩形へ変換、どちらでもなければ全体（`{0,0,1,1}`）を返すため、未移行の状態でも描画は壊れない。
@@ -731,8 +739,8 @@ Blobをダウンロード
 
 ### 7.2 レイアウト設定
 - **キャンバス（節見出し。旧「出力アスペクト比」。`docs/roadmap.md` E-8）**: 最終的な出力画像の縦横比を指定
-  - **比率タイルピッカー（`#outputAspectRatioPicker`。2026年8月のフェーズ2で `<select id="outputAspectRatio">` から置き換え。`docs/roadmap.md` A-1）**: 1:1（正方形）、4:5（IG縦）、1.91:1（IG横）、16:9（ワイド）、3:4、L判(89:127)、カスタム。比率の形をミニ長方形で描いたタイルをクリックして選ぶ（`js/ui/ratioPicker.js`。5.3節「比率タイルピッカー」参照）
-  - **カスタム比率の自由入力（実装済み）**: 「カスタム」タイルを選ぶと幅/高さの数値入力欄（`#customAspectRatioContainer`）が現れ、任意の `幅:高さ` 比率を指定できる。⇄ボタンで幅と高さを入れ替え可能。入力値は `outputTargetAspectRatioString`（例: `"3:2"`）として状態に保存される。カスタムタイルを押した時点では state は変わらず、入力欄を編集した時点で反映される。
+  - **比率タイルピッカー（`#outputAspectRatioPicker`。`docs/roadmap.md` A-1 / A-14）**: `1×1` / `2×3` / `3×4` / `4×5` / `L判`(89:127) / `9×16` / `10×16` / カスタム（縦向き表記。回転ボタンで横長へ）。比率の形をミニ長方形で描いたタイルをクリックして選ぶ（`js/ui/ratioPicker.js`。5.3節「比率タイルピッカー」参照）
+  - **カスタム比率の自由入力（実装済み）**: 「カスタム」タイルを選ぶと幅/高さの数値入力欄（`#customAspectRatioContainer`）が現れ、任意の `幅:高さ` 比率を指定できる。**幅高さの入れ替えは見出しの回転ボタン**（A-14 で専用 ⇄ ボタンを廃止・一本化）。入力値は `outputTargetAspectRatioString`（例: `"3:2"`）として状態に保存される。カスタムタイルを押した時点では state は変わらず、入力欄を編集した時点で反映される。
     - 内部的には `outputTargetAspectRatioString` に `"custom:"` プレフィックスを付けた古い形式の後方互換処理（プレフィックス除去）が残っているが、現在のUIはプレフィックスなしの `"幅:高さ"` 形式で保存する。
   - `layoutCalculator.js` は特別な値 `"original_photo"`（入力写真の比率をそのまま使う）にも対応しているが、現在のタイルにはこの項目がなく、UIから選択する手段はない。
   - これが最終的なJPEGのアスペクト比となる
@@ -740,7 +748,7 @@ Blobをダウンロード
   - この値は「最小限の余白量」の目安。実際の余白は、出力画像の目標アスペクト比を維持するために、この基準値よりも一部が自動的に広がる場合がある。
   - **UI 表記は「大きさ」（`docs/roadmap.md` A-10）**: スライダー（`#baseMarginPercent`。`controlsConfig.photoSize` の min15/max100/step0.5 で駆動）は「写真短辺がキャンバス短辺に占める割合%」を見かけ値として扱い、**右に倒すほど写真が大きくなる**（＝余白が減る）。`marginToSize(m) = 100/(1+m/45)`（m=0→100%、m=5→ちょうど90%、m=300→約13%）と逆変換`sizeToMargin(s) = 45(100-s)/s`で`baseMarginPercent`と1対1対応。既定 margin=5 がちょうど 90% になるよう分母を 45 に選んである。スライダー下限 15% は `marginToSize(300)≈13%` より上なので、全域が実 `baseMarginPercent`（0〜255）に 1:1 対応する（不感帯なし。内部ロジックには手を入れず range 属性だけで解決）。`updateSliderValueDisplays()`が表示・入力欄同期を、専用の`input`／`dblclick`（既定 margin 5＝size 90 へ）リスナーが保存を担う（汎用`addNumericInputListener`は使わない）。`updateSliderValueDisplays()`はドラッグ中に値が飛ばないよう「スライダーにフォーカスがあるあいだは`.value`を書き換えない」ガードを持つため、`dblclick`／ダブルタップのリセットハンドラは`updateState`後に`baseMarginPercentInput.value`へ`marginToSize(5)`を明示代入してつまみ位置を戻す。四隅■ハンドルのドラッグ（`commitMarginResizeByDrag`）でも同じ表示に反映される。レイアウト計算（`layoutCalculator`）には一切手を入れていない。
 - **写真位置調整**: 出力画像のフレーム内で、写真をどこに配置するか（`photoViewParams`、X/Y とも 0.0=端〜0.5=中央〜1.0=端）
-  - **数値スライダー（`#photoPosX/Y`）は 2026年8月のフェーズ2で撤去（`docs/roadmap.md` A-1）**。`photoViewParams` はデータとしては維持し、**プレビュー上で写真を直接ドラッグして調整する**（`interaction/adapters/photoAdapter.js`。ドラッグ中はキャンバス中央線・端・他オブジェクトへのスナップも働く）。パネルには「配置をリセット」ボタン（`#resetPhotoPlacement`）があり、`photoViewParams` を中央へ、かつクロップ矩形のパンを中央へ戻す（切り抜き範囲のサイズ・比率は変えない）。
+  - **数値スライダー（`#photoPosX/Y`）は 2026年8月のフェーズ2で撤去（`docs/roadmap.md` A-1）**。`photoViewParams` はデータとしては維持し、**プレビュー上で写真を直接ドラッグして調整する**（`interaction/adapters/photoAdapter.js`。ドラッグ中はキャンバス中央線・端・他オブジェクトへのスナップも働く）。パネルには「**大きさと配置をリセット**」ボタン（`#resetPhotoPlacement`。旧「配置をリセット」。`docs/roadmap.md` A-15）があり、`photoViewParams` を中央へ・クロップ矩形のパンを中央へ・`baseMarginPercent` を既定 5（表示 90%）へ戻す（切り抜き範囲のサイズ・比率は変えない。押下後 `updateSliderValueDisplays()` で「大きさ」スライダーも同期）。「大きさと配置」セクションにあった説明文は A-16 で削除。
   - **注意:** 仕様書v1では「9点から選択」とあるが、現在の実装ではプレビュードラッグによる連続的な位置調整となっている
 
 **UI上のグルーピング（フェーズ4 A-8 で並べ替え、フェーズ7 A-12 で見出しを対象明示に）:** 「レイアウト」パネルを **① キャンバス → ② 写真のトリミング → ③ 大きさと配置** の3セクション（線区切り、`fieldset`＋`legend`）に分ける。ユーザーから見た自然な決定順（枠の形を決める → 元写真のどこを使うか決める → 写真の大きさと位置を決める）に合わせたもの。`baseMarginPercent` の値（旧「余白」。UI 表記は「大きさ」）は「キャンバス」から切り離して ③ に置く——写真の大きさの決定は出力キャンバスの形の決定ではなく構図の決定であり、かつ ② トリミングで写真の実効短辺（＝内部 % の基準）が変わるため、使う範囲を先に確定してから決めるほうが値がぶれない。①②の比率タイル、③の「大きさ」スライダー・「配置をリセット」ボタンはそれぞれ独立で、`cropSettings`と`photoViewParams`の状態・計算ロジックは統合していない。切り抜き位置・枠内位置の数値スライダーはフェーズ2で撤去済みで、これらの調整はすべてプレビュー上のジェスチャーに寄せている。
@@ -1063,6 +1071,8 @@ Blobをダウンロード
 - ✅ **E-7**: ファイル選択の小枠を廃し、`.canvas-area` 全体をドロップ受付に。未読込時は中央にドロップダイアログ、読み込み後はキャンバス。上部バーに「画像を開く」ボタン（`#openImageButton`）（3.1節・6.1節）
 - ✅ **F-2**: プリセット保存時にタブ単位5セクション（`PRESET_SECTIONS`）のチェックで保存項目を選択。適用は含まれるキーだけ上書き（5.19節）
 - ✅ **F-3 / F-4 / F-5（フェーズ7 バケット3）**: 保存フォームを `renderPresetSectionChecks()` の縦ツリーに（親5＋背景・フレーム・テキストの子グループ、3状態の親チェック）。名前は空なら「プリセット N」（空き番号の最小）・衝突は連番・上書きなし（`resolvePresetName`）。`PRESET_SECTIONS` にドット付きパスの `groups` を導入し、`savePreset(name, sections, groups)` が部分オブジェクトを組み立て、`applyPreset` は deep-merge のまま。旧プリセット移行不要（5.19節）
+- ✅ **A-14 / E-9（フェーズ7 バケット3.5）**: 比率タイルピッカーを Lightroom Web 風に。`RATIO_FAMILIES` を「向きを畳んだ比率ファミリー」（縦向き正準・`×` 表記・数字が小さい順）に。ピッカーごとに `orientation` を UI 状態で持ち、見出し右端の回転ボタン（momentary・点灯なし）で全タイル反転＋選択比率を `H:W`↔`W:H`。`1.91:1` 削除／`16:10`・`3:2` 追加。サブラベル全廃。カスタムの ⇄ ボタン廃止（回転に一本化）。`editState`・`layoutCalculator` 無変更（5.3節・7.2節）
+- ✅ **A-15 / A-16（フェーズ7 バケット3.5）**: 「配置をリセット」→「大きさと配置をリセット」に改名＋`baseMarginPercent` も既定へ。「大きさと配置」セクションの説明文を削除（7.2節）
 
 既知の不具合の解消（`docs/session-log-2026-08-28.md`）:
 - ✅ **G-3**（レイアウトタブ開閉のトランジション中に画面全体が一瞬下にずれて戻る）: 極小幅のパネル内容が縦に伸び、`.app-container`（`min-height:100vh`）が下方向に膨張していた。`@media (min-width:1025px)` で `.app-container { height:100dvh; min-height:0; overflow:hidden }` にしてデスクトップ3カラム時のシェル高をビューポートに固定（内側は各自スクロール）。1024px 以下の縦積みには適用しない。G-1 の残り 2px も解消（3.1節）
@@ -1085,7 +1095,7 @@ Blobをダウンロード
 - ✅ 数値精度と丸め処理のポリシー（写真描画の厳格な整数化）
 - ✅ レイアウト計算の詳細フロー
 - ✅ ファイル名の命名規則（`_kakomi_framed.jpg`）
-- ✅ アスペクト比のカスタム指定（出力目標アスペクト比の自由入力、幅/高さ数値入力＋⇄反転ボタン）
+- ✅ アスペクト比のカスタム指定（出力目標アスペクト比の自由入力、幅/高さ数値入力。幅高さ入れ替えは見出しの回転ボタン＝A-14）
 - ✅ 編集履歴（Undo/Redo）機能
 - ✅ 編集設定のテンプレートプリセット保存／呼び出し機能
 - ✅ カラーパレットで選んだ色の履歴機能
