@@ -89,7 +89,7 @@ UI表示用とテキストオーバーレイ描画用は別系統のフォント
 ```
 .app-header（上部バー。ブランド表示・「画像を開く」ボタン・Undo/Redo・右端に「ダウンロード」ボタン＋画質ポップオーバー）
 .app-shell（残り高さいっぱいに広がる横並び3カラム。パネルを畳むと .panel-collapsed が付く）
-  ├─ .tab-navigation（左の細いアイコンレール、幅84px。上部にレイアウト／背景／フレーム／文字、
+  ├─ .tab-navigation（左の細いアイコンレール、幅84px。上部にレイアウト／背景／フレーム／テキスト、
   │                    rail-spacer をはさんで下部にプリセット／情報。全6ボタンが対等なタブ）
   ├─ .tab-content-area（レール項目に対応するフライアウトパネル、幅360px ⇔ 0。中身は7.節の各fieldset）
   └─ .canvas-area（残り全幅。プレビューCanvas ＋ 未読込時のドロップダイアログ。ドロップ受付はこの領域全体）
@@ -99,7 +99,7 @@ UI表示用とテキストオーバーレイ描画用は別系統のフォント
 - **アプリシェルの高さ固定（G-3 対策。デスクトップのみ）**: `@media (min-width: 1025px)`で`.app-container { height: 100dvh; min-height: 0; overflow: hidden }`。内側の`.tab-navigation`（`overflow-y:auto`）・`.tab-content-area`（`overflow:hidden auto`）・`.canvas-area`（`overflow:hidden`）が各自スクロールする。これがないと、パネル（`.tab-content-area`）を`width:0→360px`で展開するトランジションの途中、極小幅で中身（比率タイル群等）がいったん縦 ~1800px にレイアウトされ、`.app-container`が`min-height:100vh`で下方向に伸びられるため、キャンバスを含む画面全体が一瞬ガクッと下がって戻る（`docs/session-log-2026-08-28.md`）。G-1 の残っていた 2px オーバーフローもこれで消える。**幅 1024px 以下では`.app-shell`が縦積みになり全体スクロールが要るため、この固定はかけない**（`min-width:1025px`にスコープ）。
 - **パネル開閉時のキャンバス再フィット**: パネルの畳み／展開でキャンバス領域の幅が変わるが window resize は発生しないため、`main.js`が`.canvas-container`に`ResizeObserver`を張り、**「幅」の変化（≥1px）を検知したときだけ**`canvasRenderer.clearContainerSizeCache()`＋`requestRedraw()`する（デバウンス 180ms）。キャンバス要素自体は`max-width:100%`でトランジション中も CSS スケールで追従する。**「幅のみ」に限定しているのは既知の不具合 G-1 への多重防御**: 縦長／正方形の出力比率ではプレビューキャンバスが「高さ基準」で決まり、その要素がコンテナ高さを数px押し上げ → `ResizeObserver`発火 → 再描画で更に高く …という正のフィードバックでキャンバスがじわじわ拡大し続けた（`docs/session-log-2026-08-27-5.md` §13）。**根本原因＝`#previewCanvas`の`border: 1px`が要素のレイアウトボックスに乗っていたこと**は、`docs/session-log-2026-08-27-6.md`で枠線を`outline`（`outline-offset: -1px`。レイアウトに影響しない）へ置き換えて解消済み。高さ反応の`ResizeObserver`を実験的に戻しても縦長比率で拡大しないことを確認した。ガード（「幅のみに反応」）は別経路での再発防止として残す。
 - **枠囲みをやめ線ベースに（フェーズ4 E-2）**: 各パネルの`fieldset`は枠なし＋見出し＋（2つ目以降は）上罫線（`border-top`）だけで区切る。`legend`は小さめの大文字見出し。フレームタブの`.frame-card`も同様に枠を外して線区切りに寄せた。説明文（`.custom-text-drag-hint`）はアイコン＋数語まで削った（E-4）。
-- **`.rail-item`と`.tab-button`（E-3 / フェーズ5で整理）**: レール上のボタンの見た目用クラスは`.rail-item`。**レイアウト／背景／フレーム／文字／プリセット／情報の6ボタンすべてに`.rail-item`と`.tab-button`の両方を付与**し、`tabManager.js`が一律に`.tab-pane`と対応づけて切り替える。以前は「情報」だけ独立トグル（`#exifToggleButton`、`.tab-button`なし）だったが、E-3 で他タブと同じ`data-tab="tab-info"`＋`#tab-info`ペインにした（`docs/roadmap.md` E-3、`docs/session-log-2026-08-27-6.md`）。
+- **`.rail-item`と`.tab-button`（E-3 / フェーズ5で整理）**: レール上のボタンの見た目用クラスは`.rail-item`。**レイアウト／背景／フレーム／テキスト（旧「文字」。`docs/roadmap.md` E-8）／プリセット／情報の6ボタンすべてに`.rail-item`と`.tab-button`の両方を付与**し、`tabManager.js`が一律に`.tab-pane`と対応づけて切り替える。以前は「情報」だけ独立トグル（`#exifToggleButton`、`.tab-button`なし）だったが、E-3 で他タブと同じ`data-tab="tab-info"`＋`#tab-info`ペインにした（`docs/roadmap.md` E-3、`docs/session-log-2026-08-27-6.md`）。
 - **Exif情報表示（E-3 / フェーズ5）**: Exif は「情報」タブ（`#tab-info`）の中の`#exifDataContainer`に表示する。他タブと同じフライアウトパネル枠で、押すと切り替わり、もう一度押すと E-1 の再クリックで畳まれる（独立オーバーレイではない）。描画は`exifHandler.js`の`displayExifInfo()`で、Lightroom Web 風にカメラ／レンズ名だけを小さく上に置き、撮影設定（絞り・シャッタースピード・ISO感度・焦点距離・撮影日時）は**アイコン＋値だけの定義リスト（`.exif-dl`）**にする。項目名テキストは出さず`<dt>`の`title`属性（ホバーでツールチップ）に入れる。アイコンは`index.html`のスプライト`#i-aperture` / `#i-shutter` / `#i-iso` / `#i-focal` / `#i-cal`。以前の`#exifFloatCard` / `#exifToggleButton` / `.exif-float-card` は廃止。
 - **ダウンロードボタンの位置（フェーズ4 E-5）**: `#downloadButton`は**上部バー右端**（`.app-header .header-actions` 内の`.dl-group`）。押すと画質ポップオーバー（`#downloadPopover`。`#jpgQuality`スライダー＋「書き出す」＝`#downloadConfirmButton`）を開き、「書き出す」で`handleDownload()`を実行する。「出力」タブ（`#tab-output`）とそのレール項目は廃止した。`outputSettings.quality`のデータ・`fileManager.js`側は不変。以前は「出力タブに戻す」方針だったが、ユーザー判断で再度「上部バーへ」に転換（`docs/roadmap.md` E-5）。
 - **画像ドロップ領域（E-7 / フェーズ6）**: ファイル選択用の小枠を廃し、`.canvas-area`（キャンバス領域）全体をドラッグ&ドロップの受付にした。**画像未読込時**は`.canvas-area`に`.no-image`が付き、キャンバス枠内に中央寄せのドロップダイアログ（`#imageDropDialog` = `.image-loader-container`。アイコン＋「画像をドラッグ＆ドロップ」＋`for="imageLoader"`の「またはクリックして選択」ラベル）を出し、`#previewCanvas`は隠す。**読み込み後**は`.has-image`が付き、ダイアログを隠してキャンバスを出す。切り替えは`main.js`の`updateImagePresenceUI()`（`requestRedraw()`冒頭と初期化時に呼ぶ）。`<input type="file" id="imageLoader">`は視覚的に隠し、ダイアログのラベルと**上部バーの「画像を開く」ボタン（`#openImageButton`）**から開く。ドロップの`dragover`/`drop`は`main.js`が`.canvas-area`（無ければ`.canvas-container`）に配線。
@@ -501,13 +501,13 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 - スナップ: ドラッグ中は既定でスナップが有効。**Altキーを押しながらドラッグするとスナップを一時的に無効化**できる
 - **軸ロック**: `move` モードのドラッグ中に **Shiftキーを押している間、移動量の大きい方の軸だけに固定**する（縦だけ／横だけの移動。写真・テキスト・背景・影のどのドラッグでも効く）。スナップ計算の前に適用する。回転ハンドルの Shift（15度スナップ）は別ドラッグモード（`mode: 'rotate'`）なので競合しない
 - 矢印キーnudge: 何かが選択されている状態で矢印キーを押すと1px相当、Shift+矢印キーで10px相当（いずれもプレビューcanvas上のpx単位）移動する。フォーカスが入力欄（input/textarea/select）にある間は無効化される。**「背景」タブ・「フレーム」タブ（影が有効なとき）では、選択の有無に依らず矢印キーが背景／影のオフセット微調整になる**（本体ドラッグのタブ別振り分けと揃えている。5.16節「タブ別ドラッグ」）
-- **Deleteキーでの自由テキスト削除（D-5 / フェーズ6）**: 「文字」タブがアクティブ（`getActiveTab() === 'tab-text'`）で、選択中が自由テキスト（`selectionStore.getSelectedId()` が `text-date` / `text-exif` 以外で、かつ `textSettings.customTexts` に存在するid）のとき、`Delete` / `Backspace` で `removeCustomTextLayer(id)` ＋ 選択解除（＝チップ一覧の × ボタンと同じ）。入力欄フォーカス中は無効。固定レイヤー（撮影日・Exif）は削除不可なので何もしない
+- **Deleteキーでの自由テキスト削除（D-5 / フェーズ6）**: 「テキスト」タブがアクティブ（`getActiveTab() === 'tab-text'`）で、選択中が自由テキスト（`selectionStore.getSelectedId()` が `text-date` / `text-exif` 以外で、かつ `textSettings.customTexts` に存在するid）のとき、`Delete` / `Backspace` で `removeCustomTextLayer(id)` ＋ 選択解除（＝チップ一覧の × ボタンと同じ）。入力欄フォーカス中は無効。固定レイヤー（撮影日・Exif）は削除不可なので何もしない
 - **拡大・回転ハンドル（テキスト系オブジェクトのみ。自由テキスト・撮影日・Exifブロックいずれも対応）**: `pointerdown`時、通常のオブジェクト当たり判定（`interactionRegistry.hitTest()`）より先に`textHandleStore.getTextHandles()`のハンドル座標との距離判定を行う（当たり判定半径`HANDLE_HIT_RADIUS = 10px`）。ヒットした場合は`dragState.mode`を`'resize'`または`'rotate'`にしてドラッグを開始し、通常の移動ドラッグ（`mode: 'move'`）とは別処理で`textAdapter.commitResize()`/`commitRotate()`を直接呼ぶ（アダプタの`getValue`/`computeChanges`/`commit`という汎用インターフェースではなく、テキスト専用の`getTransform`/`commitResize`/`commitRotate`を使う。写真・背景にはこの概念がないため）
 - **写真の四隅ハンドルとトリミングモード（5.24節・5.25節、7.2節「オンキャンバス・トリミング」参照）**: 写真選択中は`photoEditModeStore`のモード（`select`/`crop`）で挙動を切り替える。
   - `pointerdown`で、テキストハンドルと同様に通常のオブジェクト当たり判定より先に`photoCropStore.getCropHandles()`の四隅座標を距離判定する（半径`HANDLE_HIT_RADIUS`）。**select モード**でヒット → `dragState.mode = 'photoResize'`（開始点と「中心→掴んだ隅」方向の単位ベクトルを保持し、`pointermove`で符号付き投影量を`photoAdapter.commitMarginResizeByDrag()`に渡し`baseMarginPercent`を増減。中心からの距離比を使う旧方式は「中心を通り越すと余白が逆に減る」不具合があったため置き換えた）。**crop モード**でヒット → `dragState.mode = 'cropRectResize'`（掴んだ隅と`frozenFrame.whole`のサイズから`rect`の差分を計算し`resizeCropRect()`→`photoAdapter.commitCropRect()`）。crop モードでクロップ窓の内側なら`dragState.mode = 'cropPan'`（`rect.x/y`をドラッグ方向へ平行移動）。
   - `pointerup`で、**pointerdown からの移動量が`CLICK_MOVE_THRESHOLD`(4px)未満、かつ押下時間が`CLICK_TAP_MS`(400ms)未満**のときだけ「短いタップ」とみなす: select モードで選択済みの写真本体タップ → `photoEditModeStore.enterCrop()`（現在のプレビュー座標を`frozenFrame`にスナップショット）。crop モードでクロップ窓の外のタップ → `photoEditModeStore.exitCrop()`（出力枠は変えない）。**動かさずに長押ししてから離した場合はモード切替が発動しない**（`pointerDownCtx.downTime` を `performance.now()` で記録して判定。以前は移動量だけを見ていたため、単なる長押しでも切り替わっていた）。`CLICK_TAP_MS` は手触りを見て調整可。
   - `Escape` / `Enter` キーでも crop モードを抜ける（`docs/roadmap.md` A-13）。crop モード中は矢印キーがクロップ矩形のパンになる。`Enter` は入力欄フォーカス中（`isEditableElement`）には効かない（keydown の先頭 return）。
-  - **レイアウトタブの「トリミング」セクション（`#cropSection`）内をクリックしても crop モードに入る**（`docs/roadmap.md` A-13）。`uiController` が `#cropSection` の `click` で `canvasInteraction.requestEnterCropMode()` を呼ぶ（プレビュー上で選択済み写真を再タップするのと同じ経路。写真が未選択なら先に選択する）。カスタム幅高さの数値入力欄（`<input>` / `<textarea>`）のクリックは除外。`requestEnterCropMode()` は `enterCrop()` の frozenFrame スナップショット作成を集約したモジュール関数で、プレビュータップ側の `enterCropMode` もこれを使う。**すでに crop モードのときは何もしない**（`isCropMode()` なら即 return。`docs/roadmap.md` G-6）——frozenFrame は select モードのレイアウト基準なので、crop 済み（`rect0` が小さい）状態で取り直すと `cropModeGeometry` の `whole = photoBox0 / rect0` が一段拡大し、繰り返すと元画像が無限に拡大してクロップ枠が消える。
+  - **レイアウトタブの「写真のトリミング」セクション（`#cropSection`）内をクリックしても crop モードに入る**（`docs/roadmap.md` A-13）。`uiController` が `#cropSection` の `click` で `canvasInteraction.requestEnterCropMode()` を呼ぶ（プレビュー上で選択済み写真を再タップするのと同じ経路。写真が未選択なら先に選択する）。カスタム幅高さの数値入力欄（`<input>` / `<textarea>`）のクリックは除外。`requestEnterCropMode()` は `enterCrop()` の frozenFrame スナップショット作成を集約したモジュール関数で、プレビュータップ側の `enterCropMode` もこれを使う。**すでに crop モードのときは何もしない**（`isCropMode()` なら即 return。`docs/roadmap.md` G-6）——frozenFrame は select モードのレイアウト基準なので、crop 済み（`rect0` が小さい）状態で取り直すと `cropModeGeometry` の `whole = photoBox0 / rect0` が一段拡大し、繰り返すと元画像が無限に拡大してクロップ枠が消える。
   - 写真本体（ハンドル以外）の select モードでのドラッグは従来どおり`photoAdapter`の`move`処理（`photoViewParams`更新）。
 - **プレビュー上のホイール操作**: 現在は未使用（`previewCanvas`に`wheel`リスナーを付けていない）。以前は select モードで写真上のホイールが`baseMarginPercent`（余白）を増減していたが、四隅■ハンドルのドラッグで余白を直接いじれるようになったため冗長・誤操作の元として削除した（`docs/roadmap.md` A-6。`photoAdapter.commitMarginDelta()`と定数`MARGIN_WHEEL_STEP`も撤去）。「背景タブでホイール→背景拡大倍率」（`docs/roadmap.md` B-2）も検討したが、誤操作の元になるとしてユーザー判断で不採用。本体ドラッグ側だけタブで切り替える（上記「タブ別ドラッグ」）
 - **選択変更と再描画（設計上の注記）:** `selectionStore`の選択状態変更（`setSelectedId()`）自体は`editState`の変更ではないため、`stateManager.js`の通常の状態変更リスナー（`requestRedraw`等）を経由しない。ドラッグを伴わない純粋なクリック選択（`pointerdown`直後に一度も`pointermove`が発火しないケース）でも選択ハイライトやハンドルが即座に表示されるよう、`main.js`が`selectionStore.onSelectionChange(() => requestRedraw())`を明示的に登録している。
@@ -558,7 +558,7 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 ### 5.19 presets/presetStore.js
 編集設定（`stateManager.js`の`EDITABLE_SETTINGS_KEYS`で定義される範囲）を、名前付きプリセットとして`localStorage`（キー: `kakomi_presets`）に保存・一覧取得・削除・適用するモジュール。読み込んだ画像そのものは対象外。`textSettings`（`customTexts`配列を含む）もそのまま保存するため、自由テキストの内容・個数もプリセットの一部として保存・復元される。
 
-**F-2（保存する項目の選択）:** `EDITABLE_SETTINGS_KEYS` を**タブ単位の5セクション**に束ねた `PRESET_SECTIONS` を持つ（`output`＝出力フォーマット: `outputTargetAspectRatioString` / `baseMarginPercent` / `outputSettings`／`crop`＝トリミング: `cropSettings` / `photoViewParams`／`background`＝背景: `backgroundColor` / `backgroundType` / `imageBlurBackgroundParams`／`frame`＝フレーム: `frameSettings`／`text`＝テキスト: `textSettings`）。5セクションで `EDITABLE_SETTINGS_KEYS` を過不足なくカバーする（読み込み時に不一致を `console.warn` するガードあり）。
+**F-2（保存する項目の選択）:** `EDITABLE_SETTINGS_KEYS` を**タブ単位の5セクション**に束ねた `PRESET_SECTIONS` を持つ（`output`＝キャンバス（旧「出力フォーマット」。`docs/roadmap.md` E-8）: `outputTargetAspectRatioString` / `baseMarginPercent` / `outputSettings`／`crop`＝写真のトリミング（旧「トリミング」）: `cropSettings` / `photoViewParams`／`background`＝背景: `backgroundColor` / `backgroundType` / `imageBlurBackgroundParams`／`frame`＝フレーム: `frameSettings`／`text`＝テキスト: `textSettings`）。各セクションの `label` は「保存済み」一覧のメタ表示（`uiController.js`）に出る。5セクションで `EDITABLE_SETTINGS_KEYS` を過不足なくカバーする（読み込み時に不一致を `console.warn` するガードあり）。
 
 **主要関数:**
 - `getPresets()`: 保存済みプリセットの一覧を取得（`{ id, name, createdAt, sections, settings }`の配列）
@@ -710,7 +710,7 @@ Blobをダウンロード
   - `'1:1'`, `'4:3'`, `'16:9'` など、または `'幅:高さ'` のカスタム: その比率でしか矩形をリサイズできない。比率を選ぶと、そのとき現在の矩形の中心を保ったまま、その比率へ**外接方向**で合わせる（`utils/cropRect.js` の `growRectToAspect`＝現在の矩形を含む最小の比率一致矩形。[0,1] 超は比率保持で頭打ち。既にその比率なら完全 no-op）。以前は `fitRectToAspect`（内接＝比率を選ぶたびに縮む）だったが、A-13 で比率タイルのクリックが crop モード遷移も兼ねるようになり、別々の比率を続けて押すとクロップ枠が 1px へ収束する不具合（`docs/roadmap.md` G-6 続報）が顕在化したため外接方式に変更した。`fitRectToAspect` は `stateManager.setImage` の画像ロード時再フィット（全体矩形から）でのみ使う。
 
 **操作方法:**
-- **プレビュー上（オンキャンバス）**: 5.16〜5.17節・7.2節「オンキャンバス・トリミング」参照。写真を選択した状態でもう一度クリック（またはレイアウトタブの「トリミング」セクション内をクリック）すると「トリミングモード」に入り、四隅の L 字ハンドルで切り抜き範囲を指定、写真本体ドラッグで切り抜き範囲を平行移動、写真の外をクリックまたは Esc / Enter で確定する。
+- **プレビュー上（オンキャンバス）**: 5.16〜5.17節・7.2節「オンキャンバス・トリミング」参照。写真を選択した状態でもう一度クリック（またはレイアウトタブの「写真のトリミング」セクション内をクリック）すると「トリミングモード」に入り、四隅の L 字ハンドルで切り抜き範囲を指定、写真本体ドラッグで切り抜き範囲を平行移動、写真の外をクリックまたは Esc / Enter で確定する。
 - **「レイアウト」パネルの UI**: 「切り抜き比率」は比率タイルピッカー（`#cropAspectRatioPicker`。`フリー` / 各比率 / カスタム幅高さ＋⇄。2026年8月のフェーズ2で `<select id="cropAspectRatio">` から置き換え。5.3節「比率タイルピッカー」参照）。**「切り抜き位置（横／縦）」スライダーはフェーズ2で撤去**（`docs/roadmap.md` A-1）。`rect` のパンはプレビュー上のジェスチャー（crop モードの本体ドラッグ・矢印キー）と「配置をリセット」ボタン（`#resetPhotoPlacement`。`uiController.js` の `cropRectWithPan(rect, 0.5, 0.5)` で中央へ）からのみ動かす。
 
 **実装詳細:**
@@ -719,7 +719,7 @@ Blobをダウンロード
 - **旧形式からの移行**: 保存済みプリセットは `presetStore.js` の `applyPreset()` が `utils/cropRect.js` の `migrateCropSettings()` で `{ aspectRatio, rect }` に正規化してから適用する。旧 `'original'`＋ズーム1＋オフセット0.5 は `rect {0,0,1,1}` に完全一致、旧 `'original'` は `'free'` に寄せる。固定比率＋ズームありは幾何変換でベストエフォート移行し、画像ロード前に適用された場合は `stateManager.js` の `setImage()` が実際の画像比率で `rect` を再フィットする。
 
 ### 7.2 レイアウト設定
-- **出力アスペクト比**: 最終的な出力画像の縦横比を指定
+- **キャンバス（節見出し。旧「出力アスペクト比」。`docs/roadmap.md` E-8）**: 最終的な出力画像の縦横比を指定
   - **比率タイルピッカー（`#outputAspectRatioPicker`。2026年8月のフェーズ2で `<select id="outputAspectRatio">` から置き換え。`docs/roadmap.md` A-1）**: 1:1（正方形）、4:5（IG縦）、1.91:1（IG横）、16:9（ワイド）、3:4、L判(89:127)、カスタム。比率の形をミニ長方形で描いたタイルをクリックして選ぶ（`js/ui/ratioPicker.js`。5.3節「比率タイルピッカー」参照）
   - **カスタム比率の自由入力（実装済み）**: 「カスタム」タイルを選ぶと幅/高さの数値入力欄（`#customAspectRatioContainer`）が現れ、任意の `幅:高さ` 比率を指定できる。⇄ボタンで幅と高さを入れ替え可能。入力値は `outputTargetAspectRatioString`（例: `"3:2"`）として状態に保存される。カスタムタイルを押した時点では state は変わらず、入力欄を編集した時点で反映される。
     - 内部的には `outputTargetAspectRatioString` に `"custom:"` プレフィックスを付けた古い形式の後方互換処理（プレフィックス除去）が残っているが、現在のUIはプレフィックスなしの `"幅:高さ"` 形式で保存する。
@@ -727,12 +727,14 @@ Blobをダウンロード
   - これが最終的なJPEGのアスペクト比となる
 - **基準余白 / 「大きさ」スライダー**: 内部値`baseMarginPercent`は構図調整後の写真の短辺に対する%（0-300%）で不変。
   - この値は「最小限の余白量」の目安。実際の余白は、出力画像の目標アスペクト比を維持するために、この基準値よりも一部が自動的に広がる場合がある。
-  - **UI 表記は「大きさ」（`docs/roadmap.md` A-10）**: スライダー（`#baseMarginPercent`。`controlsConfig.photoSize` の min14/max100/step0.5 で駆動）は「写真短辺がキャンバス短辺に占める割合%」を見かけ値として扱い、**右に倒すほど写真が大きくなる**（＝余白が減る）。`marginToSize(m) = 100/(1+2m/100)`（m=0→100%、m=5→約90.9%、m=300→約14.3%）と逆変換`sizeToMargin`で`baseMarginPercent`と1対1対応。`updateSliderValueDisplays()`が表示・入力欄同期を、専用の`input`／`dblclick`（既定 margin 5 へ）リスナーが保存を担う（汎用`addNumericInputListener`は使わない）。四隅■ハンドルのドラッグ（`commitMarginResizeByDrag`）でも同じ表示に反映される。レイアウト計算（`layoutCalculator`）には一切手を入れていない。
+  - **UI 表記は「大きさ」（`docs/roadmap.md` A-10）**: スライダー（`#baseMarginPercent`。`controlsConfig.photoSize` の min15/max100/step0.5 で駆動）は「写真短辺がキャンバス短辺に占める割合%」を見かけ値として扱い、**右に倒すほど写真が大きくなる**（＝余白が減る）。`marginToSize(m) = 100/(1+m/45)`（m=0→100%、m=5→ちょうど90%、m=300→約13%）と逆変換`sizeToMargin(s) = 45(100-s)/s`で`baseMarginPercent`と1対1対応。既定 margin=5 がちょうど 90% になるよう分母を 45 に選んである。スライダー下限 15% は `marginToSize(300)≈13%` より上なので、全域が実 `baseMarginPercent`（0〜255）に 1:1 対応する（不感帯なし。内部ロジックには手を入れず range 属性だけで解決）。`updateSliderValueDisplays()`が表示・入力欄同期を、専用の`input`／`dblclick`（既定 margin 5＝size 90 へ）リスナーが保存を担う（汎用`addNumericInputListener`は使わない）。`updateSliderValueDisplays()`はドラッグ中に値が飛ばないよう「スライダーにフォーカスがあるあいだは`.value`を書き換えない」ガードを持つため、`dblclick`／ダブルタップのリセットハンドラは`updateState`後に`baseMarginPercentInput.value`へ`marginToSize(5)`を明示代入してつまみ位置を戻す。四隅■ハンドルのドラッグ（`commitMarginResizeByDrag`）でも同じ表示に反映される。レイアウト計算（`layoutCalculator`）には一切手を入れていない。
 - **写真位置調整**: 出力画像のフレーム内で、写真をどこに配置するか（`photoViewParams`、X/Y とも 0.0=端〜0.5=中央〜1.0=端）
   - **数値スライダー（`#photoPosX/Y`）は 2026年8月のフェーズ2で撤去（`docs/roadmap.md` A-1）**。`photoViewParams` はデータとしては維持し、**プレビュー上で写真を直接ドラッグして調整する**（`interaction/adapters/photoAdapter.js`。ドラッグ中はキャンバス中央線・端・他オブジェクトへのスナップも働く）。パネルには「配置をリセット」ボタン（`#resetPhotoPlacement`）があり、`photoViewParams` を中央へ、かつクロップ矩形のパンを中央へ戻す（切り抜き範囲のサイズ・比率は変えない）。
   - **注意:** 仕様書v1では「9点から選択」とあるが、現在の実装ではプレビュードラッグによる連続的な位置調整となっている
 
-**UI上のグルーピング（フェーズ4 A-8 で並べ替え）:** 「レイアウト」パネルを **① 出力アスペクト比 → ② トリミング → ③ 余白と配置** の3セクション（線区切り、`fieldset`＋`legend`）に分ける。ユーザーから見た自然な決定順（枠の形を決める → 元写真のどこを使うか決める → 余白と配置を決める）に合わせたもの。**「余白」（`baseMarginPercent`）は「出力アスペクト比」から切り離して ③ に置く**——余白は出力キャンバスの形の決定ではなく構図の決定であり、かつ ② トリミングで写真の実効短辺（＝余白 % の基準）が変わるため、使う範囲を先に確定してから余白を決めるほうが値がぶれない。①②の比率タイル、③の余白スライダー・「配置をリセット」ボタンはそれぞれ独立で、`cropSettings`と`photoViewParams`の状態・計算ロジックは統合していない。切り抜き位置・枠内位置の数値スライダーはフェーズ2で撤去済みで、これらの調整はすべてプレビュー上のジェスチャーに寄せている。
+**UI上のグルーピング（フェーズ4 A-8 で並べ替え、フェーズ7 A-12 で見出しを対象明示に）:** 「レイアウト」パネルを **① キャンバス → ② 写真のトリミング → ③ 大きさと配置** の3セクション（線区切り、`fieldset`＋`legend`）に分ける。ユーザーから見た自然な決定順（枠の形を決める → 元写真のどこを使うか決める → 写真の大きさと位置を決める）に合わせたもの。`baseMarginPercent` の値（旧「余白」。UI 表記は「大きさ」）は「キャンバス」から切り離して ③ に置く——写真の大きさの決定は出力キャンバスの形の決定ではなく構図の決定であり、かつ ② トリミングで写真の実効短辺（＝内部 % の基準）が変わるため、使う範囲を先に確定してから決めるほうが値がぶれない。①②の比率タイル、③の「大きさ」スライダー・「配置をリセット」ボタンはそれぞれ独立で、`cropSettings`と`photoViewParams`の状態・計算ロジックは統合していない。切り抜き位置・枠内位置の数値スライダーはフェーズ2で撤去済みで、これらの調整はすべてプレビュー上のジェスチャーに寄せている。
+
+- **A-12 二重四角アイコン（`docs/roadmap.md` A-12）**: 3セクションの `<legend>` は「アイコン＋対象名だけ」（番号・サブ文なし）。アイコンは `index.html` の SVG スプライトの `#i-canvas`（外＝実線・内＝丸ドット点線＝キャンバス自体を操作）／`#i-photo-crop`（内＝実線・外＝点線＝内側の写真範囲を操作）／`#i-size-place`（大枠の中に小枠がオフセット＝両者の関係）。`fieldset legend` を `display:flex` にして `.legend-icon`（17px、`--ink-dim`）を見出し文字の左に置く。親は Kakomi ブランドマーク（二重四角、`.brand-mark`）。同じ用語（キャンバス／写真のトリミング）はプリセット保存フォームでも使う。
 
 **オンキャンバス・トリミング（2026年8月28日に再設計。旧「オンキャンバス直接トリミング」＝中央固定ズーム方式を置き換え）:**
 
@@ -744,7 +746,7 @@ Blobをダウンロード
 | 写真本体ドラッグ | 出力枠内での写真位置（`photoViewParams`）。従来どおり | クロップ矩形の平行移動（`rect.x/y`。ドラッグ方向にクロップ窓が動く） |
 | 表示 | フレーム装飾（角丸・影・縁取り）込みで写真を描画＋■ハンドル | クロップ矩形の内側だけ明るく、外側を暗くマスクした周辺減光オーバーレイ＋三分割グリッド（rule of thirds）＋L字ハンドル。枠線・グリッド・ハンドルは黒フチ＋白で明暗どちらの背景でも視認できる |
 | ホイール／矢印キー | ホイールは未使用、矢印＝`photoViewParams` の nudge | ホイール無効、矢印＝クロップ矩形のパン（本体ドラッグと同じ向き） |
-| 抜け方 | 選択済みの写真をもう一度クリック／**レイアウトタブの「トリミング」セクション内をクリック**（`#cropSection`。数値入力欄を除く。A-13）→ crop へ | 写真の外をクリック／**Esc / Enter**（A-13）→ select へ戻る。**出力枠（`outputTargetAspectRatioString`）は変えない**。枠は固定のまま、切り抜かれた写真がそのクロップ比率の形で枠の中に配置される（横長にクロップすれば写真が横長の帯になり、上下に余白がつく） |
+| 抜け方 | 選択済みの写真をもう一度クリック／**レイアウトタブの「写真のトリミング」セクション内をクリック**（`#cropSection`。数値入力欄を除く。A-13）→ crop へ | 写真の外をクリック／**Esc / Enter**（A-13）→ select へ戻る。**出力枠（`outputTargetAspectRatioString`）は変えない**。枠は固定のまま、切り抜かれた写真がそのクロップ比率の形で枠の中に配置される（横長にクロップすれば写真が横長の帯になり、上下に余白がつく） |
 
 **設計上の要点（フリーズフレーム）:** Kakomi は「出力枠＝写真＋余白、余白は写真短辺に対する％」というモデルのため、クロップ矩形を変えても画面上の写真ボックスの大きさはほぼ変わらない（余白が比例して縮むだけ。`session-log-2026-08-27.md` 2.2節）。このままライブに再レイアウトすると「内側へドラッグしているのに枠が縮まない」体験になる。そこで crop モードに入った瞬間のプレビュースケールと写真ボックス矩形・クロップ矩形を `photoEditModeStore.frozenFrame` にスナップショットし、crop モード中の描画・当たり判定はこれを基準に固定する（`canvasRenderer.js` の `drawCropModeOverlay`）。モード終了時に通常描画へ戻り、`calculateLayout` が最終 `rect` で一度だけリフローして収束する（PowerPoint の「確定」に相当）。
 
@@ -1044,7 +1046,8 @@ Blobをダウンロード
 フェーズ6（追加の小〜中改修。`docs/session-log-2026-08-27-7.md`）:
 - ✅ **E-6**: `favicon.svg`（`.brand-mark` と同意匠）＋ `<link rel="icon">`（3.1節）
 - ✅ **B-5**: 背景タイプをアイコンセグメント（`.corner-segmented`）に。`id`/`name`/`value` 据え置きで JS 配線は無変更（7.3節）
-- ✅ **D-5**: 「文字」タブがアクティブで自由テキスト選択中、`Delete` / `Backspace` で削除（`canvasInteraction.js` の keydown。5.16節）
+- ✅ **D-5**: 「テキスト」タブがアクティブで自由テキスト選択中、`Delete` / `Backspace` で削除（`canvasInteraction.js` の keydown。5.16節）
+- ✅ **E-8 / A-12（フェーズ7 バケット2）**: 用語統一（`文字`→`テキスト`、`出力アスペクト比`／`出力フォーマット`→`キャンバス`、`トリミング`→`写真のトリミング`。レール・レイアウトタブ `<legend>`・プリセット保存フォーム・`PRESET_SECTIONS.label`）＋ レイアウトタブ3セクションの見出しを「二重四角アイコン＋対象名だけ」（番号・サブ文なし。③は「大きさと配置」）に。アイコンは新スプライト `#i-canvas` / `#i-photo-crop` / `#i-size-place`。`editState`・各レンダラ・`data-section` キーは無変更（7.2節・3.1節）
 - ✅ **G-2**: 別画像への差し替え時は `cropSettings.rect`→全体・`photoViewParams`→中央にリセット（比率制約は維持して再フィット）。背景・フレーム・出力比率・余白・テキストは引き継ぐ（`setImage`。5.2節）
 - ✅ **E-7**: ファイル選択の小枠を廃し、`.canvas-area` 全体をドロップ受付に。未読込時は中央にドロップダイアログ、読み込み後はキャンバス。上部バーに「画像を開く」ボタン（`#openImageButton`）（3.1節・6.1節）
 - ✅ **F-2**: プリセット保存時にタブ単位5セクション（`PRESET_SECTIONS`）のチェックで保存項目を選択。適用は含まれるキーだけ上書き（5.19節）

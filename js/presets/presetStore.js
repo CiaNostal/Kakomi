@@ -19,8 +19,9 @@ const STORAGE_KEY = 'kakomi_presets';
  * （合計で EDITABLE_SETTINGS_KEYS を過不足なくカバーしている。）
  */
 export const PRESET_SECTIONS = {
-    output: { label: '出力フォーマット', keys: ['outputTargetAspectRatioString', 'baseMarginPercent', 'outputSettings'] },
-    crop: { label: 'トリミング', keys: ['cropSettings', 'photoViewParams'] },
+    // label は「保存済み」一覧のセクション表示に出る（uiController.js）。E-8 でレール／レイアウトタブと用語統一。
+    output: { label: 'キャンバス', keys: ['outputTargetAspectRatioString', 'baseMarginPercent', 'outputSettings'] },
+    crop: { label: '写真のトリミング', keys: ['cropSettings', 'photoViewParams'] },
     background: { label: '背景', keys: ['backgroundColor', 'backgroundType', 'imageBlurBackgroundParams'] },
     frame: { label: 'フレーム', keys: ['frameSettings'] },
     text: { label: 'テキスト', keys: ['textSettings'] },

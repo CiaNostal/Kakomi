@@ -367,7 +367,9 @@ fieldset+.frame-card,
 }
 
 fieldset legend {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
     width: 100%;
     font-family: var(--font-cond);
     font-weight: 600;
@@ -377,6 +379,16 @@ fieldset legend {
     font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+}
+
+/* A-12: レイアウトタブの節見出しに付く二重四角アイコン（対象＝キャンバス／写真／その関係）。
+   見出し文字と同じ色・行にそろえ、対象が一目で分かるようにする。 */
+fieldset legend .legend-icon {
+    display: block;
+    width: 17px;
+    height: 17px;
+    flex-shrink: 0;
+    color: var(--ink-dim);
 }
 
 .subsection-heading {
