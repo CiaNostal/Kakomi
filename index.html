@@ -466,10 +466,12 @@
                         <fieldset>
                             <legend>テキスト</legend>
                             <p class="custom-text-drag-hint" style="margin-top:0; margin-bottom:0.7rem;">
-                                下のリストから選んで、このパネルで編集します。
+                                撮影日・Exif・自由テキストは、すべて1つの「テキスト」として追加します。
                             </p>
-                            <div class="custom-texts-list" id="textLayersList"></div>
-                            <button type="button" id="addCustomTextButton" class="add-custom-text-button">+
+                            <!-- バケット4 / D-1・D-3: レイヤー一覧（#textLayersList）→「＋ テキストを追加」で
+                                 作成フォーム、選択で編集フォーム（どちらも uiController.buildTextEditor が組む）。 -->
+                            <div class="text-layers-list" id="textLayersList"></div>
+                            <button type="button" id="addTextLayerButton" class="add-custom-text-button">＋
                                 テキストを追加</button>
                             <div id="textLayerSettingsPanel" class="custom-text-settings-panel"></div>
                         </fieldset>

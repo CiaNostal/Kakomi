@@ -821,45 +821,278 @@ fieldset div span {
     margin: 0;
 }
 
-/* 自由テキストレイヤー・テキストレイヤー共通のチップ一覧 */
-.custom-texts-list {
+/* テキストレイヤー一覧（バケット4 / D-1・D-3）。行 = 掴み手／種類バッジ／内容プレビュー／表示トグル／削除。 */
+.text-layers-list {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
+    flex-direction: column;
+    gap: 0.3rem;
     margin-bottom: 0.6rem;
 }
 
-.custom-text-chip {
-    display: inline-flex;
+.text-layer-row {
+    display: flex;
     align-items: center;
-    gap: 0.35rem;
-    padding: 0.3rem 0.6rem;
+    gap: 0.4rem;
+    padding: 0.35rem 0.45rem;
     border: 1px solid var(--border);
-    border-radius: 999px;
-    background-color: var(--surface-muted);
-    font-size: 0.85rem;
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
     cursor: pointer;
     color: var(--ink);
 }
 
-.custom-text-chip.selected {
+.text-layer-row.selected {
     border-color: var(--accent);
+    background-color: var(--accent-soft);
+}
+
+.text-layer-row.disabled .text-layer-preview {
+    color: var(--ink-faint);
+}
+
+.text-layer-row.dragging {
+    opacity: 0.6;
+}
+
+.text-layer-grip {
+    flex: none;
+    color: var(--ink-faint);
+    cursor: grab;
+    letter-spacing: -2px;
+    user-select: none;
+}
+
+.text-layer-badge {
+    flex: none;
+    font-family: var(--font-cond);
+    font-weight: 700;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    background-color: var(--surface-muted);
+    color: var(--ink-dim);
+}
+
+.text-layer-badge.exif {
     background-color: var(--accent-soft);
     color: var(--accent-strong);
 }
 
-.custom-text-chip.disabled {
-    opacity: 0.5;
+.text-layer-preview {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.83rem;
 }
 
-.custom-text-chip-delete {
-    color: var(--ink-faint);
-    font-weight: bold;
+.text-layer-toggle,
+.text-layer-delete {
+    flex: none;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: var(--ink-dim);
+    font-size: 0.85rem;
     line-height: 1;
+    padding: 0.15rem 0.25rem;
 }
 
-.custom-text-chip-delete:hover {
+.text-layer-delete {
+    color: var(--ink-faint);
+}
+
+.text-layer-delete:hover {
     color: var(--danger);
+}
+
+/* 作成／編集フォーム */
+.text-editor-title {
+    font-family: var(--font-cond);
+    font-weight: 700;
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-dim);
+    margin: 0 0 0.5rem;
+}
+
+.text-content-editor {
+    margin-bottom: 0.7rem;
+}
+
+.text-token-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-bottom: 0.4rem;
+}
+
+.text-token-add {
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.2rem 0.5rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    background-color: var(--surface);
+    color: var(--ink-dim);
+    cursor: pointer;
+}
+
+.text-token-add:hover {
+    border-color: var(--accent);
+    color: var(--accent-strong);
+}
+
+.text-content-field {
+    min-height: 3.2em;
+    padding: 0.45rem 0.55rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+    font-size: 0.88rem;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--ink);
+}
+
+.text-content-field:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+}
+
+/* トークンを解決した「実際に表示される文字列」のライブプレビュー */
+.text-content-preview {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    margin-top: 0.35rem;
+    padding: 0.4rem 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface-sunken);
+    font-size: 0.85rem;
+}
+
+.text-content-preview-label {
+    flex: none;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+}
+
+.text-content-preview-body {
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--ink);
+}
+
+.text-content-preview-body.is-empty {
+    color: var(--ink-faint);
+}
+
+.text-content-preview-note {
+    margin-top: 0.3rem;
+}
+
+.text-content-preview-note[hidden] {
+    display: none;
+}
+
+.text-token {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    background-color: var(--accent-soft);
+    border: 1px solid var(--accent-soft-border);
+    color: var(--accent-strong);
+    border-radius: 4px;
+    padding: 0 0.3rem;
+    margin: 0 1px;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.text-token-picker {
+    margin: 0.4rem 0 0 0.5rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--accent-soft-border);
+    border-radius: var(--radius-sm);
+    background-color: var(--accent-soft);
+}
+
+.text-token-picker[hidden] {
+    display: none;
+}
+
+.text-token-picker-title {
+    font-family: var(--font-cond);
+    font-weight: 700;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent-strong);
+    margin: 0 0 0.4rem;
+}
+
+.date-format-opts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-bottom: 0.4rem;
+}
+
+.date-format-opt {
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    padding: 0.15rem 0.4rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    background-color: var(--surface);
+    color: var(--ink);
+    cursor: pointer;
+}
+
+.date-format-opt.on {
+    background-color: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-on);
+}
+
+.text-editor-actions {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.7rem;
+}
+
+.text-draft-commit,
+.text-draft-cancel {
+    font-family: var(--font-ui);
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.9rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.text-draft-commit {
+    flex: 1;
+    border: 1px solid var(--accent);
+    background-color: var(--accent);
+    color: var(--accent-on);
+}
+
+.text-draft-cancel {
+    border: 1px solid var(--border-strong);
+    background-color: var(--surface);
+    color: var(--ink);
 }
 
 .add-custom-text-button {

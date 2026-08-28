@@ -1,6 +1,6 @@
 // js/fileManager.js
 import { getState, setImage } from './stateManager.js';
-import { initializeUIFromState, uiElements, updateExifCustomText } from './uiController.js';
+import { initializeUIFromState, uiElements } from './uiController.js';
 import { renderFinal } from './canvasRenderer.js';
 import { extractExifFromFile, embedExifToJpeg } from './exifHandler.js';
 import { canvasToJpegBlob, blobToDataURL, dataURLToBlob } from './utils/canvasUtils.js';
@@ -23,11 +23,8 @@ export async function processImageFile(file, redrawCallback) {
 
                 setImage(img, exifData, originalFileName); // stateManagerのsetImageを呼び出し
 
-                // ★追加: 新しい画像がセットされたら、Exifテキストを強制的に更新する
-                // ただし、Exif表示が有効な場合のみ更新が走るようにする
-                if (getState().textSettings.exif.enabled) {
-                    updateExifCustomText(); // 再描画は次のredrawCallbackで行うので、ここではコールバックを渡さない
-                }
+                // バケット4: Exif テキストは textRenderer が content から都度解決するため、
+                // 画像差し替え時に別途 Exif テキストを組み直す処理は不要になった。
 
                 initializeUIFromState(); // uiControllerを使ってUIを最新の状態に更新
                 redrawCallback(); // main.jsのrequestRedrawを呼び出し

@@ -80,7 +80,7 @@ export const googleFonts = [
  * Exif情報表示で選択できるタグの定義。
  * keyはpiexif.jsのExif/0th IFD定数名に対応し、labelはUI表示用の日本語名。
  * この配列の並び順は「利用可能な項目」リストの表示順であり、
- * textSettings.exif.items（ユーザーが選んだ項目とその並び順）とは独立している。
+ * Exif トークンの items（ユーザーが選んだ項目とその並び順）とは独立している。
  */
 export const exifTagDefinitions = [
     { key: 'Make', label: 'メーカー名' },
@@ -126,32 +126,12 @@ export const controlsConfig = {
     // 出力タブ
     jpgQuality: { defaultValue: 100, min: 1, max: 100, step: 1 }, // range input (UI表示用1-100)
 
-    // 文字入力タブ - 撮影日表示
-    textDateEnabled: { defaultValue: false }, // チェックボックス
-    textDateFormat: { defaultValue: 'YYYY/MM/DD' }, // select要素用
-    textDateFont: { defaultValue: googleFonts[0].displayName }, // ★Google Fontsリストの最初のフォントをデフォルトに
-    textDateSize: { defaultValue: 2, min: 0.1, max: 10, step: 0.1 }, // % (写真短辺比)
-    textDateColor: { defaultValue: '#FFFFFF' }, // カラーピッカー
-    textDatePosition: { defaultValue: 'bottom-right' }, // select要素用 (9箇所)
-    textDateOffsetX: { defaultValue: 0, min: -50, max: 50, step: 0.5 }, // %
-    textDateOffsetY: { defaultValue: 0, min: -50, max: 50, step: 0.5 }, // %
-
-    // 文字入力タブ - Exif情報表示
-    textExifEnabled: { defaultValue: false }, // チェックボックス
-    textExifFont: { defaultValue: googleFonts[0].displayName }, // ★Google Fontsリストの最初のフォントをデフォルトに
-    textExifSize: { defaultValue: 2, min: 0.1, max: 10, step: 0.1 }, // % (写真短辺比)
-    textExifColor: { defaultValue: '#000000' }, // カラーピッカー
-    textExifPosition: { defaultValue: 'bottom-left' }, // select要素用 (9箇所)
-    textExifOffsetX: { defaultValue: 0, min: -50, max: 50, step: 0.5 }, // %
-    textExifOffsetY: { defaultValue: 0, min: -50, max: 50, step: 0.5 }, // %
-
-    // 文字入力タブ - 自由テキスト用の設定
-    textFreeSize: { defaultValue: 5, min: 0.1, max: 50, step: 0.1 }, // % (写真短辺比)
-    textFreeOffsetX: { defaultValue: 0, min: -100, max: 100, step: 0.5 },
-    textFreeOffsetY: { defaultValue: 0, min: -100, max: 100, step: 0.5 },
-
-    // テキスト共通の不透明度設定（1=くっきり／0=透明。UIラベルは「不透明度」）
-    textOpacity: { defaultValue: 1, min: 0, max: 1, step: 0.01 },
+    // テキストタブ（バケット4 / D-3）。撮影日 / Exif / 自由テキストを1本の layers[] に統合したため、
+    // サイズ・オフセット・不透明度の範囲もレイヤー共通の1セットにまとめた。
+    textLayerSize: { defaultValue: 5, min: 0.1, max: 50, step: 0.1 }, // % (写真短辺比)
+    textLayerOffsetX: { defaultValue: 0, min: -100, max: 100, step: 0.5 }, // % (写真短辺比)
+    textLayerOffsetY: { defaultValue: 0, min: -100, max: 100, step: 0.5 }, // % (写真短辺比)
+    textOpacity: { defaultValue: 1, min: 0, max: 1, step: 0.01 }, // 1=くっきり／0=透明。UIラベルは「不透明度」
 
     // フレーム加工タブ
     frameCornerStyle: { defaultValue: 'none' }, // ラジオボタンまたはselect用

@@ -1,43 +1,27 @@
 // js/interaction/adapters/textAdapter.js
 /**
  * textAdapter.js
- * 自由テキストレイヤー（customTexts）を、ドラッグ/キーボードnudgeの
+ * テキストレイヤー（textSettings.layers[]）を、ドラッグ/キーボードnudgeの
  * 共通コントローラ（canvasInteraction.js）から一様に扱えるようにする変換層。
  *
  * テキストのoffsetX/offsetYは「写真短辺基準の%」という単位系（textRenderer.jsの
  * calculateTextPositionと同じ）で保持されているため、プレビューpx単位のドラッグ量を
  * ここで変換してから状態に書き戻す。
  */
-import { getState, updateState, updateCustomTextLayer } from '../../stateManager.js';
+import { getState, updateTextLayer } from '../../stateManager.js';
 import { controlsConfig } from '../../uiDefinitions.js';
 
-// 撮影日・Exifブロックは配列ではなくtextSettings直下の固定オブジェクトのため、
-// customTexts[]とは異なる経路（updateState）で読み書きする。idはtextRenderer.jsが
-// 描画時に付与する固定値と対応させる。
-const FIXED_TEXT_IDS = { 'text-date': 'date', 'text-exif': 'exif' };
+// バケット4: 撮影日・Exif・自由テキストは1本の textSettings.layers[] に統合されたため、
+// id（レイヤーの uuid）で引くだけでよい。
 
-/** idから位置(offsetX/offsetY)を持つ設定オブジェクトを取得する（read-only参照） */
+/** idから位置(offsetX/offsetY)を持つレイヤーを取得する（read-only参照） */
 function resolveLayer(id) {
-    const fixedKey = FIXED_TEXT_IDS[id];
-    if (fixedKey) return getState().textSettings[fixedKey];
-    return getState().textSettings.customTexts.find(t => t.id === id);
+    return getState().textSettings.layers.find(l => l.id === id) || null;
 }
 
-/** idに応じた変更の書き戻し先を振り分ける（撮影日・Exifはtextsettings直下、それ以外はcustomTexts[]） */
+/** 変更をレイヤーへ書き戻す */
 function applyChanges(id, changes) {
-    const fixedKey = FIXED_TEXT_IDS[id];
-    if (fixedKey) {
-        updateState({ textSettings: { [fixedKey]: changes } });
-    } else {
-        updateCustomTextLayer(id, changes);
-    }
-}
-
-/** サイズのクランプに使うcontrolsConfigのキーは、id（撮影日/Exif/自由テキスト）ごとに範囲が異なる */
-function getSizeConfigKey(id) {
-    if (id === 'text-date') return 'textDateSize';
-    if (id === 'text-exif') return 'textExifSize';
-    return 'textFreeSize';
+    updateTextLayer(id, changes);
 }
 
 const textAdapter = {
@@ -101,7 +85,7 @@ const textAdapter = {
      * @param {number} scaleFactor - 開始時距離に対する現在距離の比
      */
     commitResize(id, startSize, scaleFactor) {
-        const { min, max } = controlsConfig[getSizeConfigKey(id)];
+        const { min, max } = controlsConfig.textLayerSize;
         const newSize = Math.round(Math.min(max, Math.max(min, startSize * scaleFactor)) * 100) / 100;
         applyChanges(id, { size: newSize });
     },

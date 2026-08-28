@@ -23,7 +23,7 @@ Kakomiは、写真にフレーム加工とテキストオーバーレイを追�
 - 上部ヘッダーを、白→アクセントの淡いグラデーションの薄いバーに変更し、Undo/Redoボタンを配置（ダウンロードボタンは当初ここへ集約したが、後に「出力」タブ内へ戻した。7.6節・`docs/roadmap.md` E）
 - 左サイドバーを「タブ横並び＋コンテンツ」から、Canvaを参考にした「細いアイコンレール＋選択時に開くフライアウトパネル＋広いキャンバスエリア」の3カラム構成に変更（3.1節）
 - フレーム加工パネルを、素のラジオボタン/チェックボックスによる即時表示切り替えから、セグメントコントロール＋トグルスイッチ＋CSSアニメーションによる滑らかなアコーディオン開閉に変更
-- 撮影日・Exif情報・自由テキストの3つに分かれていた文字入力UIを、1つのチップリスト＋1つの設定パネルに統合（5.3節「文字レイヤーの統一UI」参照。データモデル自体は変更していない）
+- 撮影日・Exif・自由テキストを1本の `textSettings.layers[]` に統合し、「＋ テキストを追加 → 内容（動的トークン含む）を組み立て → 追加」の順で作るワークフローに再設計（バケット4 / D-1・D-3。5.3節参照）
 - Exif情報表示を、常設の別パネルから、アイコンレール下部の独立した「情報」トグルボタンで開閉するフローティングカードに変更（3.1節）。**さらに E-3（フェーズ5）で、他タブと並列の「情報」タブ（`#tab-info`）＋アイコン主体のミニマル表示に作り替えた**（3.1節・7.7節）
 
 ### 主な機能
@@ -218,13 +218,17 @@ Kakomi/
       style: 'solid' | 'dashed'
     }
   },
-  textSettings: {                     // テキスト設定
-    date: { enabled, format, font, size, color, opacity, position, offsetX, offsetY },
-    exif: { enabled, items, customText, textAlign, font, size, color, opacity, position, offsetX, offsetY },
-    customTexts: [                    // 自由テキストレイヤー（可変長の配列。個数の制限なし）
-      { id, enabled, text, textAlign, font, size, color, opacity, position, offsetX, offsetY, rotation }
-      // ...ユーザーが「+ テキストを追加」で追加した分だけ要素が増える
-      // rotation: 度数。拡大・回転ハンドル（7.5節）またはパネルの数値入力で操作する
+  textSettings: {                     // テキスト設定（バケット4 / D-1・D-3。旧 date / exif / customTexts を統合）
+    layers: [                         // 撮影日・Exif・自由テキストを1本化した可変長配列。種類(kind)フィールドは持たない
+      {
+        id, enabled,
+        content: [ /* 文字列 | { field:'date', format } | { field:'exif', items:[…] } の並び */ ],
+        textAlign, font, size, color, opacity, position, offsetX, offsetY, rotation
+        // content は「リテラル文字列」と「動的トークン」の並び。トークンは Exif を解決して描画される
+        // （生きたトークン。別画像に差し替えると日付・Exif 値も追従する）。
+        // position は UI から撤去済み（D-2）だがデータには残す。rotation は度数。
+      }
+      // ...ユーザーが「＋ テキストを追加」→ 作成フォーム →「追加」で確定した分だけ要素が増える
     ]
   },
   outputSettings: {                    // 出力設定
@@ -246,9 +250,11 @@ Kakomi/
 - `updateState(updates, options)`: 状態を更新（ディープマージ）。`options.silent`が`true`の場合はリスナーへの通知を行わない（後述）
 - `setImage(img, exifData, fileName)`: 新しい画像を設定。**G-2: すでに画像がある状態での差し替え時（`editState.image` が真）は、トリミングだけ初期化する**——`cropSettings.rect` を全体（`FULL_RECT`）へ、`photoViewParams` を中央（`{0.5, 0.5}`）へ戻す。`cropSettings.aspectRatio`（比率制約）は維持し、直後の「固定比率 ＋ 全体 rect → `fitRectToAspect`」で新しい画像のアスペクトに合う最大内接矩形へ作り直す。`cropSettings.rect` は元画像に対する正規化座標なので、アスペクト比の違う画像へ同じ rect を引き継ぐと切り抜き形状が崩れる（1:1 で切ったのに 1:1 でなくなる）ため。背景・フレーム・出力比率・余白・テキストは引き継ぐ。初回ロードでは初期化しない（`docs/roadmap.md` G-2、`docs/session-log-2026-08-27-7.md`）
 - `addStateChangeListener(listener)` / `removeStateChangeListener(listener)`: 状態変更リスナーの登録／解除
-- `addCustomTextLayer()`: 自由テキストレイヤーを1つ追加し、そのidを返す
-- `removeCustomTextLayer(id)`: 指定idの自由テキストレイヤーを削除
-- `updateCustomTextLayer(id, changes)`: 指定idの自由テキストレイヤーのプロパティを部分更新
+- `addTextLayer(partial)`: テキストレイヤーを1つ追加し、そのidを返す（`partial` に content・見た目の初期値。既定値へマージ）
+- `removeTextLayer(id)`: 指定idのテキストレイヤーを削除（撮影日・Exif も含めすべて対象）
+- `updateTextLayer(id, changes)`: 指定idのテキストレイヤーのプロパティを部分更新
+- `reorderTextLayers(orderedIds)`: テキストレイヤーの並び順（＝重なり順）を差し替える（リストのドラッグ並べ替え用）
+- `migrateTextSettings(textSettings)`: 旧形式（`{ date, exif, customTexts }`）を新形式（`{ layers: [] }`）へ変換する。`applyPreset` の入口で旧プリセットにだけ通す（撮影日・Exif は有効だったものだけレイヤー化、自由テキストは全部）
 
 **`EDITABLE_SETTINGS_KEYS`（エクスポートされる定数配列）:**
 `editState`のうち「ユーザーが調整する編集設定」に該当するキーの一覧（`photoViewParams`, `outputTargetAspectRatioString`, `baseMarginPercent`, `backgroundColor`, `backgroundType`, `imageBlurBackgroundParams`, `frameSettings`, `textSettings`, `outputSettings`, `cropSettings`）。画像そのもの（`image`, `exifData`, `originalFileName`）やレイアウト計算の派生データ（`photoDrawConfig`, `outputCanvasConfig`）は含まない。`history/historyManager.js`のUndo/Redo対象範囲と`presets/presetStore.js`のプリセット保存範囲が、この一つの定義を共有している。
@@ -256,7 +262,7 @@ Kakomi/
 **状態変更通知のバッチ化と`silent`オプション（設計上の注記）:**
 - `notifyStateChange()`は同期即時実行ではなく、`queueMicrotask()`で同一Tick内の複数回呼び出しを1回にまとめてから発火する。これにより、Canvasドラッグ中に高頻度で発生する`updateState`呼び出しでも、実際の再描画・UI同期はTickごとに1回に自然に間引かれる。
 - `main.js`の`requestRedraw()`は、レイアウト計算結果（`photoDrawConfig`/`outputCanvasConfig`）を`updateState(..., { silent: true })`で書き戻している。これは「派生データの書き戻し」であり、もし通常の（silentでない）`updateState`として呼び出しリスナーに`requestRedraw`自体が登録されていると、`updateState → 通知 → requestRedraw → updateState → …`という無限ループになるため。
-- `customTexts`は配列のため、`updateState()`の汎用ディープマージ（配列は丸ごと置換される仕様）では個々のレイヤーだけを安全に部分更新できない。そのため`updateCustomTextLayer(id, changes)`という専用関数を別途用意している。
+- `textSettings.layers`は配列のため、`updateState()`の汎用ディープマージ（配列は丸ごと置換される仕様）では個々のレイヤーだけを安全に部分更新できない。そのため`updateTextLayer(id, changes)` / `reorderTextLayers(ids)`という専用関数を別途用意している。
 
 ### 5.3 uiController.js
 UI要素の制御とイベントハンドリングを担当します。
@@ -299,16 +305,16 @@ UI要素の制御とイベントハンドリングを担当します。
 **背景タブの整理（`docs/roadmap.md` B-1、軽微版）:**
 `<fieldset>`構成は保ったまま、拡大ぼかし背景の「明るさ」「彩度」スライダーを既定で閉じたネイティブ`<details id="bgToneAccordion">`（見出し「色調（明るさ・彩度）」）に入れた。X/Yオフセットのスライダー（`#bgOffsetX/Y`）は撤去し、「位置をリセット」ボタン（`#resetBgOffset`。`imageBlurBackgroundParams.offsetX/YPercent`を0に戻す）に置き換えた。位置調整は「背景」タブでのプレビュードラッグ（`backgroundAdapter`、5.17節）で行う。`imageBlurBackgroundParams`のデータモデルは変更なし。
 
-**文字レイヤーの統一UI（撮影日・Exif情報・自由テキスト）:**
-以前は撮影日／Exif情報／自由テキストがそれぞれ独立した`<fieldset>`と専用のUI・イベント配線を持っていたが、これを1つのチップリスト＋1つの設定パネルに統合した。**データモデル（`stateManager.js`の`textSettings.date`/`.exif`/`.customTexts[]`という構造）自体は変更していない**。もともと`textRenderer.js`の描画（`drawSingleText()`）と`textAdapter.js`のドラッグ処理は3種類を共通の仕組みで扱っていたため、今回はUI層だけをそれに合わせて統合した形になる。
+**テキストレイヤーのUI（バケット4 / D-1・D-3。撮影日・Exif・自由テキストを統合）:**
+撮影日／Exif／自由テキストは1本の `textSettings.layers[]`（`utils/textContent.js` で扱う `content` ＝「リテラル文字列」と「動的トークン（`{ field:'date' | 'exif' }`）」の並び）に統合された。種類(kind)フィールドは持たず、リスト行のバッジ等は content から導出する（`contentHasExif()` など）。データモデルの詳細は5.2節、旧形式プリセットの移行（`migrateTextSettings()`）は §12（プリセット）参照。
 
-- `FIXED_TEXT_LAYERS`（`uiController.js`内の定数）が撮影日(`'text-date'`)・Exif情報(`'text-exif'`)の固定チップを定義し、`resolveTextLayer(state, id)`がid（固定id、または`customTexts[]`内のuuid）から`{ settings, kind }`（`kind`は`'date'|'exif'|'custom'`）を解決する。値の書き戻しは`applyTextLayerChanges(id, kind, changes)`が`kind`に応じて`updateState()`（撮影日・Exif）または`updateCustomTextLayer()`（自由テキスト）に振り分ける（`textAdapter.js`の`resolveLayer()`/`applyChanges()`と同じ設計）
-- レイヤー一覧はチップ表示（`#textLayersList`）。先頭に撮影日・Exif情報の固定チップ（削除不可、有効/無効はチップの薄さで表現）、続けて自由テキストの動的チップ（クリックで選択、×ボタンで削除）が並ぶ。「+ テキストを追加」ボタン（`#addCustomTextButton`）は末尾
-- 選択中レイヤーの設定パネル（`#textLayerSettingsPanel`）は`renderTextLayerSettingsPanel()`が選択変更のたびにHTML文字列で丸ごと再構築する。共通フィールド（表示する/フォント/サイズ/文字色/不透明度/オフセットX・Y/回転）は3種類共通で常に表示し、種類固有の部分だけを切り替える（不透明度スライダーのラベルはフェーズ3で「透過度」→「不透明度」に修正。値は`opacity`で 1=くっきり／0=透明。`docs/roadmap.md` D-4）（撮影日=書式プリセット＋自由入力、Exif=表示項目の選択・並び替えUI、自由テキスト=テキストエリア）。撮影日には水平配置（textAlign）の概念がないため、その行は表示しない（7.5節参照）
-- **表示位置アンカーはUIから撤去（データモデルは維持）**: 以前は9点（`top/middle/bottom` × `left/center/right`）の固定アンカーを`<select id="textLayerPosition">`で選ばせていたが、位置はプレビュー上のドラッグで決めるため固定アンカーの選択はほぼ使われておらず、UIから削除した（`docs/roadmap.md` D-2）。`textSettings.*.position`（既定は撮影日=`bottom-left`／Exif=`bottom-right`／自由テキスト=`middle-center`）は状態・プリセットに残り、`textRenderer.js`の`calculateTextPosition()`はこれをオフセットの基準アンカーとして引き続き使う。UIを消しただけなのでプリセットの移行は不要。将来アンカーを可変にしたくなった場合はセレクトを戻せばよい
-- Canvasドラッグ中の座標欄（横位置/縦位置）・拡大ハンドル/回転ハンドル操作中のサイズ・回転角の値だけは、`syncTextLayerLiveInputs(state)`が軽量に`.value`のみ更新し、パネル全体は再構築しない（入力中のフォーカスを奪わないため。`main.js`の状態変更リスナー経由で`syncUIFromState()`→`syncTextLayerLiveInputs()`と呼ばれる）
-- 横位置/縦位置/回転の数値欄は`js/ui/scrubInput.js`の`enhanceAsScrubInput()`で拡張されており、ドラッグでスクラブ、クリックでタイプ入力ができる
-- Exif表示項目の「利用可能な項目」「使用する項目」リスト（`renderExifItemsUI()`）は、選択中レイヤーがExifのときだけ`renderTextLayerSettingsPanel()`が生成するコンテナ（`#textLayerExifAvailableList`/`#textLayerExifUsedList`/`#textLayerExifPreview`）に対して動的に`document.getElementById()`で対象を取得する（`uiElements`オブジェクトには含めない。パネルごと再構築されるため、モジュール読み込み時に一度だけ取得する`uiElements`の設計とは相容れないため）
+- **レイヤー一覧（`#textLayersList`、`renderTextLayersList()`）**: 各行 ＝ 掴み手（`⠿`、ドラッグで並べ替え＝重なり順、`reorderTextLayers()`）／種類バッジ（`T` または `Exif`）／内容プレビュー（`contentPreviewLabel()`）／表示トグル（`●`/`○`、`enabled` の切り替え）／削除（`×`）。0枚のときは「まだテキストがありません」のヒントのみ。
+- **追加の導線（D-1）**: 「＋ テキストを追加」（`#addTextLayerButton`）で**作成フォーム**（未確定の下書き `textDraft`）が開く。内容を組み立てて「追加」を押すまで `state` には触れない。`addTextLayer()` で確定し、そのレイヤーを選択して編集モードへ。
+- **編集フォーム（`#textLayerSettingsPanel`、`buildTextEditor(panel, mode, layerId)`）**: `mode='create'`（下書き）と `mode='edit'`（選択中レイヤーをライブ編集）で同じ部品を使う。フィールドは種類を問わず共通の1セット（D-3）＝内容エディタ／揃え／フォント／大きさ／文字色／不透明度／横位置・縦位置／回転。`create` では末尾に「追加／キャンセル」。
+- **内容エディタ（`mountContentEditor()`）**: `contenteditable` な1つの入力欄＋トークン差し込みボタン（`＋ 撮影日` / `＋ Exif`）＋**解決後の文字列のライブプレビュー**（`.text-content-preview`。`resolveContentText(content, exifData)` の結果を都度表示。Exif 未読込でトークンを含む場合は空欄になる旨の注記も出す）＋インラインの書式・項目ピッカー。トークンは `contenteditable="false"` のインライン span（`.text-token`）で、Backspace で1単位として消える。`serialize()` が DOM を辿って `content` 配列へ、`paint()` が逆向き。ゼロ幅スペースでトークン直後のキャレット位置を確保する。
+- **トークンのピッカー（Q-C: その場で展開。モーダルにしない）**: 撮影日トークンをクリック → 書式ピッカー（`buildDateFormatPicker()`、プリセットボタン＋自由入力）。Exif トークンをクリック → 項目ピッカー（`buildExifItemPicker()`、`exifTagDefinitions` から「利用可能／使用する」の2リスト、クリックで追加・×で削除・`⠿` ドラッグで並べ替え。`attachListDragHandle()` はレイヤー一覧の並べ替えと共通）。
+- **表示位置アンカーはUIから撤去（データモデルは維持）**: 9点（`top/middle/bottom` × `left/center/right`）の固定アンカー選択は出さない（`docs/roadmap.md` D-2）。`layer.position`（既定 `middle-center`）は状態・プリセットに残り、`textRenderer.js` の `calculateTextPosition()` がオフセットの基準アンカーとして引き続き使う。
+- Canvasドラッグ中の座標欄（横位置/縦位置）・拡大/回転ハンドル操作中のサイズ・回転角の値だけは、`syncTextLayerLiveInputs(state)` が軽量に `.value` のみ更新し、パネル全体は再構築しない（`create` モード中は下書きが state と無関係のため早期 return）。横位置/縦位置/回転の数値欄は `enhanceAsScrubInput()` でスクラブ／タイプ入力対応。
 
 **フレーム加工パネルの開閉表現:**
 角丸/超楕円のパラメータ行・影/縁取りの詳細設定は、以前は`style.display = 'none'/''`による即時の表示切り替えだったが、CSSの`grid-template-rows`トランジション（`.accordion`/`.accordion.open`、`style.css`）による滑らかな開閉に変更した。`updateFrameSettingsVisibility()`はこれに合わせて対象要素への`classList.toggle('open', ...)`に変更しているが、値の読み書きロジック自体（`addOptionChangeListener`等）は変更していない。
@@ -352,7 +358,7 @@ UI要素の制御とイベントハンドリングを担当します。
 5. 写真本体描画
 6. インナーシャドウ（有効な場合）
 7. 縁取り（有効な場合）
-8. テキスト描画（`customTexts`の各レイヤーは、描画と同時に当たり判定用の矩形を`interactionRegistry`へ登録）
+8. テキスト描画（`textSettings.layers[]`の各レイヤーは、描画と同時に当たり判定用の矩形を`interactionRegistry`へ登録）
 9. **プレビューのみ**: 選択中オブジェクトのハイライト枠（回転している場合はボックス中心を軸に回転させて描画）、選択中がテキストレイヤーの場合は拡大・回転ハンドル、ドラッグ中のスナップガイド線を描画（出力画像には含まれない）
 
 `interactionRegistry`は`drawPreview`が呼ばれるたびに`clear()`されてから再構築される。immediate-mode描画（毎回全部描き直す）方式を変えずに当たり判定を持たせるための設計。詳細は5.12節以降を参照。
@@ -399,13 +405,13 @@ UI要素の制御とイベントハンドリングを担当します。
 テキスト描画を担当します。
 
 **主要関数:**
-- `drawText(ctx, currentState, canvasWidth, canvasHeight, basePhotoShortSideForTextPx)`: テキストを描画。`date`/`exif`/`customTexts[]`の各レイヤーをループして描画し、`customTexts`のうち実際に描画したレイヤーについては`{ id, type: 'text', x, y, width, height, rotation }`という当たり判定用バウンディングボックスの配列を返す（`canvasRenderer.js`がこれを`interactionRegistry`へ登録する）
+- `drawText(ctx, currentState, canvasWidth, canvasHeight, basePhotoShortSideForTextPx)`: テキストを描画。`textSettings.layers[]`の各レイヤーをループし、`resolveContentText(layer.content, exifData)`（`utils/textContent.js`）で content を1本の文字列に解決してから `drawSingleText()` で描く。実際に描画したレイヤーについては`{ id, type: 'text', x, y, width, height, rotation }`という当たり判定用バウンディングボックスの配列を返す（`canvasRenderer.js`がこれを`interactionRegistry`へ登録する）
 - `loadSingleGoogleFont(fontApiName)`: Google Fontを読み込む
-- `drawSingleText(ctx, settings, textToDraw, fontObject, basePhotoShortSidePx, canvasWidth, canvasHeight)`: 単一テキストブロックを描画し、描画した矩形（左上原点の`{x, y, width, height, rotation}`）を返す
+- `drawSingleText(ctx, settings, textToDraw, fontObject, basePhotoShortSidePx, canvasWidth, canvasHeight)`: 単一テキストブロックを描画し、描画した矩形（左上原点の`{x, y, width, height, rotation}`）を返す。`settings` はレイヤー1件、`textToDraw` は解決済みの文字列
 - `calculateTextPosition(...)`: テキスト位置を計算
-- `getFormattedDate(exifDateTimeString, displayFormat)`: Exif日時をフォーマット
+- （`getFormattedDate` / Exif 値の整形は `utils/textContent.js` ／ `exifHandler.getExifValue()` に移動した）
 
-**回転（`customTexts[]`の`rotation`、度数）:** `settings.rotation`が非0の場合、描画前に（バウンディングボックスの中心を軸に）`ctx.translate`＋`ctx.rotate`＋`ctx.translate`で座標系を回転させてから`fillText`する。バウンディングボックス自体は「回転前のローカル座標」のまま返す（`x, y, width, height`は無回転の値）。回転適用の有無や当たり判定・ハンドル描画への影響は5.12節・5.22節を参照。`date`/`exif`には`rotation`の概念はなく、`customTexts[]`のみ対応する。
+**回転（`layer.rotation`、度数）:** `settings.rotation`が非0の場合、描画前に（バウンディングボックスの中心を軸に）`ctx.translate`＋`ctx.rotate`＋`ctx.translate`で座標系を回転させてから`fillText`する。バウンディングボックス自体は「回転前のローカル座標」のまま返す（`x, y, width, height`は無回転の値）。回転適用の有無や当たり判定・ハンドル描画への影響は5.12節・5.22節を参照。統合により、撮影日・Exif を含むレイヤーも自由テキストと同じく `rotation` を持つ。
 
 **フォント読み込み:**
 - Google Fonts APIから動的にCSSを読み込み
@@ -472,7 +478,7 @@ Canvas操作のユーティリティ関数を提供します。
 
 **主要関数:**
 - `clear()`: 帳簿を空にする（`drawPreview`の冒頭で呼ばれる）
-- `register(entry)`: `{ id, type, x, y, width, height, rotation? }`形式の矩形を1件登録する（描画順=z順に積むこと）。`rotation`（度）は自由テキストレイヤーのみ持ちうる（写真・背景は常に無回転）
+- `register(entry)`: `{ id, type, x, y, width, height, rotation? }`形式の矩形を1件登録する（描画順=z順に積むこと）。`rotation`（度）はテキストレイヤーのみ持ちうる（写真・背景は常に無回転）
 - `hitTest(px, py)`: 指定座標にヒットする最前面のオブジェクトを返す（登録順の後ろから走査するため、後から描画＝上に重なっているものが優先される）。`entry.rotation`が非0の場合、クリック座標をボックス中心を軸に`-rotation`だけ逆回転させてから通常のAABB判定を行う（`utils/geometry.js`の`rotatePoint()`を使用）。これにより、ボックス自体は常に「回転前のローカル座標」を保持したまま、見た目上回転した矩形への当たり判定が成立する
 - `getById(id)`: idからバウンディングボックスを取得
 - `getAll()`: 登録済みの全オブジェクトを返す（スナップ判定に使用）
@@ -509,7 +515,7 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 - スナップ: ドラッグ中は既定でスナップが有効。**Altキーを押しながらドラッグするとスナップを一時的に無効化**できる
 - **軸ロック**: `move` モードのドラッグ中に **Shiftキーを押している間、移動量の大きい方の軸だけに固定**する（縦だけ／横だけの移動。写真・テキスト・背景・影のどのドラッグでも効く）。スナップ計算の前に適用する。回転ハンドルの Shift（15度スナップ）は別ドラッグモード（`mode: 'rotate'`）なので競合しない
 - 矢印キーnudge: 何かが選択されている状態で矢印キーを押すと1px相当、Shift+矢印キーで10px相当（いずれもプレビューcanvas上のpx単位）移動する。フォーカスが入力欄（input/textarea/select）にある間は無効化される。**「背景」タブ・「フレーム」タブ（影が有効なとき）では、選択の有無に依らず矢印キーが背景／影のオフセット微調整になる**（本体ドラッグのタブ別振り分けと揃えている。5.16節「タブ別ドラッグ」）
-- **Deleteキーでの自由テキスト削除（D-5 / フェーズ6）**: 「テキスト」タブがアクティブ（`getActiveTab() === 'tab-text'`）で、選択中が自由テキスト（`selectionStore.getSelectedId()` が `text-date` / `text-exif` 以外で、かつ `textSettings.customTexts` に存在するid）のとき、`Delete` / `Backspace` で `removeCustomTextLayer(id)` ＋ 選択解除（＝チップ一覧の × ボタンと同じ）。入力欄フォーカス中は無効。固定レイヤー（撮影日・Exif）は削除不可なので何もしない
+- **Deleteキーでのテキストレイヤー削除（D-5 / バケット4）**: 「テキスト」タブがアクティブ（`getActiveTab() === 'tab-text'`）で、選択中が `textSettings.layers` に存在するidのとき、`Delete` / `Backspace` で `removeTextLayer(id)` ＋ 選択解除（＝リスト行の × ボタンと同じ）。入力欄フォーカス中は無効。統合後は撮影日・Exif を含むレイヤーも削除対象（固定レイヤーの概念は無くなった）
 - **拡大・回転ハンドル（テキスト系オブジェクトのみ。自由テキスト・撮影日・Exifブロックいずれも対応）**: `pointerdown`時、通常のオブジェクト当たり判定（`interactionRegistry.hitTest()`）より先に`textHandleStore.getTextHandles()`のハンドル座標との距離判定を行う（当たり判定半径`HANDLE_HIT_RADIUS = 10px`）。ヒットした場合は`dragState.mode`を`'resize'`または`'rotate'`にしてドラッグを開始し、通常の移動ドラッグ（`mode: 'move'`）とは別処理で`textAdapter.commitResize()`/`commitRotate()`を直接呼ぶ（アダプタの`getValue`/`computeChanges`/`commit`という汎用インターフェースではなく、テキスト専用の`getTransform`/`commitResize`/`commitRotate`を使う。写真・背景にはこの概念がないため）
 - **写真の四隅ハンドルとトリミングモード（5.24節・5.25節、7.2節「オンキャンバス・トリミング」参照）**: 写真選択中は`photoEditModeStore`のモード（`select`/`crop`）で挙動を切り替える。
   - `pointerdown`で、テキストハンドルと同様に通常のオブジェクト当たり判定より先に`photoCropStore.getCropHandles()`の四隅座標を距離判定する（半径`HANDLE_HIT_RADIUS`）。**select モード**でヒット → `dragState.mode = 'photoResize'`（開始点と「中心→掴んだ隅」方向の単位ベクトルを保持し、`pointermove`で符号付き投影量を`photoAdapter.commitMarginResizeByDrag()`に渡し`baseMarginPercent`を増減。中心からの距離比を使う旧方式は「中心を通り越すと余白が逆に減る」不具合があったため置き換えた）。**crop モード**でヒット → `dragState.mode = 'cropRectResize'`（掴んだ隅と`frozenFrame.whole`のサイズから`rect`の差分を計算し`resizeCropRect()`→`photoAdapter.commitCropRect()`）。crop モードでクロップ窓の内側なら`dragState.mode = 'cropPan'`（`rect.x/y`をドラッグ方向へ平行移動）。
@@ -527,7 +533,7 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 
 | アダプタ | 対象 | 値の単位系 | 備考 |
 |---|---|---|---|
-| `textAdapter.js` | `customTexts[]`の各レイヤー、および撮影日・Exifブロック（固定id `'text-date'`/`'text-exif'`） | 写真短辺基準の% | `customTexts[]`は`updateCustomTextLayer()`、撮影日・Exifは`updateState({ textSettings: { date/exif: changes } })`と、idに応じて内部で経路を振り分ける（`resolveLayer()`ヘルパー） |
+| `textAdapter.js` | `textSettings.layers[]`の各レイヤー（id ＝ レイヤーの uuid） | 写真短辺基準の% | `resolveLayer(id)`（`layers` から検索）＋ `updateTextLayer(id, changes)` で書き戻し。サイズのクランプは `controlsConfig.textLayerSize`（レイヤー共通の1範囲、最大50%） |
 | `photoAdapter.js` | 写真の枠内配置（`photoViewParams`） | 可動範囲(movable width/height)に対する0.0〜1.0の割合 | `layoutCalculator.js`の可動範囲計算と対応させる必要があり、`getLastPreviewContext().scale`を使った変換が必要。加えてトリミング用に、`getCropRect()`（`resolveCropRect`で現在の割合矩形を返す）・`commitCropRect(rect)`（`cropSettings.rect`を更新）・`getCropConstraint()`（比率制約の取得）・`commitMarginResizeByDrag(startMargin, projPx, startShortSidePx)`（select モードの四隅ハンドル→`baseMarginPercent`、符号付き投影量ベース）を持つ（5.16節参照。`textAdapter`の`getTransform`系と同種の拡張） |
 | `backgroundAdapter.js` | 拡大ぼかし背景の位置（`imageBlurBackgroundParams`） | 写真短辺基準の%（textAdapterと同じ単位系） | 単色背景（`backgroundType === 'color'`）の場合はそもそも`interactionRegistry`に登録されないため、ドラッグ対象にならない。**背景のドラッグ位置調整は「背景」タブでのみ有効**で、そのタブでは写真の上を含むキャンバス全面のドラッグを`canvasInteraction.js`がこのアダプタへ振り替える。他タブでの余白ドラッグでは背景は動かない（5.16節「タブ別ドラッグ」参照）。原点スナップ用の`originSnapPx(startValue, ctx)`を持つ |
 | `shadowAdapter.js` | フレームの影のオフセット（`frameSettings.shadowParams.offsetX/offsetY`） | 写真短辺基準の%（-25〜25でクランプ。`controlsConfig.frameShadowOffsetX`） | 「フレーム」タブ表示中かつ`shadowEnabled === true`のときだけ、`canvasInteraction.js`が写真本体（テキスト以外）のドラッグをこのアダプタへ振り替える。`backgroundAdapter`と同じ`getValue`/`computeChanges`/`commit`＋`originSnapPx`パターン。0.1%丸めも同様（5.16節「タブ別ドラッグ」参照） |
@@ -550,7 +556,7 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 
 **`textAdapter.js`の拡張（拡大・回転ハンドル用）:** 通常の`getValue`/`computeChanges`/`commit`（位置移動用）に加えて、以下を持つ。
 - `getTransform(id)`: ドラッグ開始時点の`{ size, rotation }`を取得（`resolveLayer()`経由で撮影日・Exifにも対応）
-- `commitResize(id, startSize, scaleFactor)`: `startSize * scaleFactor`をクランプして`size`に反映。クランプ範囲は対象によって異なるスライダー範囲に合わせる（`getSizeConfigKey(id)`が`'text-date'`→`textDateSize`、`'text-exif'`→`textExifSize`、それ以外（自由テキスト）→`textFreeSize`という`controlsConfig`のキーを選択する）
+- `commitResize(id, startSize, scaleFactor)`: `startSize * scaleFactor`を`controlsConfig.textLayerSize`（レイヤー共通、0.1〜50%）でクランプして`size`に反映
 - `commitRotate(id, newRotationDeg)`: `rotation`に反映（0.1度単位に丸め）
 - 上記2つの書き戻しは、`commit()`と同様に`applyChanges(id, changes)`ヘルパーが`FIXED_TEXT_IDS`を見て`updateState()`（撮影日・Exif）と`updateCustomTextLayer()`（自由テキスト）に振り分ける
 
@@ -564,7 +570,7 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
   - フォーカス中の直接クリックはスクラブを起動しない（タイプ入力を優先）
 
 ### 5.19 presets/presetStore.js
-編集設定（`stateManager.js`の`EDITABLE_SETTINGS_KEYS`で定義される範囲）を、名前付きプリセットとして`localStorage`（キー: `kakomi_presets`）に保存・一覧取得・削除・適用するモジュール。読み込んだ画像そのものは対象外。`textSettings`（`customTexts`配列を含む）もそのまま保存するため、自由テキストの内容・個数もプリセットの一部として保存・復元される。
+編集設定（`stateManager.js`の`EDITABLE_SETTINGS_KEYS`で定義される範囲）を、名前付きプリセットとして`localStorage`（キー: `kakomi_presets`）に保存・一覧取得・削除・適用するモジュール。読み込んだ画像そのものは対象外。`textSettings`（`layers[]` を含む）もそのまま保存するため、テキストの内容・個数・並び順もプリセットの一部として保存・復元される。**旧形式（`{ date, exif, customTexts }`）で保存されたプリセットは `applyPreset` の入口で `migrateTextSettings()`（`stateManager.js`）が `{ layers: [] }` へ変換してから適用する**（`cropSettings` の `migrateCropSettings` と同じ考え方。`updateState` は deep-merge のため、事前に `settings.textSettings` をまるごと差し替えて旧キーが残らないようにする）。
 
 **F-2 / F-5（保存する項目の2階層選択）:** `EDITABLE_SETTINGS_KEYS` を**タブ単位の5セクション**に束ねた `PRESET_SECTIONS` を持つ。**背景・フレーム・テキストの3つは「効く所だけ」の子グループ（`groups`）を持つ**（F-5、`docs/roadmap.md` F-5）:
 
@@ -574,9 +580,9 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 | `crop`＝写真のトリミング | —（葉） | `cropSettings` / `photoViewParams` |
 | `background`＝背景 | `type` / `color` / `blur` | `backgroundType` ／ `backgroundColor` ／ `imageBlurBackgroundParams` |
 | `frame`＝フレーム | `corner` / `border` / `shadow` | `frameSettings.cornerStyle`ほか ／ `frameSettings.border` ／ `frameSettings.{shadowEnabled,shadowType,shadowParams}` |
-| `text`＝テキスト | `date` / `exif` / `custom` | `textSettings.date` ／ `textSettings.exif` ／ `textSettings.customTexts` |
+| `text`＝テキスト | —（葉。バケット4 で子グループ廃止） | `textSettings` |
 
-`keys` の要素はドット無しの状態キーか**ドット付きパス**（`frameSettings.border` など）。`savePreset` はパスを辿って部分オブジェクトを組み立て、`applyPreset` 側の `updateState` deep-merge で既存値の上にマージされる（移行関数不要）。各セクションの `label` は「保存済み」一覧のメタ表示に出る。ドリフト検知ガードは葉キーをトップレベルへ丸めて `EDITABLE_SETTINGS_KEYS` と突き合わせる。
+`keys` の要素はドット無しの状態キーか**ドット付きパス**（`frameSettings.border` など）。`savePreset` はパスを辿って部分オブジェクトを組み立て、`applyPreset` 側の `updateState` deep-merge で既存値の上にマージされる（旧テキストプリセットのみ `migrateTextSettings()` を通す。上記5.19冒頭）。各セクションの `label` は「保存済み」一覧のメタ表示に出る。ドリフト検知ガードは葉キーをトップレベルへ丸めて `EDITABLE_SETTINGS_KEYS` と突き合わせる。
 
 **主要関数:**
 - `getPresets()`: 保存済みプリセットの一覧を取得（`{ id, name, createdAt, sections, groups?, settings }`の配列）
@@ -816,43 +822,28 @@ Blobをダウンロード
     - **実装状況の補足**: `frameRenderer.js` の `applyBorder()` は `border.style === 'dashed'` の場合に `ctx.setLineDash()` で破線描画をサポートしており、`uiController.js` にも `frameBorderStyleSelect` 用のイベントリスナーが用意されている。しかし `index.html` 内の実際の `<select id="frameBorderStyle">` はHTMLコメントとして無効化されており、現在のUI画面上からは破線を選択する手段がない（`border.style` は常に初期値の `'solid'` のまま）。つまり、描画ロジックとイベント配線は実装済みだが、UIコントロール自体が非表示のため、実質的に破線は使用できない状態にある。
 
 ### 7.5 テキストオーバーレイ
-撮影日、Exif情報、自由テキスト（`customTexts[]`）の各テキスト要素に対して以下を設定可能:
+撮影日・Exif・自由テキストは1本の `textSettings.layers[]` に統合されている（バケット4 / D-1・D-3。データモデルは5.2節、UI は5.3節）。1レイヤー ＝ `content`（「リテラル文字列」と「動的トークン」の並び）＋ 見た目の設定1セット。
 
-**UI構成（2026年8月のUI刷新で変更）:** 以前は撮影日・Exif情報・自由テキストがそれぞれ独立した`<fieldset>`を持っていたが、現在は1つのチップリスト（`#textLayersList`。先頭に撮影日・Exif情報の固定チップ、続けて自由テキストの動的チップ）＋1つの設定パネル（`#textLayerSettingsPanel`）に統合されている。設定できる項目自体（下記）はほぼ変わらないが、UI上は種類を問わず同じ場所・同じ並びで編集する。詳細は5.3節「文字レイヤーの統一UI」参照。
+**作成の流れ（D-1）:** 「テキスト」タブの「＋ テキストを追加」→ 作成フォームで内容を組み立て →「追加」でキャンバスに出る（`position: 'middle-center'`）。撮影日・Exif も「テキスト」の1種として、内容欄に**トークンを差し込む**形で作る。撮影日 / Exif とも何枚でも追加できる。
 
-- **有効/無効**: チェックボックスで切り替え（統合後は「表示するかどうか」と「選択して中身を編集すること」が分離され、無効化されていても中身の編集は可能）
-- **フォント**: Google Fontsから選択
-- **サイズ**: 写真短辺に対する%（0.1-10%または0.1-50%）
-- **色**: HEXカラーコード
-- **不透明度**: 0-1
-- **位置**: 基準アンカー（`position`。上/中央/下 × 左/中央/右の9点。既定は撮影日=`bottom-left`／Exif=`bottom-right`／自由テキスト=`middle-center`）＋オフセットX/Y（%指定、アンカーからのさらなる微調整）。オフセットはプレビュー上のドラッグ・数値欄・矢印キーで動かす
-  - **注意（2026年8月のUI刷新で変更）:** 統合前は撮影日・Exifが6点（中央行なし）、自由テキストにはアンカー選択UI自体が存在しなかった。UI統合時にいったん3種類とも9点セレクトに揃えたが、その後**アンカー選択セレクト（`#textLayerPosition`）はUIから撤去した**（位置はドラッグで決めるため9点の選択はほぼ使われない。`docs/roadmap.md` D-2）。`position`はデータモデル・プリセットには残り、`calculateTextPosition()`がオフセットの基準として使い続ける。`textRenderer.js`はもともと9点全てに対応済み。
-- **水平方向の配置（textAlign）**: 左寄せ、中央、右寄せ
-  - Exif情報、自由テキストにはこの配置ラジオボタンが存在する。
-  - **撮影日表示にはこの配置コントロールが存在しない**（`textRenderer.js`側でも撮影日設定オブジェクトに`textAlign`が定義されていないため、位置指定文字列から自動的に左/中央/右寄せが決まる）。
-- **プレビュー上でのドラッグ移動、拡大・回転**: 撮影日・Exif情報も自由テキストと全く同様に、プレビュー上で直接ドラッグして位置（オフセットX/Y）を移動でき、選択中は拡大ハンドル・回転ハンドルも表示される。`textRenderer.js`の`drawText()`が固定id（`'text-date'`, `'text-exif'`）を振って`interactionRegistry`に登録し、`textAdapter.js`がcustomTexts[]と同じ移動・拡大・回転ロジックで扱う（5.16・5.17節参照）。`rotation`フィールドを持ち、サイズの拡大範囲は自由テキスト（`textFreeSize`、最大50%）とは異なりそれぞれの表示位置設定と同じ範囲（`textDateSize`/`textExifSize`、最大10%）にクランプされる。オフセットX/Y・サイズのスライダー、回転の数値入力欄はいずれもドラッグ操作にも追従する（`document.activeElement`が別要素のときのみ値を上書き）
+**レイヤー共通の設定（種類を問わず1セット。D-3）:**
+- **表示/非表示**: リスト行の `●`/`○` トグル（`enabled`）。非表示でも編集はできる
+- **フォント**: Google Fonts から選択
+- **大きさ**: 写真短辺に対する %（`controlsConfig.textLayerSize`、0.1〜50%）
+- **文字色**: HEX
+- **不透明度**: 0〜1
+- **揃え（textAlign）**: 左 / 中 / 右
+- **位置**: 基準アンカー `position`（9点。UI からは撤去済み＝D-2、既定 `middle-center`）＋ オフセット X/Y（%）。オフセットはプレビュー上のドラッグ・数値欄・矢印キー（1px／Shift+10px）で動かす
+- **回転（`rotation`、度）**: プレビュー上の回転ハンドル（Shift で15°刻み）または数値欄。拡大は右下角のハンドル。ハンドルドラッグ中は数値欄・サイズスライダーも追従（`syncTextLayerLiveInputs`）
+- 横位置/縦位置/回転の数値欄はドラッグでスクラブ、クリックでタイプ入力（`ui/scrubInput.js`）
+- 改行対応（内容欄で Enter → `\n`）
 
-**撮影日表示**:
-- ExifのDateTimeタグから取得
-- **フォーマット**: `format`は自由な文字列で、`YYYY`/`YY`/`MM`/`DD`のトークンを組み合わせて指定する（`getFormattedDate()`が文字列置換で処理）。UIには8種類のプリセット（YYYY.MM.DD、YYYY/MM/DD、YY/MM/DD、YY.MM.DD、YYYY年MM月DD日、MM/DD/YYYY、DD/MM/YYYY、YYYY-MM-DD）を選ぶselectと、任意の書式を直接打てる自由入力欄が両方あり、常に同じ`format`値を指しているため相互に同期する（select選択→自由入力欄にも反映、自由入力→マッチするプリセットがあればselectもそれを指す、なければ「プリセットから選択...」に戻る）。出力アスペクト比（7.2節）と同じ「プリセット+自由入力」のUIパターン
+**動的トークン（`content` 内の `{ field }` 要素。生きたトークン＝別画像に差し替えると値も追従）:**
+- **撮影日トークン `{ field: 'date', format }`**: Exif の DateTime から日付を取り、`format` で整形（`utils/textContent.js` の `getFormattedDate()`）。`format` は `YYYY`/`YY`/`MM`/`DD` を組み合わせた自由文字列。トークンをクリックすると**その場で書式ピッカー**（プリセットボタン＋自由入力。`DATE_FORMAT_PRESETS`）が開く。
+- **Exif トークン `{ field: 'exif', items }`**: `items`（Exif キーの配列）を並び順どおりに解決し `EXIF_ITEM_SEPARATOR`（スペース2つ）で連結。トークンをクリックすると**その場で項目ピッカー**が開く＝「利用可能な項目」（`exifTagDefinitions` のうち未選択のもの、クリックで末尾に追加）と「使用する項目」（現在の `items`、各行に `⠿` ドラッグハンドルと `×`）。並べ替えは `attachListDragHandle()`（レイヤー一覧の並べ替えと共通。ドラッグ中は DOM だけ動かし `pointerup` で一度コミット）。
+- **対応 Exif タグ**: Make（メーカー名）／Model（機種名）／LensModel（レンズ情報）／FNumber（F値）／ExposureTime（シャッタースピード）／ISOSpeedRatings（ISO感度）／FocalLength（焦点距離）／ExposureBiasValue（露出補正、例 `+0.3EV`）。定義は `uiDefinitions.js` の `exifTagDefinitions`。値の整形は `exifHandler.getExifValue()`
 
-**Exif情報表示**:
-- **対応タグ**: Make（メーカー名）、Model（機種名）、LensModel（レンズ情報）、FNumber（F値）、ExposureTime（シャッタースピード）、ISOSpeedRatings（ISO感度）、FocalLength（焦点距離）、ExposureBiasValue（露出補正、例: `+0.3EV`）。定義は`uiDefinitions.js`の`exifTagDefinitions`配列（`{ key, label }`の並び）
-- **表示項目の選択と並び替え**: `textSettings.exif.items`は「選んだタグのkeyを表示順に並べた配列」であり、この配列の並び順がそのまま出力テキストの並び順になる（以前は表示順が`uiController.js`内に別途ハードコードされた固定配列で決まっており、`items`の並びは無視されていた。これを修正し、`items`自体の並びを唯一の情報源にした）
-  - UIは「利用可能な項目」（`exifTagDefinitions`のうちまだ`items`に含まれていないタグをチップ表示、クリックで`items`の末尾に追加）と「使用する項目」（現在の`items`を上から順に表示するリスト、各行に`⠿`のドラッグハンドルと`×`の削除ボタン）の2つの領域で構成される
-  - 並び替えは`uiController.js`の`attachExifDragHandle()`が素のPointer Eventsで実装している。ドラッグ中はDOM上の行要素を直接並べ替えるだけで状態（`textSettings.exif.items`）へは書き込まず、`pointerup`時に最終的な並び順をまとめて一度だけ`updateState()`でコミットする。これは、ドラッグ中に`updateState()`のたびにリストを再構築すると、ドラッグ中の行のDOM要素自体が作り直されてポインタ操作が中断してしまうため（`interaction/canvasInteraction.js`の拡大・回転ハンドルとは異なる構成だが、「状態を書き換えるとDOMが壊れてドラッグが継続できなくなる」という同種の問題への対処という点で共通する設計判断）
-  - 生成された表示テキストは読み取り専用のプレビュー欄（`#textLayerExifPreview`。選択中レイヤーがExifのときだけ動的に生成される。5.3節参照）に表示される。**以前あった「生成されたテキストを手動編集できるテキストエリア」は廃止した**（チェックボックスの状態を変えるたびに手動編集内容が丸ごと上書きされてしまう壊れた導線だったため、上記の並び替えUIに置き換えた）
-
-**自由テキスト（`customTexts[]`）**:
-- 個数の制限なく追加・削除できる（「文字」レール項目内の「+ テキストを追加」ボタン）
-- 各レイヤーは独立した`id`を持ち、テキスト内容・フォント・サイズ・色・不透明度・位置を個別に設定できる
-- 改行対応（\nで区切る）
-- 新規追加時は初期文言「テキスト」でCanvas中央（`position: 'middle-center'`）に配置される
-- **プレビュー上で直接ドラッグして位置を移動できる**（当たり判定・ドラッグ処理は5.12〜5.17節のインタラクション基盤による）。ドラッグ中はキャンバス中央線・端・写真・他のテキストレイヤーへのスナップが働き、Altキー押下でスナップを無効化できる
-- 選択中は矢印キーで1px相当（Shift+矢印で10px相当）の微調整ができる
-- 横位置/縦位置/回転の数値欄はドラッグでスクラブ、クリックでタイプ入力の両方に対応（`ui/scrubInput.js`）
-- レイヤー一覧はチップ表示で、クリックで選択（プレビュー上での選択とも連動する）、×ボタンで削除できる
-- **拡大・回転（`rotation`、度数）**: 選択中はプレビュー上に拡大ハンドル（右下角の四角）と回転ハンドル（上端中央から少し離れた丸）が表示され、ドラッグで直接操作できる（5.16・5.22節参照）。回転ハンドルはShiftキー併用で15度刻みにスナップする。設定パネルには数値入力欄もあり、ハンドルドラッグ中はこの数値欄・サイズスライダーもリアルタイムに追従する
+**リスト（`#textLayersList`）:** 各行 ＝ 掴み手（`⠿`、ドラッグで重なり順を変更）／種類バッジ（`T` または `Exif`、`content` から導出）／内容プレビュー／表示トグル／`×` 削除。プレビュー上でのドラッグ移動・拡大・回転はどのレイヤーも同じ（`textAdapter.js`、5.16・5.17節）。ドラッグ中はキャンバス中央線・端・写真・他レイヤーへスナップ（Alt で無効化）。「テキスト」タブがアクティブで選択中のとき `Delete`/`Backspace` で削除（D-5）。
 
 ### 7.6 出力設定
 - **JPEG品質**: 1-100（スライダー、`jpgQuality`）。2026年8月のフェーズ4で「出力」タブを廃止し、**ダウンロードボタンの画質ポップオーバー（`#downloadPopover`）内**に移動した。同期先の id は不変なので `uiController.js` 側の配線（`initializeUIFromState` / `updateSliderValueDisplays` / `addNumericInputListener`）は変えていない。
@@ -1011,7 +1002,7 @@ Blobをダウンロード
 
 ### 11.5 UI刷新の残タスク（2026年8月）
 今回のUI刷新（3.1節・5.3節参照）で見送った・保留した項目:
-- **文字レイヤーのデータモデル統合（見送り）**: 撮影日・Exif情報を自由テキストと同じ配列（`kind`フィールド付き）に統合しきる案も検討したが、既存ユーザーのlocalStorageプリセットの移行処理が必要になり範囲が広がるため、今回はUI層の統合（5.3節）に留めた。将来的にやる場合は`stateManager.js`・`textRenderer.js`・`textAdapter.js`・`presets/presetStore.js`への影響を要確認。
+- **文字レイヤーのデータモデル統合（バケット4 / D-1・D-3 で実施済み）**: 撮影日・Exif・自由テキストを1本の `textSettings.layers[]` に統合した。`kind` フィールドは持たず（「Exif を含むか」等は `content` から導出）、`content` は「リテラル文字列」と「動的トークン」の並び。旧 localStorage プリセットは `migrateTextSettings()` が `applyPreset` の入口で変換する。影響範囲は `stateManager.js`・`textRenderer.js`・`textAdapter.js`・`canvasInteraction.js`・`canvasRenderer.js`・`fileManager.js`・`presets/presetStore.js`・`uiController.js`＋新規 `utils/textContent.js`（`docs/session-log-2026-08-28-4.md`）。
 - **Exif情報タブの拡充**: E-3（フェーズ5）で「情報」を他タブと並列のタブ＋アイコン主体表示にした（7.7節）。今後、表示項目の増減（露出補正・GPS 等）や、Exif 値をそのまま文字レイヤーに送る導線などは D-1/D-3 と合わせて検討の余地あり。
 - **`frameBorderStyle`（破線）の扱い**: 7.4節で述べた通り、UIコントロール自体が無効化されたまま。今回のフレーム加工パネル刷新のタイミングで復活させるか完全に削除するかは未決定。
 - **レスポンシブ（`@media max-width:1024px`以下）の実機確認未実施**: アイコンレールを横並びに戻すフォールバックは実装したが、タッチデバイス・狭幅ブラウザでの実機検証はまだ行っていない。
@@ -1114,12 +1105,12 @@ Blobをダウンロード
 - **仕様書v1の要求**: 9点から選択（中央、上、下、左、右、左上、右上、左下、右下）
 - **現在の実装**: 連続的な位置調整（スライダー、およびプレビュー上でのドラッグ。スナップにより中央や端への位置決めも可能）
 
-**自由テキストの個数:**
-- **仕様書v1の要求**: 自由テキスト2つ（固定枠）
-- **現在の実装**: `customTexts[]`による可変長レイヤー（個数制限なし、追加/削除可能）
+**テキストの個数:**
+- **仕様書v1の要求**: 自由テキスト2つ（固定枠）＋ 撮影日・Exif 各1
+- **現在の実装**: `textSettings.layers[]`による可変長レイヤー（撮影日・Exif・自由テキストの区別なく個数制限なし。追加/削除/並べ替え可能）
 
 ### 12.3 未実装の仕様
 
 **未実装機能（11章の拡張案を参照）:**
-- 自由テキストレイヤーの並び替え・複製、複数選択・一括移動（11.1節参照）
+- テキストレイヤーの複製、複数選択・一括移動（11.1節参照。並べ替えはバケット4 で実装済み）
 - タッチデバイスでの実機確認（11.1節参照）

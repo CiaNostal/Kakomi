@@ -256,4 +256,76 @@ function displayExifInfo(exifData, container) {
     container.innerHTML = html;
 }
 
-export { extractExifFromFile, formatExifForDisplay, embedExifToJpeg, displayExifInfo, decodeExifString };
+/**
+ * Exif の1項目を、テキストオーバーレイ用の短い表示文字列へ整形する。
+ * key は uiDefinitions.js の `exifTagDefinitions[].key`（'FNumber' / 'ExposureTime' など）。
+ * 値が取れない場合は空文字。以前は uiController.js が持っていたが、
+ * テキストレイヤーの content 解決（utils/textContent.js）からも使うためこちらへ移した。
+ * @param {Object|null} exifDataFromState - piexif.js 形式の Exif データ
+ * @param {string} itemKey
+ * @returns {string}
+ */
+function getExifValue(exifDataFromState, itemKey) {
+    if (!exifDataFromState || typeof piexif === 'undefined') return '';
+    const zerothIFD = exifDataFromState['0th'];
+    const exifIFD = exifDataFromState['Exif'];
+    const ImageIFD = piexif.ImageIFD;
+    const ExifIFD = piexif.ExifIFD;
+    if (!zerothIFD && !exifIFD) return '';
+    switch (itemKey) {
+        case 'Make':
+            return (zerothIFD && ImageIFD && ImageIFD.Make !== undefined) ? decodeExifString(zerothIFD[ImageIFD.Make]) : '';
+        case 'Model':
+            return (zerothIFD && ImageIFD && ImageIFD.Model !== undefined) ? decodeExifString(zerothIFD[ImageIFD.Model]) : '';
+        case 'LensModel':
+            return (exifIFD && ExifIFD && ExifIFD.LensModel !== undefined) ? decodeExifString(exifIFD[ExifIFD.LensModel]) : '';
+        case 'FNumber': {
+            if (exifIFD && ExifIFD && ExifIFD.FNumber !== undefined) {
+                const fVal = exifIFD[ExifIFD.FNumber];
+                if (Array.isArray(fVal) && fVal.length === 2 && fVal[1] !== 0) return `f/${(fVal[0] / fVal[1]).toFixed(1)}`;
+            }
+            return '';
+        }
+        case 'ExposureTime': {
+            if (exifIFD && ExifIFD && ExifIFD.ExposureTime !== undefined) {
+                const etVal = exifIFD[ExifIFD.ExposureTime];
+                if (Array.isArray(etVal) && etVal.length === 2 && etVal[1] !== 0) {
+                    const et = etVal[0] / etVal[1];
+                    if (et >= 1) return `${et.toFixed(1)}s`;
+                    if (et >= 0.1) return `${et.toFixed(2)}s`;
+                    return `1/${Math.round(1 / et)}s`;
+                }
+            }
+            return '';
+        }
+        case 'ISOSpeedRatings': {
+            if (exifIFD && ExifIFD && ExifIFD.ISOSpeedRatings !== undefined) {
+                const iso = exifIFD[ExifIFD.ISOSpeedRatings];
+                return iso ? `${Array.isArray(iso) ? iso[0] : iso}` : '';
+            }
+            return '';
+        }
+        case 'FocalLength': {
+            if (exifIFD && ExifIFD && ExifIFD.FocalLength !== undefined) {
+                const flVal = exifIFD[ExifIFD.FocalLength];
+                if (Array.isArray(flVal) && flVal.length === 2 && flVal[1] !== 0) return `${Math.round(flVal[0] / flVal[1])}mm`;
+            }
+            return '';
+        }
+        case 'ExposureBiasValue': {
+            if (exifIFD && ExifIFD && ExifIFD.ExposureBiasValue !== undefined) {
+                const evVal = exifIFD[ExifIFD.ExposureBiasValue];
+                if (Array.isArray(evVal) && evVal.length === 2 && evVal[1] !== 0) {
+                    const ev = evVal[0] / evVal[1];
+                    if (ev === 0) return '0EV';
+                    return `${ev > 0 ? '+' : ''}${ev.toFixed(1)}EV`;
+                }
+            }
+            return '';
+        }
+        default:
+            return '';
+    }
+}
+
+export { extractExifFromFile, formatExifForDisplay, embedExifToJpeg, displayExifInfo, decodeExifString, getExifValue };

@@ -5,10 +5,11 @@
  * 名前付きプリセットとしてlocalStorageに保存・一覧取得・削除・適用する。
  *
  * 読み込んだ画像そのものやレイアウト計算の派生データは対象外（historyManager.jsの
- * Undo/Redoと同じ考え方）。customTexts配列を含むtextSettingsもそのまま保存するため、
- * 自由テキストの内容・個数もプリセットの一部として保存・復元される。
+ * Undo/Redoと同じ考え方）。textSettings.layers[] もそのまま保存するため、テキストの
+ * 内容・個数・並び順もプリセットの一部として保存・復元される。旧形式（date / exif /
+ * customTexts）のプリセットは applyPreset で migrateTextSettings() が layers[] へ変換する。
  */
-import { getState, updateState, EDITABLE_SETTINGS_KEYS } from '../stateManager.js';
+import { getState, updateState, EDITABLE_SETTINGS_KEYS, migrateTextSettings } from '../stateManager.js';
 import { migrateCropSettings } from '../utils/cropRect.js';
 
 const STORAGE_KEY = 'kakomi_presets';
@@ -42,14 +43,9 @@ export const PRESET_SECTIONS = {
             shadow: { label: '影', keys: ['frameSettings.shadowEnabled', 'frameSettings.shadowType', 'frameSettings.shadowParams'] },
         },
     },
-    text: {
-        label: 'テキスト',
-        groups: {
-            date: { label: '撮影日', keys: ['textSettings.date'] },
-            exif: { label: 'Exif', keys: ['textSettings.exif'] },
-            custom: { label: '自由テキスト（すべて）', keys: ['textSettings.customTexts'] },
-        },
-    },
+    // バケット4: 撮影日 / Exif / 自由テキストは1本の textSettings.layers[] に統合されたため、
+    // 「テキスト」は子グループを持たない葉。textSettings 丸ごとで保存・復元する。
+    text: { label: 'テキスト', keys: ['textSettings'] },
 };
 
 /** セクション定義の葉キー（ドット付き含む）を全部集める。 */
@@ -274,6 +270,12 @@ export function applyPreset(id) {
         settings.cropSettings = migrateCropSettings(
             settings.cropSettings, state.originalWidth, state.originalHeight
         );
+    }
+    // 旧形式（{ date, exif, customTexts }）で保存されたテキスト設定を、現行の layers[] へ移行する。
+    // updateState は deepMerge のため、事前に textSettings オブジェクトごと差し替えて
+    // 旧キー（date 等）が状態に残らないようにする（cropSettings と同じ考え方）。
+    if (settings.textSettings) {
+        settings.textSettings = migrateTextSettings(settings.textSettings);
     }
     updateState(settings);
     return true;

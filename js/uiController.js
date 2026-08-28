@@ -1,7 +1,11 @@
 // js/uiController.js
-import { getState, updateState, addCustomTextLayer, removeCustomTextLayer, updateCustomTextLayer } from './stateManager.js';
+import { getState, updateState, addTextLayer, removeTextLayer, updateTextLayer, reorderTextLayers } from './stateManager.js';
 import { controlsConfig, googleFonts, exifTagDefinitions } from './uiDefinitions.js';
 import { loadGoogleFonts } from './textRenderer.js';
+import {
+    DATE_FORMAT_PRESETS, DEFAULT_DATE_FORMAT, DEFAULT_EXIF_ITEMS,
+    contentHasExif, contentHasDate, contentPreviewLabel, contentIsEmpty, resolveContentText
+} from './utils/textContent.js';
 import { stripCustomPrefix } from './layoutCalculator.js';
 import { growRectToAspect, resolveCropRect, resolveCropAspectValue } from './utils/cropRect.js';
 import * as selectionStore from './interaction/selectionStore.js';
@@ -10,7 +14,6 @@ import { enhanceAsScrubInput } from './ui/scrubInput.js';
 import { attachColorHistory } from './ui/colorSwatches.js';
 import { createRatioPicker, ratioOptionsFor, RATIO_FAMILIES, orientedValueOf, isOrientableFamily } from './ui/ratioPicker.js';
 import { getPresets, savePreset, deletePreset, applyPreset, PRESET_SECTIONS, getPresetSections, getPresetGroups, getNextAutoPresetName } from './presets/presetStore.js';
-import { decodeExifString } from './exifHandler.js';
 
 export const uiElements = {
     imageLoader: document.getElementById('imageLoader'),
@@ -104,9 +107,9 @@ export const uiElements = {
     // 以前の独立トグル #exifToggleButton / フローティングカード #exifFloatCard は廃止。
     exifDataContainer: document.getElementById('exifDataContainer'),
 
-    // 文字レイヤー（撮影日・Exif情報・自由テキストを統一UIで扱う。5.x節「テキストUI統合」参照）
+    // テキストレイヤー（撮影日・Exif・自由テキストを1本の layers[] で扱う。バケット4 / D-1・D-3）
     textLayersListContainer: document.getElementById('textLayersList'),
-    addCustomTextButton: document.getElementById('addCustomTextButton'),
+    addTextLayerButton: document.getElementById('addTextLayerButton'),
     textLayerSettingsPanel: document.getElementById('textLayerSettingsPanel'),
 
     // プリセットタブ
@@ -572,166 +575,225 @@ function updateFrameSettingsVisibility() {
     }
 }
 
-// --- 文字レイヤー（撮影日・Exif情報・自由テキスト）の統一UI ---
-// textRenderer.js/textAdapter.jsでは既にこの3種類は同じ仕組み（固定id 'text-date'/'text-exif'、
-// またはcustomTexts[]の各id）で統一的に扱われている。UI側もこれに合わせ、1つのチップリストと
-// 1つの設定パネルで、種類ごとに異なる部分（書式/Exif項目/自由記述）だけを切り替える構成にする。
+// --- テキストレイヤー（撮影日・Exif・自由テキストを1本の layers[] で扱う。バケット4 / D-1・D-3） ---
+// 各レイヤーの content は「文字列と動的トークン（{ field:'date'|'exif' }）の並び」。種類(kind)フィールドは
+// 持たず、リスト行のバッジ等は content から導出する（utils/textContent.js）。追加の導線は
+// 「＋ テキストを追加」→ 作成フォーム（未確定の下書き textDraft）→「追加」で確定、の順。
 
-const FIXED_TEXT_LAYERS = [
-    { id: 'text-date', kind: 'date', label: '撮影日' },
-    { id: 'text-exif', kind: 'exif', label: 'Exif情報' }
-];
+// 未確定の下書きレイヤー。null なら作成フォームは閉じている。
+let textDraft = null;
 
-/** idから設定オブジェクトと種類(kind)を取得する（textAdapter.jsのresolveLayer()と同じ考え方） */
-function resolveTextLayer(state, id) {
-    const fixed = FIXED_TEXT_LAYERS.find(f => f.id === id);
-    if (fixed) return { settings: state.textSettings[fixed.kind], kind: fixed.kind };
-    const layer = state.textSettings.customTexts.find(t => t.id === id);
-    return layer ? { settings: layer, kind: 'custom' } : null;
+/** 新規テキストレイヤーの下書き（stateManager の TEXT_LAYER_DEFAULTS と揃える）。 */
+function makeTextDraft() {
+    return {
+        content: [''],
+        textAlign: 'center',
+        font: googleFonts[0].displayName,
+        size: controlsConfig.textLayerSize.defaultValue,
+        color: '#333333',
+        opacity: 1,
+        position: 'middle-center',
+        offsetX: 0,
+        offsetY: 0,
+        rotation: 0,
+    };
 }
 
-/** 変更を種類に応じた書き戻し先へ振り分ける（textAdapter.jsのapplyChanges()と同じパターン） */
-function applyTextLayerChanges(id, kind, changes) {
-    if (kind === 'date') updateState({ textSettings: { date: changes } });
-    else if (kind === 'exif') updateState({ textSettings: { exif: changes } });
-    else updateCustomTextLayer(id, changes);
+/** 「＋ テキストを追加」: 作成フォームを開く。 */
+function enterTextCreateMode() {
+    textDraft = makeTextDraft();
+    if (selectionStore.getSelectedId() !== null) selectionStore.setSelectedId(null);
+    renderTextLayersList();
+    renderTextLayerSettingsPanel();
 }
 
-/** サイズのクランプ範囲は種類ごとに異なる（textAdapter.jsのgetSizeConfigKey()と同じ対応） */
-function sizeConfigKeyForKind(kind) {
-    if (kind === 'date') return 'textDateSize';
-    if (kind === 'exif') return 'textExifSize';
-    return 'textFreeSize';
+/** 作成フォームの「キャンセル」: 下書きを捨てて閉じる。 */
+function cancelTextCreateMode() {
+    textDraft = null;
+    renderTextLayersList();
+    renderTextLayerSettingsPanel();
 }
 
-/** レイヤー一覧（チップ）を再描画する。撮影日・Exifは常設チップとして先頭に表示する。 */
+/** 作成フォームの「追加」: 下書きを確定してレイヤー化し、そのレイヤーを選択する。 */
+function commitTextDraft() {
+    if (!textDraft) return;
+    if (contentIsEmpty(textDraft.content)) {
+        alert('テキストの内容を入力するか、「撮影日」「Exif」を差し込んでください。');
+        return;
+    }
+    const { content, ...style } = textDraft;
+    const id = addTextLayer({ content, ...style });
+    textDraft = null;
+    selectionStore.setSelectedId(id); // onSelectionChange がリスト・設定パネルを再描画
+}
+
+/** ハンドルを掴んでリスト行を縦にドラッグ並べ替えできるようにする汎用ヘルパー（Exif 項目リストでも使う）。 */
+function attachListDragHandle(handle, row, container, rowSelector, onCommit) {
+    handle.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        row.classList.add('dragging');
+        const onMove = (moveEvent) => {
+            const rows = Array.from(container.querySelectorAll(rowSelector)).filter(r => r !== row);
+            const afterRow = rows.find(r => {
+                const rect = r.getBoundingClientRect();
+                return moveEvent.clientY < rect.top + rect.height / 2;
+            });
+            if (afterRow) container.insertBefore(row, afterRow);
+            else container.appendChild(row);
+        };
+        const onUp = () => {
+            row.classList.remove('dragging');
+            document.removeEventListener('pointermove', onMove);
+            document.removeEventListener('pointerup', onUp);
+            onCommit();
+        };
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+    });
+}
+
+/** レイヤー一覧を再描画する。行 = 掴み手／種類バッジ／内容プレビュー／表示トグル／削除。 */
 function renderTextLayersList() {
     const container = uiElements.textLayersListContainer;
     if (!container) return;
     const state = getState();
     const selectedId = selectionStore.getSelectedId();
+    const layers = state.textSettings.layers || [];
     container.innerHTML = '';
 
-    FIXED_TEXT_LAYERS.forEach(fixed => {
-        const chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className = 'custom-text-chip' + (fixed.id === selectedId ? ' selected' : '');
-        if (!state.textSettings[fixed.kind].enabled) chip.classList.add('disabled');
+    if (layers.length === 0) {
+        const hint = document.createElement('p');
+        hint.className = 'custom-text-empty-hint';
+        hint.textContent = 'まだテキストがありません。「＋ テキストを追加」で作成します。';
+        container.appendChild(hint);
+        return;
+    }
 
-        const label = document.createElement('span');
-        label.textContent = fixed.label;
-        chip.appendChild(label);
+    layers.forEach((layer) => {
+        const row = document.createElement('div');
+        row.className = 'text-layer-row'
+            + (layer.id === selectedId && !textDraft ? ' selected' : '')
+            + (layer.enabled ? '' : ' disabled');
+        row.dataset.layerId = layer.id;
 
-        chip.addEventListener('click', () => selectionStore.setSelectedId(fixed.id));
-        container.appendChild(chip);
-    });
+        const grip = document.createElement('span');
+        grip.className = 'text-layer-grip';
+        grip.textContent = '⠿';
+        grip.title = 'ドラッグで並べ替え（＝重なり順）';
+        row.appendChild(grip);
 
-    state.textSettings.customTexts.forEach((layer, index) => {
-        const chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className = 'custom-text-chip' + (layer.id === selectedId ? ' selected' : '');
-        if (!layer.enabled) chip.classList.add('disabled');
+        const hasExif = contentHasExif(layer.content);
+        const badge = document.createElement('span');
+        badge.className = 'text-layer-badge' + (hasExif ? ' exif' : '');
+        badge.textContent = hasExif ? 'Exif' : 'T';
+        row.appendChild(badge);
 
-        const label = document.createElement('span');
-        const preview = (layer.text || '').trim();
-        label.textContent = preview ? preview.slice(0, 8) : `テキスト${index + 1}`;
-        chip.appendChild(label);
+        const preview = document.createElement('span');
+        preview.className = 'text-layer-preview';
+        const label = contentPreviewLabel(layer.content).replace(/\s+/g, ' ').trim();
+        preview.textContent = label || '(空のテキスト)';
+        row.appendChild(preview);
 
-        const del = document.createElement('span');
-        del.className = 'custom-text-chip-delete';
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'text-layer-toggle';
+        toggle.textContent = layer.enabled ? '●' : '○';
+        toggle.title = layer.enabled ? '表示中（クリックで隠す）' : '非表示（クリックで表示）';
+        toggle.setAttribute('aria-pressed', String(layer.enabled));
+        toggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            updateTextLayer(layer.id, { enabled: !layer.enabled });
+            renderTextLayersList();
+        });
+        row.appendChild(toggle);
+
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'text-layer-delete';
         del.textContent = '×';
         del.title = '削除';
         del.addEventListener('click', (e) => {
             e.stopPropagation();
             selectionStore.clearSelectionIfMatches(layer.id);
-            removeCustomTextLayer(layer.id);
+            removeTextLayer(layer.id);
             renderTextLayersList();
             renderTextLayerSettingsPanel();
         });
-        chip.appendChild(del);
+        row.appendChild(del);
 
-        chip.addEventListener('click', () => selectionStore.setSelectedId(layer.id));
-        container.appendChild(chip);
+        row.addEventListener('click', () => {
+            if (textDraft) textDraft = null;
+            selectionStore.setSelectedId(layer.id);
+        });
+
+        attachListDragHandle(grip, row, container, '.text-layer-row', () => {
+            const order = Array.from(container.querySelectorAll('.text-layer-row')).map(r => r.dataset.layerId);
+            reorderTextLayers(order);
+        });
+
+        container.appendChild(row);
     });
 }
 
-/** 選択中レイヤーの設定パネルを丸ごと再構築する。選択変更・追加・削除時に呼ぶ（毎ドラッグでは呼ばない）。 */
+/**
+ * 設定パネルを丸ごと再構築する。作成モード（下書き）／編集モード（選択中レイヤー）／未選択で切り替える。
+ * 選択変更・追加・削除・作成フォーム開閉時に呼ぶ（毎ドラッグでは呼ばない）。
+ */
 function renderTextLayerSettingsPanel() {
     const panel = uiElements.textLayerSettingsPanel;
     if (!panel) return;
-    const state = getState();
-    const selectedId = selectionStore.getSelectedId();
-    const resolved = selectedId ? resolveTextLayer(state, selectedId) : null;
 
-    if (!resolved) {
-        panel.innerHTML = '<p class="custom-text-empty-hint">上のリストからテキストを選択、または「+ テキストを追加」で新規作成してください。</p>';
+    if (textDraft) {
+        buildTextEditor(panel, 'create', null);
         return;
     }
-    const { settings, kind } = resolved;
-    const id = selectedId;
-
-    const alignRadiosHtml = `
-        <div class="form-row-simple" style="justify-content: space-around;">
-            <div class="radio-group"><input type="radio" id="textLayerAlignLeft" name="textLayerAlign" value="left"><label for="textLayerAlignLeft">左寄せ</label></div>
-            <div class="radio-group"><input type="radio" id="textLayerAlignCenter" name="textLayerAlign" value="center"><label for="textLayerAlignCenter">中央</label></div>
-            <div class="radio-group"><input type="radio" id="textLayerAlignRight" name="textLayerAlign" value="right"><label for="textLayerAlignRight">右寄せ</label></div>
-        </div>`;
-
-    let kindSpecificHtml;
-    if (kind === 'date') {
-        // 撮影日はExifから自動生成される表示のため、水平配置ラジオは持たない（7.5節参照）
-        kindSpecificHtml = `
-        <div class="form-row-simple">
-            <label for="textLayerDateFormat">書式:</label>
-            <select id="textLayerDateFormat">
-                <option value="">プリセットから選択...</option>
-                <option value="YYYY.MM.DD">YYYY.MM.DD</option>
-                <option value="YYYY/MM/DD">YYYY/MM/DD</option>
-                <option value="YY/MM/DD">YY/MM/DD</option>
-                <option value="YY.MM.DD">YY.MM.DD</option>
-                <option value="YYYY年MM月DD日">YYYY年MM月DD日</option>
-                <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-                <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-                <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-            </select>
-        </div>
-        <div class="form-row-simple">
-            <label for="textLayerDateFormatCustom">自由入力:</label>
-            <input type="text" id="textLayerDateFormatCustom" placeholder="例: YYYY.MM.DD">
-        </div>
-        <p class="custom-text-drag-hint">YYYY・YY・MM・DDを組み合わせて自由に書式を指定できます（プリセットを選ぶと自由入力欄にも反映されます）。</p>`;
-    } else if (kind === 'exif') {
-        kindSpecificHtml = `
-        <fieldset>
-            <legend>表示項目</legend>
-            <p class="custom-text-drag-hint">クリックで項目を追加し、追加した項目はドラッグで並び順を変更できます。</p>
-            <div class="exif-available-list" id="textLayerExifAvailableList"></div>
-            <div class="exif-used-list" id="textLayerExifUsedList"></div>
-            <div class="form-row-simple"><label>プレビュー:</label></div>
-            <textarea id="textLayerExifPreview" rows="2" class="exif-preview-textarea" readonly></textarea>
-        </fieldset>
-        ${alignRadiosHtml}`;
-    } else {
-        kindSpecificHtml = `
-        <div class="form-row-simple">
-            <textarea id="textLayerCustomArea" rows="3"
-                style="width: 100%; font-family: var(--font-mono); padding: 0.4rem; border-radius: 4px; border: 1px solid var(--border);"></textarea>
-        </div>
-        ${alignRadiosHtml}`;
+    const selectedId = selectionStore.getSelectedId();
+    const layer = selectedId
+        ? (getState().textSettings.layers || []).find(l => l.id === selectedId)
+        : null;
+    if (!layer) {
+        panel.innerHTML = '<p class="custom-text-empty-hint">リストからテキストを選ぶと、ここで編集できます。</p>';
+        return;
     }
+    buildTextEditor(panel, 'edit', layer.id);
+}
 
+/**
+ * テキスト編集フォームを組み立てる。mode='create' は下書き textDraft を編集（「追加」まで state に触れない）、
+ * mode='edit' は選択中レイヤーをライブ編集する。フィールド構成は両モード共通（D-3: 全共通の1セット）。
+ */
+function buildTextEditor(panel, mode, layerId) {
+    const isCreate = mode === 'create';
+    const model = isCreate
+        ? textDraft
+        : (getState().textSettings.layers || []).find(l => l.id === layerId);
+    if (!model) { panel.innerHTML = ''; return; }
+
+    // create は下書きを直接いじる（再描画・state 更新なし）。edit は updateTextLayer 経由でライブ反映。
+    const apply = (changes) => {
+        if (isCreate) Object.assign(textDraft, changes);
+        else updateTextLayer(layerId, changes);
+    };
+    const applyContent = (content) => {
+        apply({ content });
+        if (!isCreate) renderTextLayersList(); // 行のプレビュー文言を追従（パネルは作り直さない）
+    };
+
+    const align = (model.textAlign || 'center');
     panel.innerHTML = `
-        <div class="form-row-simple">
-            <label for="textLayerEnabled">表示する:</label>
-            <input type="checkbox" id="textLayerEnabled">
+        ${isCreate ? '<p class="text-editor-title">新しいテキスト</p>' : ''}
+        <div class="text-content-editor"></div>
+        <div class="form-row-simple" style="justify-content: space-around;">
+            <div class="radio-group"><input type="radio" name="textLayerAlign" id="textLayerAlignLeft" value="left"><label for="textLayerAlignLeft">左</label></div>
+            <div class="radio-group"><input type="radio" name="textLayerAlign" id="textLayerAlignCenter" value="center"><label for="textLayerAlignCenter">中</label></div>
+            <div class="radio-group"><input type="radio" name="textLayerAlign" id="textLayerAlignRight" value="right"><label for="textLayerAlignRight">右</label></div>
         </div>
-        ${kindSpecificHtml}
         <div class="form-row-simple">
             <label for="textLayerFont">フォント:</label>
             <select id="textLayerFont"></select>
         </div>
         <div class="form-row-slider">
-            <label for="textLayerSize">サイズ (%):</label>
+            <label for="textLayerSize">大きさ (%):</label>
             <input type="range" id="textLayerSize">
             <span id="textLayerSizeValue"></span>
         </div>
@@ -756,111 +818,368 @@ function renderTextLayerSettingsPanel() {
             <label for="textLayerRotation">回転 (°):</label>
             <input type="number" id="textLayerRotation" step="1">
         </div>
-        <p class="custom-text-drag-hint">プレビュー上でドラッグして位置を調整できます（横位置/縦位置欄はドラッグでもスクラブ操作できます。矢印キーでも微調整可）。選択中はプレビュー上に表示される角の四角ハンドルで拡大縮小、上の丸ハンドルで回転できます（回転は Shift 押しながらで15°刻み）。</p>
+        ${isCreate
+            ? `<div class="text-editor-actions">
+                   <button type="button" id="textDraftCommit" class="text-draft-commit">追加</button>
+                   <button type="button" id="textDraftCancel" class="text-draft-cancel">キャンセル</button>
+               </div>`
+            : `<p class="custom-text-drag-hint">プレビュー上でドラッグして位置を調整。四隅の■で拡大縮小、上の丸ハンドルで回転（Shift で15°刻み）。Delete で削除。</p>`}
     `;
 
     const el = (elId) => document.getElementById(elId);
 
-    // --- 共通フィールドの初期値設定 ---
-    el('textLayerEnabled').checked = settings.enabled;
-    populateFontSelect(el('textLayerFont'), settings.font);
+    // 内容エディタ（文字列＋トークン）
+    mountContentEditor(panel.querySelector('.text-content-editor'), () => model.content, applyContent);
 
-    const sizeConfig = controlsConfig[sizeConfigKeyForKind(kind)];
-    const sizeSlider = el('textLayerSize');
-    sizeSlider.min = sizeConfig.min; sizeSlider.max = sizeConfig.max; sizeSlider.step = sizeConfig.step;
-    sizeSlider.value = settings.size;
-    el('textLayerSizeValue').textContent = `${settings.size}%`;
-
-    el('textLayerColor').value = settings.color;
-    attachColorHistory(el('textLayerColor'));
-
-    const opacitySlider = el('textLayerOpacity');
-    opacitySlider.min = 0; opacitySlider.max = 1; opacitySlider.step = 0.01;
-    opacitySlider.value = settings.opacity;
-    el('textLayerOpacityValue').textContent = settings.opacity.toFixed(2);
-
-    el('textLayerOffsetX').value = settings.offsetX;
-    el('textLayerOffsetY').value = settings.offsetY;
-    el('textLayerRotation').value = settings.rotation || 0;
-
-    // --- 共通フィールドのイベント配線 ---
-    el('textLayerEnabled').addEventListener('change', (e) => {
-        applyTextLayerChanges(id, kind, { enabled: e.target.checked });
-        renderTextLayersList();
-        if (kind === 'exif' && e.target.checked) updateExifCustomText();
+    // 揃え
+    const alignInput = el(`textLayerAlign${align.charAt(0).toUpperCase()}${align.slice(1)}`);
+    if (alignInput) alignInput.checked = true;
+    ['Left', 'Center', 'Right'].forEach(dir => {
+        el(`textLayerAlign${dir}`).addEventListener('change', (e) => {
+            if (e.target.checked) apply({ textAlign: dir.toLowerCase() });
+        });
     });
+
+    // フォント
+    populateFontSelect(el('textLayerFont'), model.font);
     el('textLayerFont').addEventListener('change', async (e) => {
-        const selectedFontObject = googleFonts.find(f => f.displayName === e.target.value);
-        if (selectedFontObject) {
+        const fontObj = googleFonts.find(f => f.displayName === e.target.value);
+        if (fontObj) {
             try {
                 e.target.disabled = true;
-                await loadGoogleFonts(selectedFontObject.apiName);
+                await loadGoogleFonts(fontObj.apiName);
             } catch (error) {
-                alert(`フォントの読み込みに失敗しました: ${selectedFontObject.displayName}`);
+                alert(`フォントの読み込みに失敗しました: ${fontObj.displayName}`);
             } finally {
                 e.target.disabled = false;
             }
         }
-        applyTextLayerChanges(id, kind, { font: e.target.value });
+        apply({ font: e.target.value });
     });
-    el('textLayerSize').addEventListener('input', (e) => {
-        const value = parseFloat(e.target.value);
-        el('textLayerSizeValue').textContent = `${value}%`;
-        applyTextLayerChanges(id, kind, { size: value });
-    });
-    el('textLayerColor').addEventListener('input', (e) => {
-        applyTextLayerChanges(id, kind, { color: e.target.value });
-    });
-    el('textLayerOpacity').addEventListener('input', (e) => {
-        const value = parseFloat(e.target.value);
-        el('textLayerOpacityValue').textContent = value.toFixed(2);
-        applyTextLayerChanges(id, kind, { opacity: value });
-    });
-    enhanceAsScrubInput(el('textLayerOffsetX'), { sensitivity: 0.2, onChange: (v) => applyTextLayerChanges(id, kind, { offsetX: v }) });
-    enhanceAsScrubInput(el('textLayerOffsetY'), { sensitivity: 0.2, onChange: (v) => applyTextLayerChanges(id, kind, { offsetY: v }) });
-    enhanceAsScrubInput(el('textLayerRotation'), { sensitivity: 0.5, onChange: (v) => applyTextLayerChanges(id, kind, { rotation: v }) });
 
-    // --- 種類固有フィールドの初期値・イベント配線 ---
-    if (kind === 'date') {
-        const formatOptionExists = Array.from(el('textLayerDateFormat').options).some(o => o.value === settings.format);
-        el('textLayerDateFormat').value = formatOptionExists ? settings.format : '';
-        el('textLayerDateFormatCustom').value = settings.format;
+    // 大きさ
+    const sizeCfg = controlsConfig.textLayerSize;
+    const sizeSlider = el('textLayerSize');
+    sizeSlider.min = sizeCfg.min; sizeSlider.max = sizeCfg.max; sizeSlider.step = sizeCfg.step;
+    sizeSlider.value = model.size;
+    el('textLayerSizeValue').textContent = `${model.size}%`;
+    sizeSlider.addEventListener('input', (e) => {
+        const v = parseFloat(e.target.value);
+        el('textLayerSizeValue').textContent = `${v}%`;
+        apply({ size: v });
+    });
 
-        el('textLayerDateFormat').addEventListener('change', (e) => {
-            const value = e.target.value;
-            if (!value) return; // 「プリセットから選択...」を選んだ場合は何もしない
-            applyTextLayerChanges(id, kind, { format: value });
-            el('textLayerDateFormatCustom').value = value;
+    // 文字色
+    el('textLayerColor').value = model.color;
+    attachColorHistory(el('textLayerColor'));
+    el('textLayerColor').addEventListener('input', (e) => apply({ color: e.target.value }));
+
+    // 不透明度
+    const opacitySlider = el('textLayerOpacity');
+    const opaCfg = controlsConfig.textOpacity;
+    opacitySlider.min = opaCfg.min; opacitySlider.max = opaCfg.max; opacitySlider.step = opaCfg.step;
+    opacitySlider.value = model.opacity;
+    el('textLayerOpacityValue').textContent = Number(model.opacity).toFixed(2);
+    opacitySlider.addEventListener('input', (e) => {
+        const v = parseFloat(e.target.value);
+        el('textLayerOpacityValue').textContent = v.toFixed(2);
+        apply({ opacity: v });
+    });
+
+    // オフセット・回転
+    el('textLayerOffsetX').value = model.offsetX;
+    el('textLayerOffsetY').value = model.offsetY;
+    el('textLayerRotation').value = model.rotation || 0;
+    enhanceAsScrubInput(el('textLayerOffsetX'), { sensitivity: 0.2, onChange: (v) => apply({ offsetX: v }) });
+    enhanceAsScrubInput(el('textLayerOffsetY'), { sensitivity: 0.2, onChange: (v) => apply({ offsetY: v }) });
+    enhanceAsScrubInput(el('textLayerRotation'), { sensitivity: 0.5, onChange: (v) => apply({ rotation: v }) });
+
+    if (isCreate) {
+        el('textDraftCommit').addEventListener('click', commitTextDraft);
+        el('textDraftCancel').addEventListener('click', cancelTextCreateMode);
+    }
+}
+
+/**
+ * 内容エディタ（contenteditable な1つの入力欄＋トークン差し込みボタン＋インライン書式/項目ピッカー）。
+ * getContent()/setContent(arr) で content 配列を出し入れする。トークンは contenteditable=false の
+ * インライン span（Backspace で1単位として消える）。
+ */
+function mountContentEditor(host, getContent, setContent) {
+    if (!host) return;
+    host.innerHTML =
+        '<div class="text-token-bar">'
+        + '<button type="button" class="text-token-add" data-field="date">＋ 撮影日</button>'
+        + '<button type="button" class="text-token-add" data-field="exif">＋ Exif</button>'
+        + '</div>'
+        + '<div class="text-content-field" contenteditable="true" role="textbox" aria-multiline="true" aria-label="テキストの内容"></div>'
+        + '<div class="text-content-preview" aria-live="polite"><span class="text-content-preview-label">表示</span><span class="text-content-preview-body"></span></div>'
+        + '<p class="text-content-preview-note custom-text-drag-hint" hidden>※ 撮影日・Exif は写真の Exif から表示されます（未読込のあいだは空欄）</p>'
+        + '<div class="text-token-picker" hidden></div>';
+
+    const field = host.querySelector('.text-content-field');
+    const previewBody = host.querySelector('.text-content-preview-body');
+    const previewNote = host.querySelector('.text-content-preview-note');
+    const picker = host.querySelector('.text-token-picker');
+    let pickerFor = null;
+
+    // 実際に描画される文字列（Exif 解決後）をライブ表示する。トークンで組み立てた結果が
+    // どう見えるか確認できるように（ユーザー要望）。
+    function updatePreview() {
+        const arr = serialize();
+        const exifData = getState().exifData;
+        const text = resolveContentText(arr, exifData);
+        previewBody.textContent = text.trim() !== '' ? text : '（表示するテキストがありません）';
+        previewBody.classList.toggle('is-empty', text.trim() === '');
+        previewNote.hidden = !(!exifData && (contentHasDate(arr) || contentHasExif(arr)));
+    }
+
+    function makeTokenEl(seg) {
+        const span = document.createElement('span');
+        span.className = 'text-token';
+        span.setAttribute('contenteditable', 'false');
+        span.dataset.field = seg.field;
+        if (seg.field === 'date') {
+            const fmt = seg.format || DEFAULT_DATE_FORMAT;
+            span.dataset.format = fmt;
+            span.textContent = `撮影日 ${fmt}`;
+        } else {
+            const items = Array.isArray(seg.items) ? seg.items : [];
+            span.dataset.items = JSON.stringify(items);
+            span.textContent = items.length ? `Exif（${items.length}項目）` : 'Exif（未選択）';
+        }
+        span.title = 'クリックで書式・項目を編集';
+        return span;
+    }
+
+    function paint() {
+        const content = getContent();
+        field.innerHTML = '';
+        const arr = (Array.isArray(content) && content.length) ? content : [''];
+        arr.forEach(seg => {
+            if (typeof seg === 'string') field.appendChild(document.createTextNode(seg));
+            else if (seg && seg.field) field.appendChild(makeTokenEl(seg));
         });
-        el('textLayerDateFormatCustom').addEventListener('input', (e) => {
-            const value = e.target.value;
-            applyTextLayerChanges(id, kind, { format: value });
-            const optionExists = Array.from(el('textLayerDateFormat').options).some(o => o.value === value);
-            el('textLayerDateFormat').value = optionExists ? value : '';
-        });
-    } else if (kind === 'exif') {
-        el(`textLayerAlign${settings.textAlign.charAt(0).toUpperCase()}${settings.textAlign.slice(1)}`).checked = true;
-        ['Left', 'Center', 'Right'].forEach(dir => {
-            el(`textLayerAlign${dir}`).addEventListener('change', (e) => {
-                if (e.target.checked) applyTextLayerChanges(id, kind, { textAlign: dir.toLowerCase() });
+        // 末尾がトークンだとその後ろにキャレットを置けないので、ゼロ幅スペースを1つ足す（serialize で除去）。
+        if (field.lastChild && field.lastChild.nodeType === Node.ELEMENT_NODE) {
+            field.appendChild(document.createTextNode('​'));
+        }
+    }
+
+    function serialize() {
+        const out = [];
+        // contenteditable は Enter で <div>／<br> を差し込むことがあるので、直下だけでなく再帰で辿る。
+        const walk = (parent) => {
+            parent.childNodes.forEach(node => {
+                if (node.nodeType === Node.TEXT_NODE) {
+                    const t = node.textContent.replace(/​/g, '');
+                    if (t) out.push(t);
+                    return;
+                }
+                if (node.nodeType !== Node.ELEMENT_NODE) return;
+                if (node.classList.contains('text-token')) {
+                    if (node.dataset.field === 'date') {
+                        out.push({ field: 'date', format: node.dataset.format || DEFAULT_DATE_FORMAT });
+                    } else {
+                        let items = [];
+                        try { items = JSON.parse(node.dataset.items || '[]'); } catch (e) { items = []; }
+                        out.push({ field: 'exif', items });
+                    }
+                    return;
+                }
+                if (node.tagName === 'BR') { out.push('\n'); return; }
+                if (node.tagName === 'DIV' && out.length) out.push('\n'); // ブロック区切り
+                walk(node);
             });
-        });
-        el('textLayerExifPreview').value = settings.customText;
-        // 「利用可能な項目」「使用する項目」リストの生成・配線はrenderExifItemsUI()に委譲
-        renderExifItemsUI();
-    } else {
-        el('textLayerCustomArea').value = settings.text;
-        el(`textLayerAlign${settings.textAlign.charAt(0).toUpperCase()}${settings.textAlign.slice(1)}`).checked = true;
-        el('textLayerCustomArea').addEventListener('input', debounce((e) => {
-            applyTextLayerChanges(id, kind, { text: e.target.value });
-            renderTextLayersList();
-        }, 300));
-        ['Left', 'Center', 'Right'].forEach(dir => {
-            el(`textLayerAlign${dir}`).addEventListener('change', (e) => {
-                if (e.target.checked) applyTextLayerChanges(id, kind, { textAlign: dir.toLowerCase() });
+        };
+        walk(field);
+        const merged = [];
+        for (const s of out) {
+            if (typeof s === 'string' && typeof merged[merged.length - 1] === 'string') merged[merged.length - 1] += s;
+            else merged.push(s);
+        }
+        return merged.length ? merged : [''];
+    }
+
+    const commit = () => { setContent(serialize()); updatePreview(); };
+
+    function closePicker() {
+        picker.hidden = true;
+        picker.innerHTML = '';
+        pickerFor = null;
+    }
+
+    function openPickerFor(tokenEl) {
+        pickerFor = tokenEl;
+        picker.hidden = false;
+        picker.innerHTML = '';
+        if (tokenEl.dataset.field === 'date') {
+            buildDateFormatPicker(picker, tokenEl.dataset.format || DEFAULT_DATE_FORMAT, (fmt) => {
+                tokenEl.dataset.format = fmt;
+                tokenEl.textContent = `撮影日 ${fmt}`;
+                commit();
             });
+        } else {
+            buildExifItemPicker(
+                picker,
+                () => { try { return JSON.parse(tokenEl.dataset.items || '[]'); } catch (e) { return []; } },
+                (arr) => {
+                    tokenEl.dataset.items = JSON.stringify(arr);
+                    tokenEl.textContent = arr.length ? `Exif（${arr.length}項目）` : 'Exif（未選択）';
+                    commit();
+                }
+            );
+        }
+    }
+
+    function insertToken(fieldName) {
+        const seg = fieldName === 'date'
+            ? { field: 'date', format: DEFAULT_DATE_FORMAT }
+            : { field: 'exif', items: DEFAULT_EXIF_ITEMS.slice() };
+        const tokenEl = makeTokenEl(seg);
+        field.focus();
+        const sel = window.getSelection();
+        let range;
+        if (sel && sel.rangeCount && field.contains(sel.anchorNode)) {
+            range = sel.getRangeAt(0);
+            range.deleteContents();
+        } else {
+            range = document.createRange();
+            range.selectNodeContents(field);
+            range.collapse(false);
+        }
+        range.insertNode(tokenEl);
+        const spacer = document.createTextNode('​');
+        tokenEl.after(spacer);
+        range.setStartAfter(spacer);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        commit();
+        openPickerFor(tokenEl);
+    }
+
+    host.querySelectorAll('.text-token-add').forEach(btn => {
+        btn.addEventListener('click', () => insertToken(btn.dataset.field));
+    });
+    field.addEventListener('input', () => {
+        if (pickerFor && !field.contains(pickerFor)) closePicker();
+        commit();
+    });
+    field.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            document.execCommand('insertText', false, '\n');
+        }
+    });
+    field.addEventListener('paste', (e) => {
+        e.preventDefault();
+        const t = (e.clipboardData || window.clipboardData).getData('text/plain');
+        document.execCommand('insertText', false, t);
+    });
+    field.addEventListener('click', (e) => {
+        const tok = e.target.closest('.text-token');
+        if (tok) openPickerFor(tok);
+        else if (pickerFor) closePicker();
+    });
+
+    paint();
+    updatePreview();
+}
+
+/** 撮影日トークンの書式ピッカー（プリセットボタン＋自由入力）。 */
+function buildDateFormatPicker(container, current, onPick) {
+    container.innerHTML = '<p class="text-token-picker-title">撮影日の書式</p>';
+    const row = document.createElement('div');
+    row.className = 'form-row-simple';
+    row.innerHTML = '<label for="dateFormatFree">自由入力:</label><input type="text" id="dateFormatFree" placeholder="例: YYYY.MM.DD">';
+    const free = row.querySelector('#dateFormatFree');
+    free.value = current;
+
+    const opts = document.createElement('div');
+    opts.className = 'date-format-opts';
+    DATE_FORMAT_PRESETS.forEach(fmt => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'date-format-opt' + (fmt === current ? ' on' : '');
+        b.textContent = fmt;
+        b.addEventListener('click', () => {
+            opts.querySelectorAll('.date-format-opt').forEach(x => x.classList.toggle('on', x === b));
+            free.value = fmt;
+            onPick(fmt);
+        });
+        opts.appendChild(b);
+    });
+    free.addEventListener('input', () => {
+        const v = free.value;
+        opts.querySelectorAll('.date-format-opt').forEach(x => x.classList.toggle('on', x.textContent === v));
+        onPick(v);
+    });
+
+    container.appendChild(opts);
+    container.appendChild(row);
+    container.insertAdjacentHTML('beforeend',
+        '<p class="custom-text-drag-hint">YYYY・YY・MM・DD を組み合わせて指定できます。</p>');
+}
+
+/** Exif トークンの項目ピッカー（クリックで追加、×で削除、ドラッグで並べ替え）。 */
+function buildExifItemPicker(container, getItems, setItems) {
+    container.innerHTML =
+        '<p class="text-token-picker-title">Exif の表示項目</p>'
+        + '<p class="custom-text-drag-hint">クリックで追加。追加後はドラッグで並べ替え、×で削除。</p>'
+        + '<div class="exif-available-list"></div>'
+        + '<div class="exif-used-list"></div>';
+    const availEl = container.querySelector('.exif-available-list');
+    const usedEl = container.querySelector('.exif-used-list');
+
+    function render() {
+        const items = getItems();
+        availEl.innerHTML = '';
+        exifTagDefinitions.filter(t => !items.includes(t.key)).forEach(tag => {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'exif-available-chip';
+            chip.textContent = `＋ ${tag.label}`;
+            chip.addEventListener('click', () => { setItems([...getItems(), tag.key]); render(); });
+            availEl.appendChild(chip);
+        });
+
+        usedEl.innerHTML = '';
+        if (items.length === 0) {
+            usedEl.innerHTML = '<p class="custom-text-empty-hint">上の一覧から項目を選んでください。</p>';
+            return;
+        }
+        items.forEach(key => {
+            const tag = exifTagDefinitions.find(t => t.key === key);
+            const row = document.createElement('div');
+            row.className = 'exif-used-row';
+            row.dataset.tagKey = key;
+
+            const handle = document.createElement('span');
+            handle.className = 'exif-drag-handle';
+            handle.textContent = '⠿';
+            row.appendChild(handle);
+
+            const label = document.createElement('span');
+            label.className = 'exif-used-label';
+            label.textContent = tag ? tag.label : key;
+            row.appendChild(label);
+
+            const rm = document.createElement('button');
+            rm.type = 'button';
+            rm.className = 'exif-used-remove';
+            rm.textContent = '×';
+            rm.title = '削除';
+            rm.addEventListener('click', () => { setItems(getItems().filter(k => k !== key)); render(); });
+            row.appendChild(rm);
+
+            attachListDragHandle(handle, row, usedEl, '.exif-used-row', () => {
+                setItems(Array.from(usedEl.querySelectorAll('.exif-used-row')).map(r => r.dataset.tagKey));
+            });
+            usedEl.appendChild(row);
         });
     }
+    render();
 }
 
 /**
@@ -869,11 +1188,11 @@ function renderTextLayerSettingsPanel() {
  * 入力中のフォーカスを奪わない。フォーカス中の欄は上書きしない（タイプ入力を妨げないため）。
  */
 function syncTextLayerLiveInputs(state) {
+    if (textDraft) return; // 作成フォーム編集中はライブ同期しない（state と無関係の下書き）
     const selectedId = selectionStore.getSelectedId();
     if (!selectedId) return;
-    const resolved = resolveTextLayer(state, selectedId);
-    if (!resolved) return;
-    const { settings } = resolved;
+    const settings = (state.textSettings.layers || []).find(l => l.id === selectedId);
+    if (!settings) return;
 
     const xInput = document.getElementById('textLayerOffsetX');
     const yInput = document.getElementById('textLayerOffsetY');
@@ -1114,172 +1433,11 @@ export function syncUIFromState(state) {
     syncTextLayerLiveInputs(state);
 }
 
-/**
- * textSettings.exif.items（ユーザーが選んだ項目とその並び順）から、
- * 実際にプレビュー・出力に描画されるcustomTextを組み立てて状態とプレビュー欄に反映する。
- * 並び順は固定のdisplayOrderではなく、items配列そのものの順序（=「使用する項目」リストの表示順）を使う。
- */
-export function updateExifCustomText(redrawCallback) {
-    const currentState = getState();
-    const { exifData, textSettings } = currentState;
-    const itemsToDisplay = textSettings.exif.items || [];
-
-    const displayedExifValues = [];
-
-    if (exifData) {
-        for (const itemKey of itemsToDisplay) {
-            const value = getExifValue(exifData, itemKey);
-            if (value) {
-                let displayValue = value;
-                if (itemKey === 'ISOSpeedRatings' && !String(value).toUpperCase().startsWith('ISO')) {
-                    displayValue = `ISO ${value}`;
-                }
-                displayedExifValues.push(displayValue);
-            }
-        }
-    }
-    const newCustomText = displayedExifValues.join('  ');
-
-    // StateとUIの両方を更新
-    updateState({ textSettings: { exif: { customText: newCustomText } } });
-    const previewTextarea = document.getElementById('textLayerExifPreview');
-    if (previewTextarea) {
-        previewTextarea.value = newCustomText;
-    }
-    if (redrawCallback) redrawCallback();
-}
-
-// ★追加: textRendererからgetExifValueヘルパー関数をこちらに移動（UIの責務のため）
-function getExifValue(exifDataFromState, itemKey) {
-    if (!exifDataFromState || typeof piexif === 'undefined') return '';
-    const zerothIFD = exifDataFromState["0th"]; const exifIFD = exifDataFromState["Exif"];
-    const ImageIFD_CONSTANTS = piexif.ImageIFD; const ExifIFD_CONSTANTS = piexif.ExifIFD;
-    if (!zerothIFD && !exifIFD) return '';
-    switch (itemKey) {
-        case 'Make': return (zerothIFD && ImageIFD_CONSTANTS && ImageIFD_CONSTANTS.Make !== undefined) ? decodeExifString(zerothIFD[ImageIFD_CONSTANTS.Make]) : '';
-        case 'Model': return (zerothIFD && ImageIFD_CONSTANTS && ImageIFD_CONSTANTS.Model !== undefined) ? decodeExifString(zerothIFD[ImageIFD_CONSTANTS.Model]) : '';
-        case 'LensModel': return (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.LensModel !== undefined) ? decodeExifString(exifIFD[ExifIFD_CONSTANTS.LensModel]) : '';
-        case 'FNumber': if (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.FNumber !== undefined) { const fVal = exifIFD[ExifIFD_CONSTANTS.FNumber]; if (fVal && Array.isArray(fVal) && fVal.length === 2 && fVal[1] !== 0) { return `f/${(fVal[0] / fVal[1]).toFixed(1)}`; } } return '';
-        case 'ExposureTime': if (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.ExposureTime !== undefined) { const etVal = exifIFD[ExifIFD_CONSTANTS.ExposureTime]; if (etVal && Array.isArray(etVal) && etVal.length === 2 && etVal[1] !== 0) { const et = etVal[0] / etVal[1]; if (et >= 1) return `${et.toFixed(1)}s`; if (et >= 0.1) return `${et.toFixed(2)}s`; return `1/${Math.round(1 / et)}s`; } } return '';
-        case 'ISOSpeedRatings': if (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.ISOSpeedRatings !== undefined) { const iso = exifIFD[ExifIFD_CONSTANTS.ISOSpeedRatings]; return iso ? `${Array.isArray(iso) ? iso[0] : iso}` : ''; } return '';
-        case 'FocalLength': if (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.FocalLength !== undefined) { const flVal = exifIFD[ExifIFD_CONSTANTS.FocalLength]; if (flVal && Array.isArray(flVal) && flVal.length === 2 && flVal[1] !== 0) { return `${Math.round(flVal[0] / flVal[1])}mm`; } } return '';
-        case 'ExposureBiasValue': if (exifIFD && ExifIFD_CONSTANTS && ExifIFD_CONSTANTS.ExposureBiasValue !== undefined) { const evVal = exifIFD[ExifIFD_CONSTANTS.ExposureBiasValue]; if (evVal && Array.isArray(evVal) && evVal.length === 2 && evVal[1] !== 0) { const ev = evVal[0] / evVal[1]; if (ev === 0) return '0EV'; return `${ev > 0 ? '+' : ''}${ev.toFixed(1)}EV`; } } return '';
-        default: return '';
-    }
-}
-
-/**
- * 「利用可能な項目」チップ一覧と「使用する項目」並び替えリストを再構築する。
- * 項目の追加・削除・並び替えのたびに呼ばれる。
- */
-function renderExifItemsUI() {
-    // 撮影日/自由テキスト選択中はExif専用の入れ物自体がDOMに存在しないため、その都度動的に取得する
-    // （renderTextLayerSettingsPanel()内でExif選択時にのみ生成される。5.x節「テキストUI統合」参照）
-    const availableContainer = document.getElementById('textLayerExifAvailableList');
-    const usedContainer = document.getElementById('textLayerExifUsedList');
-    if (!availableContainer || !usedContainer) return;
-
-    const items = getState().textSettings.exif.items || [];
-
-    // 利用可能な項目（クリックで「使用する項目」の末尾に追加）
-    availableContainer.innerHTML = '';
-    exifTagDefinitions
-        .filter(tag => !items.includes(tag.key))
-        .forEach(tag => {
-            const chip = document.createElement('button');
-            chip.type = 'button';
-            chip.className = 'exif-available-chip';
-            chip.textContent = `+ ${tag.label}`;
-            chip.addEventListener('click', () => {
-                const newItems = [...(getState().textSettings.exif.items || []), tag.key];
-                updateState({ textSettings: { exif: { items: newItems } } });
-                updateExifCustomText();
-                renderExifItemsUI();
-            });
-            availableContainer.appendChild(chip);
-        });
-
-    // 使用する項目（ドラッグで並び替え、×で削除）
-    usedContainer.innerHTML = '';
-    if (items.length === 0) {
-        usedContainer.innerHTML = '<p class="custom-text-empty-hint">上の一覧から項目をクリックして追加してください。</p>';
-        return;
-    }
-    items.forEach(key => {
-        const tag = exifTagDefinitions.find(t => t.key === key);
-        const row = document.createElement('div');
-        row.className = 'exif-used-row';
-        row.dataset.tagKey = key;
-
-        const handle = document.createElement('span');
-        handle.className = 'exif-drag-handle';
-        handle.textContent = '⠿';
-        row.appendChild(handle);
-
-        const label = document.createElement('span');
-        label.className = 'exif-used-label';
-        label.textContent = tag ? tag.label : key;
-        row.appendChild(label);
-
-        const removeBtn = document.createElement('button');
-        removeBtn.type = 'button';
-        removeBtn.className = 'exif-used-remove';
-        removeBtn.textContent = '×';
-        removeBtn.title = '削除';
-        removeBtn.addEventListener('click', () => {
-            const newItems = (getState().textSettings.exif.items || []).filter(k => k !== key);
-            updateState({ textSettings: { exif: { items: newItems } } });
-            updateExifCustomText();
-            renderExifItemsUI();
-        });
-        row.appendChild(removeBtn);
-
-        attachExifDragHandle(handle, row, usedContainer);
-
-        usedContainer.appendChild(row);
-    });
-}
-
-/**
- * 「使用する項目」リストの1行をドラッグで並び替えられるようにする。
- * ドラッグ中はDOM上のみで行を移動し（stateへの書き込みはしない）、pointerup時に
- * 最終的な並び順をまとめてstateへコミットする。
- * ドラッグ中に毎回state経由で再描画してしまうと、ドラッグ中の行のDOM要素自体が
- * 作り直されてポインタ操作が中断されてしまうため、この2段階方式にしている
- * （interaction/canvasInteraction.jsの拡大・回転ハンドルと同じ設計思想）。
- */
-function attachExifDragHandle(handle, row, container) {
-    handle.addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        row.classList.add('dragging');
-
-        const onMove = (moveEvent) => {
-            const rows = Array.from(container.querySelectorAll('.exif-used-row')).filter(r => r !== row);
-            const afterRow = rows.find(r => {
-                const rect = r.getBoundingClientRect();
-                return moveEvent.clientY < rect.top + rect.height / 2;
-            });
-            if (afterRow) {
-                container.insertBefore(row, afterRow);
-            } else {
-                container.appendChild(row);
-            }
-        };
-
-        const onUp = () => {
-            row.classList.remove('dragging');
-            document.removeEventListener('pointermove', onMove);
-            document.removeEventListener('pointerup', onUp);
-
-            const newOrder = Array.from(container.querySelectorAll('.exif-used-row')).map(r => r.dataset.tagKey);
-            updateState({ textSettings: { exif: { items: newOrder } } });
-            updateExifCustomText();
-        };
-
-        document.addEventListener('pointermove', onMove);
-        document.addEventListener('pointerup', onUp);
-    });
-}
+// バケット4: 撮影日 / Exif / 自由テキストの統合に伴い、updateExifCustomText()（Exif 表示テキストの
+// 事前組み立て）・getExifValue()・renderExifItemsUI()・attachExifDragHandle() は廃止した。
+// Exif 値の整形は exifHandler.getExifValue()、content → 文字列の解決は utils/textContent.js が担い、
+// Exif 項目ピッカーとリストのドラッグ並べ替えは mountContentEditor / buildExifItemPicker /
+// attachListDragHandle（上記）が引き継いでいる。
 
 const debounce = (func, delay) => {
     let timeout;
@@ -1516,16 +1674,11 @@ export function setupEventListeners(redrawCallback) {
     addColorInputListener(uiElements.frameBorderColorInput, 'frameSettings', 'border', 'color');
     addOptionChangeListener(uiElements.frameBorderStyleSelect, 'frameSettings', 'border', 'style');
 
-    // --- 文字入力タブ（撮影日・Exif情報・自由テキストの統一UI） ---
-    // レイヤー個別の設定UIはrenderTextLayerSettingsPanel()内で選択中レイヤーごとに配線されるため、
-    // ここでは「追加ボタン」と「選択変更に応じたUI再描画」のみを配線する。
-    if (uiElements.addCustomTextButton) {
-        uiElements.addCustomTextButton.addEventListener('click', () => {
-            const id = addCustomTextLayer();
-            selectionStore.setSelectedId(id);
-            renderTextLayersList();
-            renderTextLayerSettingsPanel();
-        });
+    // --- テキストタブ（バケット4 / D-1・D-3） ---
+    // レイヤー個別の設定UIは buildTextEditor() 内で配線されるため、ここでは「＋ テキストを追加」
+    // （作成フォームを開く）と「選択変更に応じたUI再描画」のみを配線する。
+    if (uiElements.addTextLayerButton) {
+        uiElements.addTextLayerButton.addEventListener('click', enterTextCreateMode);
     }
     selectionStore.onSelectionChange(() => {
         renderTextLayersList();

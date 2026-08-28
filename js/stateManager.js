@@ -80,38 +80,13 @@ let editState = {
             style: 'solid'
         }
     },
-    // 文字表示関連の設定を追加
+    // 文字表示関連の設定（バケット4 / D-1・D-3）。
+    // 撮影日・Exif・自由テキストを1本の layers[] に統合した。各レイヤーは content（文字列と
+    // 動的トークンの並び）＋見た目の設定を持ち、種類（kind）フィールドは持たない
+    // ——「Exif を含むか」等は content から導出する（utils/textContent.js）。
+    // 旧形式（date / exif / customTexts）のプリセットは applyPreset で migrateTextSettings() が変換する。
     textSettings: {
-        date: {
-            enabled: false,
-            format: 'YYYY.MM.DD',
-            font: googleFonts[0].displayName, // ★初期値をGoogle Fontsリストの最初のフォントに
-            size: 2,
-            color: '#000000', // 仕様書では白背景が多いので、日付は濃い色が良いかもしれないが、現状維持
-            opacity: 1,
-            position: 'bottom-left',
-            offsetX: 0,
-            offsetY: 0,
-            rotation: 0
-        },
-        exif: {
-            enabled: false,
-            // 並び順がそのまま表示順になる（uiController.jsのupdateExifCustomText参照）。
-            // 旧実装で固定表示順だった頃と同じ並びをデフォルトにしている。
-            items: ['Make', 'Model', 'LensModel', 'FNumber', 'ExposureTime', 'ISOSpeedRatings', 'FocalLength'],
-            customText: '', // itemsから自動生成される表示テキスト（uiController.jsのupdateExifCustomText参照。手動編集はできない）
-            textAlign: 'left', // 水平方向の配置 'left', 'center', 'right'
-            font: googleFonts[0].displayName, // 初期値をGoogle Fontsリストの最初のフォントに
-            size: 2,
-            color: '#000000',
-            opacity: 1,
-            position: 'bottom-right',
-            offsetX: 0,
-            offsetY: 0,
-            rotation: 0
-        },
-        // 自由テキストは可変長のレイヤー配列として保持する（1個目もaddCustomTextLayer()で追加される）
-        customTexts: []
+        layers: []
     },
     // 出力関連の設定を追加
     outputSettings: {
@@ -204,52 +179,125 @@ function updateState(updates, options = {}) {
     }
 }
 
-/**
- * 自由テキストレイヤーを1つ追加する
- * @returns {string} 追加されたレイヤーのid
- */
-function addCustomTextLayer() {
-    const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+function generateTextLayerId() {
+    return (typeof crypto !== 'undefined' && crypto.randomUUID)
         ? crypto.randomUUID()
         : `text-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    editState.textSettings.customTexts.push({
-        id,
-        enabled: true,
-        text: 'テキスト',
-        textAlign: 'center',
-        font: googleFonts[0].displayName,
-        size: 5,
-        color: '#333333',
-        opacity: 1,
-        position: 'middle-center',
-        offsetX: 0,
-        offsetY: 0,
-        rotation: 0
-    });
+}
+
+// 新規テキストレイヤーの既定値。D-3: 撮影日 / Exif / 自由テキストで別だった範囲・初期値を1本化。
+const TEXT_LAYER_DEFAULTS = {
+    enabled: true,
+    content: [''],
+    textAlign: 'center',
+    font: googleFonts[0].displayName,
+    size: 5,
+    color: '#333333',
+    opacity: 1,
+    position: 'middle-center',
+    offsetX: 0,
+    offsetY: 0,
+    rotation: 0
+};
+
+/**
+ * テキストレイヤーを1つ追加する（D-1: 作成フォームの「追加」で確定した内容が渡ってくる）。
+ * @param {Object} [partial] content や見た目の初期値。既定値へ上書きマージする。
+ * @returns {string} 追加されたレイヤーのid
+ */
+function addTextLayer(partial = {}) {
+    const id = generateTextLayerId();
+    const layer = { id, ...TEXT_LAYER_DEFAULTS, ...partial };
+    layer.content = (Array.isArray(layer.content) && layer.content.length) ? layer.content : [''];
+    editState.textSettings.layers.push(layer);
     notifyStateChange();
     return id;
 }
 
 /**
- * 自由テキストレイヤーを削除する
+ * テキストレイヤーを削除する（撮影日・Exif も含め、すべてのレイヤーが対象）。
  * @param {string} id
  */
-function removeCustomTextLayer(id) {
-    editState.textSettings.customTexts = editState.textSettings.customTexts.filter(t => t.id !== id);
+function removeTextLayer(id) {
+    editState.textSettings.layers = editState.textSettings.layers.filter(l => l.id !== id);
     notifyStateChange();
 }
 
 /**
- * 自由テキストレイヤーのプロパティを部分更新する
- * （customTextsは配列なので、updateState()の汎用deepMergeでは配列全体が置き換わってしまうため専用関数を用意している）
+ * テキストレイヤーのプロパティを部分更新する。
+ * （layers は配列なので、updateState() の汎用 deepMerge では配列全体が置き換わってしまうため専用関数を用意している）
  * @param {string} id
  * @param {Object} changes
  */
-function updateCustomTextLayer(id, changes) {
-    const layer = editState.textSettings.customTexts.find(t => t.id === id);
+function updateTextLayer(id, changes) {
+    const layer = editState.textSettings.layers.find(l => l.id === id);
     if (!layer) return;
     Object.assign(layer, changes);
     notifyStateChange();
+}
+
+/**
+ * テキストレイヤーの並び順（＝重なり順）を、指定された id の並びへ差し替える。
+ * リストのドラッグ並べ替えから使う。未知の id は無視し、指定に無い既存レイヤーは末尾へ温存する。
+ * @param {string[]} orderedIds
+ */
+function reorderTextLayers(orderedIds) {
+    const byId = new Map(editState.textSettings.layers.map(l => [l.id, l]));
+    const next = [];
+    for (const id of orderedIds) {
+        const layer = byId.get(id);
+        if (layer && !next.includes(layer)) next.push(layer);
+    }
+    for (const layer of editState.textSettings.layers) {
+        if (!next.includes(layer)) next.push(layer);
+    }
+    editState.textSettings.layers = next;
+    notifyStateChange();
+}
+
+/**
+ * 旧形式の textSettings（{ date, exif, customTexts }）を新形式（{ layers: [] }）へ変換する。
+ * localStorage に保存済みの旧プリセットを applyPreset で読んだときにだけ通る（editState 自体は保存されず、
+ * Undo 履歴はメモリ上で常に現行形式なので、変換はプリセット適用の入口1か所で足りる）。
+ * 撮影日・Exif は「有効だったものだけ」レイヤー化する（未使用の既定ブロックが空レイヤーとして
+ * 復活しないように）。自由テキストは全部レイヤー化する。
+ * @param {Object} ts
+ * @returns {{ layers: Array }}
+ */
+function migrateTextSettings(ts) {
+    if (!ts || typeof ts !== 'object') return { layers: [] };
+    if (Array.isArray(ts.layers)) return ts; // すでに新形式
+    const base = (src) => ({
+        id: generateTextLayerId(),
+        enabled: !!src.enabled,
+        textAlign: src.textAlign || 'center',
+        font: src.font || googleFonts[0].displayName,
+        size: typeof src.size === 'number' ? src.size : 5,
+        color: src.color || '#333333',
+        opacity: typeof src.opacity === 'number' ? src.opacity : 1,
+        position: src.position || 'middle-center',
+        offsetX: src.offsetX || 0,
+        offsetY: src.offsetY || 0,
+        rotation: src.rotation || 0
+    });
+    const layers = [];
+    if (ts.date && ts.date.enabled) {
+        layers.push({
+            ...base(ts.date),
+            textAlign: ts.date.textAlign || 'left',
+            content: [{ field: 'date', format: ts.date.format || 'YYYY.MM.DD' }]
+        });
+    }
+    if (ts.exif && ts.exif.enabled) {
+        layers.push({
+            ...base(ts.exif),
+            content: [{ field: 'exif', items: Array.isArray(ts.exif.items) ? ts.exif.items.slice() : [] }]
+        });
+    }
+    for (const c of Array.isArray(ts.customTexts) ? ts.customTexts : []) {
+        layers.push({ ...base(c), content: [typeof c.text === 'string' ? c.text : ''] });
+    }
+    return { layers };
 }
 
 /**
@@ -331,6 +379,6 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
 
 export {
     getState, updateState, addStateChangeListener, removeStateChangeListener, setImage,
-    addCustomTextLayer, removeCustomTextLayer, updateCustomTextLayer,
+    addTextLayer, removeTextLayer, updateTextLayer, reorderTextLayers, migrateTextSettings,
     EDITABLE_SETTINGS_KEYS
 };

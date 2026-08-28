@@ -404,8 +404,7 @@ export async function drawPreview(currentState, previewCanvas, previewCtx) { // 
     }
 
     // 7. テキスト描画
-    const hasAnyText = currentState.textSettings.date.enabled || currentState.textSettings.exif.enabled ||
-        (currentState.textSettings.customTexts || []).some(t => t.enabled);
+    const hasAnyText = (currentState.textSettings.layers || []).some(l => l.enabled);
     if (hasAnyText) {
         // Google Fonts のロードは別途考慮
         // プレビュー表示における写真の実際の短辺を渡し、フォント読み込みと描画を待つ
@@ -519,9 +518,9 @@ export async function renderFinal(currentState) { // async追加
     }
 
     // 7. テキスト描画
-    console.log("[CanvasRenderer] Attempting to draw text. date.enabled:", currentState.textSettings.date.enabled, "exif.enabled:", currentState.textSettings.exif.enabled, "basePhotoShortSideForTextPx:", photoShortSidePx);
-    const hasAnyTextFinal = currentState.textSettings.date.enabled || currentState.textSettings.exif.enabled ||
-        (currentState.textSettings.customTexts || []).some(t => t.enabled);
+    const enabledTextLayerCount = (currentState.textSettings.layers || []).filter(l => l.enabled).length;
+    console.log("[CanvasRenderer] Attempting to draw text. enabled layers:", enabledTextLayerCount, "basePhotoShortSideForTextPx:", photoShortSidePx);
+    const hasAnyTextFinal = enabledTextLayerCount > 0;
     if (hasAnyTextFinal) {
         // Google Fonts のロードは別途考慮
         // 出力解像度における写真の実際の短辺を渡す（renderFinalでは当たり判定は不要なので戻り値は使わない）
