@@ -261,8 +261,9 @@ range 属性2つの差し替えなので、Playwright スモークの通過を�
     `updateAspectRatioFromInputs` / `updateCropAspectRatioFromInputs`／`1×1`・フリー・オリジナルは向きだけ反転。
   - `#outputRotateButton` / `#cropRotateButton` の click に配線。旧 ⇄ ボタンのハンドラ（`swapAspectRatioButton` /
     `cropSwapAspectRatioButton`）と `uiElements` エントリを削除。
-  - `#cropSection` の click 除外を `INPUT`/`TEXTAREA` → `e.target.closest('input, textarea, button')` に
-    （回転ボタンのクリックで crop モードに入らないように）。
+  - `#cropSection` の click 除外を `INPUT`/`TEXTAREA` → `e.target.closest('input, textarea, .ratio-rotate-btn')` に。
+    ※ 最初 `... , button)` にしたら比率タイル（`<button class="ratio-tile">`）まで除外され、A-13 の「トリミングパネル
+    （タイル含む）クリックで crop モードへ」が壊れた（ユーザー報告）。回転ボタンだけをクラスで除外する形に修正。
   - `syncCropAspectUI`: `setValue` が向き変更で再描画しうるので `syncOriginalTileShape(state)` を setValue の**後**へ移動。
 - `style.css`: `.legend-text { flex:1 }` ＋ `.ratio-rotate-btn`（26px・`:hover` でアクセント・押下状態なし）。
 - 向きは常に保存文字列から導出し永続化しない。`editState` のキー・`layoutCalculator`・各レンダラは無変更。
@@ -285,7 +286,8 @@ range 属性2つの差し替えなので、Playwright スモークの通過を�
   （横長導出）／crop も同様／オリジナル選択中の回転は `original` のまま＋ミニ長方形が画像比を保つ／カスタム
   `7:3`→回転で `3:7`＋入力欄も入替／リセットボタン改名／説明文 `<p>` 無し／リセットで `baseMarginPercent`→5・
   `photoViewParams`→中央・スライダー→90／コンソールエラー無し。
-- **回帰**: `phase7b1-test.js` の G-4 ⇄ 連打テストを回転ボタン（`#outputRotateButton`）に置換して 61/61。
+- **回帰**: `phase7b1-test.js` の G-4 ⇄ 連打テストを回転ボタン（`#outputRotateButton`）に置換、A-13 に
+  「比率タイルのクリックで crop モードへ入る／回転ボタンのクリックでは入らない」の3チェックを追加して 64/64。
   `phase7b1-regress.js` は「16:9 タイル」を「縦長 `9:16` タイル → 回転で `16:9`」に書き換えて 18/18（+2）。
   `phase7b2-test.js` 27/27・`phase7b3-test.js` 24/24 変わらず。
 - **`phase7b35-shot.js`**: `phase7b35-portrait.png`（縦向き一覧）／`phase7b35-landscape.png`（両ピッカー回転後）。
@@ -294,7 +296,7 @@ range 属性2つの差し替えなので、Playwright スモークの通過を�
 
 - **バケット1（A-10 / A-11 / A-13 / G-4 / G-5 / G-6）完了。ユーザーのブラウザ目視も確認済み**。
 - **バケット2（E-8 / A-12）＋ バケット3（F-3 / F-4 / F-5）＋ バケット3.5（A-14 / E-9 / A-15 / A-16）実装・
-  Playwright 検証済み**（phase7b1 61/61・phase7b1-regress 18/18・phase7b2 27/27・phase7b3 24/24・phase7b35 26/26）。
+  Playwright 検証済み**（phase7b1 64/64・phase7b1-regress 18/18・phase7b2 27/27・phase7b3 24/24・phase7b35 26/26）。
   **ユーザーのブラウザ目視は次回**（レイアウトタブの3見出し・用語・プリセットツリー・比率ピッカーの向き
   切り替えと回転ボタンの手触り・「大きさと配置をリセット」）。
 - `spec.md`（3.1／5.3 比率タイルピッカーを A-14 対応に全面改稿／7.2／5.19／実装済み一覧）と `docs/roadmap.md`

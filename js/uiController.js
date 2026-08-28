@@ -1400,15 +1400,15 @@ export function setupEventListeners(redrawCallback) {
         uiElements.cropRotateButton.addEventListener('click', () => rotateRatioPicker('crop'));
     }
 
-    // 「トリミング」セクション内をクリックしたら、写真を選択して crop モードへ自動で入る
-    // （プレビュー上で選択済み写真を再タップするのと同じ。frozenFrame スナップショットは
-    // requestEnterCropMode が作る）。数値入力欄（カスタム幅高さ）とボタン（回転ボタン等）の
-    // クリックは除外して、数値入力・回転操作中にクロップオーバーレイが割り込まないようにする。
-    // Esc / Enter で select に戻る。
+    // 「写真のトリミング」セクション内をクリックしたら、写真を選択して crop モードへ自動で入る（A-13。
+    // プレビュー上で選択済み写真を再タップするのと同じ。frozenFrame スナップショットは requestEnterCropMode
+    // が作る）。**比率タイル（`<button class="ratio-tile">`）のクリックも crop モードへ入る**——A-13 の
+    // 当初仕様。除外するのは数値入力欄（カスタム幅高さ）と回転ボタン（`.ratio-rotate-btn`。向きの切り替えは
+    // メタ操作なので crop モードには入らない）だけ。Esc / Enter で select に戻る。
     const cropSection = document.getElementById('cropSection');
     if (cropSection) {
         cropSection.addEventListener('click', (e) => {
-            if (e.target.closest('input, textarea, button')) return;
+            if (e.target.closest('input, textarea, .ratio-rotate-btn')) return;
             requestEnterCropMode();
         });
     }
