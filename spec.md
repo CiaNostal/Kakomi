@@ -49,6 +49,17 @@ Kakomiは、写真にフレーム加工とテキストオーバーレイを追�
   - URL: `https://unpkg.com/piexifjs`
   - 用途: JPEG画像のExifメタデータ操作
 
+### アクセス解析（Cloudflare Web Analytics）
+- `index.html` の `<head>`（piexif.js の直後）に Cloudflare Web Analytics のビーコンを埋め込んでいる。
+  - `<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "…"}'>`
+  - 目的: GitHub Pages で公開したページの「いつ・どれくらいアクセスがあったか」の把握のみ。
+  - Cookie・localStorage・フィンガープリントを使わず、個人を追跡する ID も持たない（同意バナー不要）。
+    Google Analytics を避けたのは「重い・個人情報寄り・オーバースペック」という判断（`docs/session-log-2026-08-29-8.md`）。
+  - 計測は JS ビーコン方式のため、広告／トラッカーブロッカーや JS 無効の環境では計上されず、実数より少なめに出る。
+  - ビーコンは設定ホスト名（`cianostal.github.io`）からの POST のみ受け付ける。ローカル開発（`localhost:8420`）では
+    `https://cloudflareinsights.com/cdn-cgi/rum` への POST が CORS で弾かれ、コンソールに CORS エラーが 2 行出るが、
+    これは本番ドメインでは発生しない既知の想定内挙動。アプリ本体の動作には影響しない。
+
 ### フォント
 UI表示用とテキストオーバーレイ描画用は別系統のフォントで、混同しないよう分けて管理している。
 
