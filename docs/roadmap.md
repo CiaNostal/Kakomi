@@ -66,6 +66,7 @@
 | C-1 | 角丸「半径」と超楕円「次数n」を1つの「丸み」スライダー（`#frameRoundness`、0-100、右ほど丸い）に統合。角のスタイルは2択（角丸/超楕円、「なし」廃止＝丸み0 が実質「なし」）。角丸は `半径% = 丸み/2`、超楕円は角の詰まり `F=2^(-1/n)` を等間隔に刻む非線形マッピング（丸み0→n40、丸み100→n3。逆関数でプリセット位置復元）。モード切替は丸み位置を保持。`createSuperellipsePath` は `Math.round` を撤去し clamp のみ（非整数 n 可）。`layoutCalculator`・データモデル・Undo・`presetStore` は無変更 | `session-log-2026-08-28-5.md` |
 | A-5 | crop モード中は「キャンバスの外側」（`.canvas-area` のパディング／出力比率が縦長・横長のときのレターボックス）をクリックしてもクロップを確定できる。`initCanvasInteraction()` が `previewCanvas.closest('.canvas-area')` に `pointerdown`/`pointerup` を張り、`e.target !== previewCanvas` かつ crop モードのときだけ canvas 本体と同じ「短いタップ」判定で `exitCrop()`。select モードは無反応（キャンバス外クリックでの選択解除は対象外）。`?debug` 用に `window.__kakomiGetPhotoEditMode` を追加 | `session-log-2026-08-29.md` |
 | B-6 | 背景タイプに「別画像」を追加（単色／ぼかしに続く3つ目 `#bgTypeImage` = `backgroundType:'bgImage'`）。`editState.bgImage`（`EDITABLE_SETTINGS_KEYS` 外＝Undo・プリセット非対象。`getState()` のクローン時は `image` と同様に除外）に別途読み込む（`stateManager.setBackgroundImage` / `fileManager.processBackgroundImageFile`）。スライダー（拡大率・ぼかし・明るさ・彩度・位置）は `imageBlurBackgroundParams` を「ぼかし」と共有＝`drawBlurredImageBackground()` に別画像を全体で渡すだけ。別画像へ切替時、ぼかし既定 3 のままなら 0 へ寄せる。プレビュードラッグ位置調整も共有。プリセットに `bgImage` 型が入っていて画像未ロードなら単色にフォールバック | `session-log-2026-08-29-2.md` |
+| A-4 | クロップ確定後の写真を出力キャンバス内で回転（`photoViewParams.rotation`、度、-180〜180。`EDITABLE_SETTINGS_KEYS` の `photoViewParams` に含まれるので Undo・プリセットに自動追随）。操作は「大きさと配置」の「角度」スライダー（`#photoRotation`）＋ select モードの上端回転ハンドル（`photoCropStore` に `rotate` 座標追加、Shift で15°刻み、ダブルクリックで 0°）。`layoutCalculator` が**回転後の外接矩形＋余白**で出力キャンバスを取り直す＝写真は切れない〈仕様(a)〉。`destWidth/Height` は回転前のまま＝`canvasRenderer` が `drawPreview`／`renderFinal` で写真中心の `ctx.rotate` で包んで描く（装飾も一緒に回る）。余白・テキストの基準「写真短辺」は回転前で固定。crop モード中は回転を無視して素の写真でトリミング。`cropRect.js` は無変更 | `session-log-2026-08-29-3.md` |
 
 ダブルクリックでオフセットをリセットする案は「他の操作が暴発しそう」としてユーザー判断で見送り。
 
@@ -182,7 +183,8 @@ a5 / g1 / c1 / phase5 / phase7b4 / phase7b4-regress 回帰全通し）。上の�
 
 **バケット後の積み残し:** ~~C-1（超楕円スライダーの体感等間隔マッピング）~~ ✅ 完了（`docs/session-log-2026-08-28-5.md`）／
 ~~A-5（クロップ確定をキャンバス外クリックでも）~~ ✅ 完了（`docs/session-log-2026-08-29.md`）／
-A-4（クロップ後の写真を回転）／A-3（クロップ時に元画像を回転。最大規模）。
+~~A-4（クロップ後の写真を回転）~~ ✅ 完了（`docs/session-log-2026-08-29-3.md`）／
+A-3（クロップ時に切り出し前の元画像を回転。最大規模。仕様(a)＝クロップ窓を画像内に収まるよう自動で縮める）＋「切り抜きをまるごとリセット」操作。
 
 ---
 
@@ -203,19 +205,29 @@ A-4（クロップ後の写真を回転）／A-3（クロップ時に元画像�
 レイアウトタブを ① 出力アスペクト比 → ② トリミング → ③ 余白と配置 の3セクション（線区切り）に。
 余白（`baseMarginPercent`）を①から③へ分離。詳細は「完了済み」表と `docs/session-log-2026-08-27-5.md` §11。
 
-### A-3. クロップ時に「外側の写真」を回転できる機構
+### A-3. クロップ時に「外側の写真」を回転できる機構（次の着手候補）
 
 **要望:** crop モード中に、切り抜き前の元画像（枠の外も含む）を回転させたい（水平出し等）。
 
-**検討メモ（暫定）:** `cropSettings` に回転角を持たせ、`layoutCalculator` で「回転した元画像から矩形を切り出す」計算にする。
-`drawCropModeOverlay` の `whole` 描画にも回転を反映。中規模。回転後にはみ出す扱いを要検討。
+**方針（2026-08-29 合意）:** 傾いた画像が軸平行クロップ窓を覆いきれなくなったら、**(a) クロップ窓を画像内に
+収まるよう自動で縮める**（Lightroom 既定）。空き角を塗る (b) 案は不採用。`cropSettings` に回転角を持たせ、
+`layoutCalculator` で「回転した元画像から矩形を切り出す」計算（`drawImage` の source 4 数値では表せないので
+クリップ＋回転の別経路に）にする。`drawCropModeOverlay` の `whole` 描画にも回転を反映（画像が傾く／クロップ窓は
+軸平行のまま＋角度グリッド）。`cropRect.js` の resize/grow/clamp を回転空間で作り直し。**A-4 で用意した回転
+レンダラ・回転ハンドル操作・回転矩形の当たり判定・外接矩形サイズの `layoutCalculator` を土台に拡張する。**
+「切り抜きをまるごとリセット」操作もここで用意。最大規模。
 
-### A-4. クロップ後に写真をキャンバス内で回転できる
+### A-4.（完了）
 
-**要望:** crop 確定後、select モードで写真自体をキャンバス内で回転させたい。
-
-**検討メモ（暫定）:** テキストの回転ハンドル（`textHandleStore` / `interactionRegistry` / `utils/geometry.js` の `rotatePoint`）の仕組みを写真にも適用。
-A-3（切り出し元の回転）と A-4（出力枠内の回転）はレイヤーが違うので、両方要るか片方でよいか整理する。
+クロップ確定後の写真を出力キャンバス内で回転（`photoViewParams.rotation`）。「大きさと配置」の「角度」
+スライダー（`#photoRotation`、-180〜180、Shift ドラッグで 15° 刻み）＋ select モードで写真選択中に上端の
+回転ハンドル（`photoCropStore` に `rotate` 座標追加。テキストの回転ハンドル機構を流用）。`layoutCalculator` が
+回転後の外接矩形＋余白で出力キャンバスを取り直すので写真は切れない（仕様(a)）。`destWidth/Height` は回転前の
+ままで、`canvasRenderer` が `drawPreview`／`renderFinal` の写真描画ブロックを写真中心の `ctx.rotate` で包む
+（角丸・影・縁取りも一緒に回る）。余白・テキストの基準「写真短辺」は回転前で固定。crop モード中は回転を無視。
+`photoViewParams` は `EDITABLE_SETTINGS_KEYS` にあるので Undo・プリセットに自動追随。「大きさと配置をリセット」で
+`rotation` も 0 へ。`cropRect.js`・データモデルの他部分・`historyManager`・`presetStore` は無変更。
+詳細は「完了済み」表と `docs/session-log-2026-08-29-3.md`。
 
 ### A-5.（完了）
 
@@ -576,8 +588,15 @@ no-op に、`uiController.applyCropAspect` を内接 `fitRectToAspect` → 外�
   （Undo・プリセット非対象）に別読み込み、見え方・色調・位置は `imageBlurBackgroundParams` を「ぼかし」と共有、
   レンダラは `drawBlurredImageBackground()` に別画像を全体で渡すだけ。ぼかしレンダラが既にパラメータ化されて
   いたため中規模で収まった。b6-test 25/25 ＋ a5/g1/c1/phase5/phase7b4/phase7b4-regress 回帰全通し。
-  ユーザーのブラウザ目視も確認済み・push 済み）。**次は積み残し A-4（クロップ後の
-  写真をキャンバス内で回転）／A-3（クロップ時に切り出し前の元画像を回転・最大規模）。** 優先順位はユーザーと相談。
+  ユーザーのブラウザ目視も確認済み・push 済み）。
+- **A-4 完了**（`docs/session-log-2026-08-29-3.md`。クロップ後の写真を出力キャンバス内で回転
+  ＝`photoViewParams.rotation`。「角度」スライダー＋ select モードの上端回転ハンドル（Shift で15°刻み）。
+  `layoutCalculator` が回転後の外接矩形＋余白でキャンバスを取り直す＝写真は切れない〈仕様(a)〉。装飾も一緒に
+  回る。`photoViewParams` は追跡キーなので Undo・プリセットに自動追随。`cropRect.js` 無変更。a4-test 19/19 ＋
+  b6/a5/c1/g1/phase5/phase7b4/phase7b4-regress 回帰全通し。ユーザーのブラウザ目視も確認済み・push 済み）。
+  **次は A-3（crop モードで切り出し前の元画像を回転・最大規模。仕様(a)＝クロップ窓を自動で
+  縮める）＋「切り抜きをまるごとリセット」操作。** A-4 の回転レンダラ・回転ハンドル・外接矩形サイズを土台に
+  「拡張」として進める。
 - 比率タイルピッカー（`js/ui/ratioPicker.js`）は「形で見せて選ぶ」の再利用ネタ（C-1 で採った「感覚に合わせて曲げる」も同系）。
 - 「タブでプレビュー操作の意味を変える」系は、`tabManager.getActiveTab()` ＋ `canvasInteraction.js` の分岐に足していける。
   フェーズ4 で「パネルを畳んだ（`getActiveTab()`＝`null`）」状態が加わった＝写真ドラッグは枠内配置にフォールバックする。

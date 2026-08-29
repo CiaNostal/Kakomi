@@ -152,6 +152,22 @@ export function initCanvasInteraction(canvas) {
             cropExitCandidate: false
         };
 
+        // --- select モード: 上端の回転ハンドルのドラッグ = 写真の回転（A-4） ---
+        if (editMode === 'select' && photoSelected && cropHandles && cropHandles.rotate) {
+            const rh = cropHandles.rotate;
+            if (distance(x, y, rh.x, rh.y) <= HANDLE_HIT_RADIUS) {
+                dragState = {
+                    mode: 'photoRotate',
+                    center: cropHandles.center,
+                    startAngle: Math.atan2(y - cropHandles.center.y, x - cropHandles.center.x),
+                    startRotation: photoAdapter.getRotation()
+                };
+                canvas.setPointerCapture(e.pointerId);
+                canvas.classList.add('dragging-object');
+                return;
+            }
+        }
+
         // --- crop モード: L 字ハンドルでクロップ矩形をリサイズ / クロップ窓内で写真をパン ---
         if (editMode === 'crop' && photoSelected && cropHandles && cropHandles.whole) {
             let grabbedCorner = null;
@@ -313,6 +329,16 @@ export function initCanvasInteraction(canvas) {
             let newRotation = dragState.startRotation + deltaDeg;
             if (e.shiftKey) newRotation = Math.round(newRotation / 15) * 15; // Shiftで15度刻みにスナップ
             textAdapter.commitRotate(dragState.id, newRotation);
+            return;
+        }
+        if (dragState.mode === 'photoRotate') {
+            // A-4: 写真の回転ハンドルのドラッグ。テキストの rotate と同じ角度計算。
+            const { x, y } = toCanvasCoords(canvas, e.clientX, e.clientY);
+            const currentAngle = Math.atan2(y - dragState.center.y, x - dragState.center.x);
+            let deltaDeg = (currentAngle - dragState.startAngle) * 180 / Math.PI;
+            let newRotation = dragState.startRotation + deltaDeg;
+            if (e.shiftKey) newRotation = Math.round(newRotation / 15) * 15; // Shiftで15度刻みにスナップ
+            photoAdapter.commitRotate(newRotation);
             return;
         }
 

@@ -14,14 +14,16 @@
  * 座標変換に使う。
  *
  * textHandleStore.js と同じ「描画側が書き、操作側が読む」の一時状態パターン。
- * 写真の四隅ハンドルは回転しないため、textHandleStore と異なり回転ハンドルは持たない。
+ * A-4 で、select モードの写真には回転ハンドル（rotate）も持たせるようになった。四隅の座標も
+ * 回転適用後の画面 px で記録する（crop モードの L 字ハンドルは従来どおり回転なし）。
  */
 let cropHandles = null;
-// { corners: { tl, tr, bl, br }, center: {x,y},
+// { corners: { tl, tr, bl, br }, center: {x,y}, rotate?: {x,y},
 //   cropScreen?: {x,y,width,height}, whole?: {x,y,width,height} } | null
 
 /**
  * @param {{corners: {tl:{x,y},tr:{x,y},bl:{x,y},br:{x,y}}, center:{x:number,y:number},
+ *   rotate?:{x:number,y:number},
  *   cropScreen?:{x:number,y:number,width:number,height:number},
  *   whole?:{x:number,y:number,width:number,height:number}}|null} h
  */

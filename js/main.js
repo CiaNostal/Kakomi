@@ -9,6 +9,7 @@ import { processImageFile, processBackgroundImageFile, handleDownload } from './
 import { displayExifInfo } from './exifHandler.js';   // Exif表示用
 import { initializeTabs, onTabChange } from './tabManager.js';
 import { initCanvasInteraction } from './interaction/canvasInteraction.js';
+import { getCropHandles } from './interaction/photoCropStore.js';
 import * as selectionStore from './interaction/selectionStore.js';
 import * as photoEditModeStore from './interaction/photoEditModeStore.js';
 import { initHistory, recordStateChange, undo, redo, onHistoryChange, onSnapshotApplied } from './history/historyManager.js';
@@ -84,6 +85,8 @@ if (typeof location !== 'undefined' && new URLSearchParams(location.search).has(
         const bg = getState().bgImage;
         return bg ? { width: bg.width, height: bg.height } : null;
     };
+    // A-4 スモーク用。select モードの写真の四隅 ■ ／回転ハンドルの画面座標。
+    window.__kakomiGetCropHandles = getCropHandles;
 }
 
 // DOMContentLoadedイベントでアプリケーションを初期化

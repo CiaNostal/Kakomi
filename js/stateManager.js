@@ -37,7 +37,10 @@ let editState = {
     originalFileName: null,
     photoViewParams: {
         offsetX: 0.5,
-        offsetY: 0.5
+        offsetY: 0.5,
+        // A-4: クロップ確定後の写真をキャンバス内で回す角度（度、-180〜180）。
+        // 回転すると layoutCalculator が「回転後の外接矩形＋余白」で出力キャンバスを取り直す。
+        rotation: 0
     },
     outputTargetAspectRatioString: '1:1',
     baseMarginPercent: 5,
@@ -370,7 +373,7 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
     const crop = editState.cropSettings;
     if (isReplacingImage) {
         crop.rect = { ...FULL_RECT };
-        editState.photoViewParams = { offsetX: 0.5, offsetY: 0.5 };
+        editState.photoViewParams = { offsetX: 0.5, offsetY: 0.5, rotation: 0 };
     }
     if (!isValidRect(crop.rect)) {
         crop.rect = { ...FULL_RECT };

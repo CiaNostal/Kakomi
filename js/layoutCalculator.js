@@ -37,6 +37,8 @@ function calculateLayout(currentState) {
     const originalImgWidth = currentState.originalWidth;
     const originalImgHeight = currentState.originalHeight;
     const { offsetX, offsetY } = currentState.photoViewParams;
+    // A-4: クロップ後の写真をキャンバス内で回す角度（度）。
+    const photoRotationDeg = currentState.photoViewParams.rotation || 0;
 
     // 1. 構図調整設定に基づいて、元画像から切り出す領域を決定する。
     // cropSettings.rect は「元画像に対する割合」 { x, y, w, h }（0–1）で切り出し矩形を表す。
@@ -51,17 +53,29 @@ function calculateLayout(currentState) {
     // 描画サイズ = 切り出したサイズ（元の解像度を維持）
     const photoDrawWidthPx = sourceWidth;
     const photoDrawHeightPx = sourceHeight;
-    const currentPhotoAspectRatio = (photoDrawHeightPx === 0) ? 1 : photoDrawWidthPx / photoDrawHeightPx;
 
-    // 2. 基準値の計算
+    // A-4: 写真を回すと、キャンバスに収めるべきは「回転後の外接矩形」。
+    // 実際に drawImage するサイズ（photoDrawWidth/HeightPx）は回転前のまま＝レンダラが
+    // 写真中心まわりに ctx.rotate してから等倍で描く。ここでは外接矩形の寸法だけ別に持つ。
+    const rotRad = photoRotationDeg * Math.PI / 180;
+    const absCos = Math.abs(Math.cos(rotRad));
+    const absSin = Math.abs(Math.sin(rotRad));
+    const bboxWidthPx = photoDrawWidthPx * absCos + photoDrawHeightPx * absSin;
+    const bboxHeightPx = photoDrawWidthPx * absSin + photoDrawHeightPx * absCos;
+
+    // 出力アスペクト比 'original_photo' 用は「見た目の footprint」＝外接矩形の比率で合わせる。
+    const currentPhotoAspectRatio = (bboxHeightPx === 0) ? 1 : bboxWidthPx / bboxHeightPx;
+
+    // 2. 基準値の計算。余白・テキストの基準となる「写真短辺」は回転前の値で固定する
+    //    （回すたびに余白やテキストサイズの基準が変わらないように）。
     const photoShortSidePx = Math.min(photoDrawWidthPx, photoDrawHeightPx);
 
     // 3. 最小余白の計算
     const minMarginPx = Math.round(photoShortSidePx * (currentState.baseMarginPercent / 100));
 
-    // 4. 出力Canvasの寸法決定
-    const tempWidthWithMinMargin = photoDrawWidthPx + 2 * minMarginPx;
-    const tempHeightWithMinMargin = photoDrawHeightPx + 2 * minMarginPx;
+    // 4. 出力Canvasの寸法決定（外接矩形＋余白を基準にする）
+    const tempWidthWithMinMargin = bboxWidthPx + 2 * minMarginPx;
+    const tempHeightWithMinMargin = bboxHeightPx + 2 * minMarginPx;
     const tempAspectRatio = (tempHeightWithMinMargin === 0) ? 1 : tempWidthWithMinMargin / tempHeightWithMinMargin;
 
     let outputTargetAspectRatioValue;
@@ -99,25 +113,28 @@ function calculateLayout(currentState) {
         outputCanvasHeightPx = tempHeightWithMinMargin;
         outputCanvasWidthPx = Math.round(tempHeightWithMinMargin * outputTargetAspectRatioValue);
     }
-    outputCanvasWidthPx = Math.max(outputCanvasWidthPx, Math.round(photoDrawWidthPx));
-    outputCanvasHeightPx = Math.max(outputCanvasHeightPx, Math.round(photoDrawHeightPx));
+    outputCanvasWidthPx = Math.max(outputCanvasWidthPx, Math.round(bboxWidthPx));
+    outputCanvasHeightPx = Math.max(outputCanvasHeightPx, Math.round(bboxHeightPx));
     if (outputCanvasWidthPx <= 0) outputCanvasWidthPx = 1;
     if (outputCanvasHeightPx <= 0) outputCanvasHeightPx = 1;
 
-    // 5. 写真の描画位置決定 (出力枠内でのスライド)
-    const movableWidth = outputCanvasWidthPx - photoDrawWidthPx;
-    const movableHeight = outputCanvasHeightPx - photoDrawHeightPx;
+    // 5. 写真の描画位置決定 (出力枠内でのスライド)。
+    // offsetX/Y は「回転後の外接矩形」を可動範囲内で動かす割合。写真本体はその外接矩形の
+    // 中心に置き、レンダラが中心まわりに回す。回転 0 のときは bbox = 写真なので従来と一致する。
+    const movableWidth = outputCanvasWidthPx - bboxWidthPx;
+    const movableHeight = outputCanvasHeightPx - bboxHeightPx;
 
-    // offsetX, offsetY (0-1) を使って、可動範囲内で写真の左上座標を決定
-    const photoXonCanvasPx = movableWidth * offsetX;
-    const photoYonCanvasPx = movableHeight * offsetY;
+    const bboxXonCanvasPx = movableWidth * offsetX;
+    const bboxYonCanvasPx = movableHeight * offsetY;
+    const photoXonCanvasPx = bboxXonCanvasPx + (bboxWidthPx - photoDrawWidthPx) / 2;
+    const photoYonCanvasPx = bboxYonCanvasPx + (bboxHeightPx - photoDrawHeightPx) / 2;
 
-    // 各辺の余白の実際の値を計算（デバッグ用）
+    // 各辺の余白の実際の値を計算（デバッグ用。外接矩形基準）
     const actualMargins = {
-        left: photoXonCanvasPx,
-        right: outputCanvasWidthPx - (photoXonCanvasPx + photoDrawWidthPx),
-        top: photoYonCanvasPx,
-        bottom: outputCanvasHeightPx - (photoYonCanvasPx + photoDrawHeightPx)
+        left: bboxXonCanvasPx,
+        right: outputCanvasWidthPx - (bboxXonCanvasPx + bboxWidthPx),
+        top: bboxYonCanvasPx,
+        bottom: outputCanvasHeightPx - (bboxYonCanvasPx + bboxHeightPx)
     };
 
     return {
@@ -129,7 +146,9 @@ function calculateLayout(currentState) {
             destWidth: Math.round(photoDrawWidthPx),
             destHeight: Math.round(photoDrawHeightPx),
             destXonOutputCanvas: Math.round(photoXonCanvasPx),
-            destYonOutputCanvas: Math.round(photoYonCanvasPx)
+            destYonOutputCanvas: Math.round(photoYonCanvasPx),
+            // A-4: 写真中心まわりの回転角（度）。レンダラが drawImage 前に ctx.rotate する。
+            rotation: photoRotationDeg
         },
         outputCanvasConfig: {
             width: Math.round(outputCanvasWidthPx),

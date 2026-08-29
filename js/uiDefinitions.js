@@ -113,6 +113,9 @@ export const controlsConfig = {
     // size=100 → margin=0（最大）、size=90 → margin=5（既定）、size=15（下限）→ margin=255。
     // 下限 15 は marginToSize(300)≈13.0% より上なので、スライダー全域が実 margin に 1:1 対応する（不感帯なし）。
     photoSize: { defaultValue: 90, min: 15, max: 100, step: 0.5 },
+    // A-4: クロップ後の写真をキャンバス内で回す角度（度）。保存キーは photoViewParams.rotation。
+    // 全周（-180〜180）。Shift ドラッグで 15° スナップ（回転ハンドル操作時）。
+    photoRotation: { defaultValue: 0, min: -180, max: 180, step: 1 },
     // 背景編集タブ
     backgroundType: { defaultValue: 'color' }, // radio button のデフォルト選択値
     backgroundColor: { defaultValue: '#ffffff' }, // color input

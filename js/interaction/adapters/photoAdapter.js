@@ -36,9 +36,16 @@ const photoAdapter = {
         const outputHeight = state.outputCanvasConfig.height;
         const scale = (ctx && ctx.scale) || 1;
 
+        // A-4: offsetX/Y は「回転後の外接矩形」を可動範囲内で動かす割合（layoutCalculator と対応）。
+        const rot = (state.photoViewParams.rotation || 0) * Math.PI / 180;
+        const absCos = Math.abs(Math.cos(rot));
+        const absSin = Math.abs(Math.sin(rot));
+        const bboxWidth = destWidth * absCos + destHeight * absSin;
+        const bboxHeight = destWidth * absSin + destHeight * absCos;
+
         // 可動範囲（出力解像度基準）をプレビューpx空間に変換
-        const movableWidthPreview = (outputWidth - destWidth) * scale;
-        const movableHeightPreview = (outputHeight - destHeight) * scale;
+        const movableWidthPreview = (outputWidth - bboxWidth) * scale;
+        const movableHeightPreview = (outputHeight - bboxHeight) * scale;
 
         let offsetX = startValue.offsetX;
         let offsetY = startValue.offsetY;
@@ -53,6 +60,23 @@ const photoAdapter = {
 
     commit(id, changes) {
         updateState({ photoViewParams: { offsetX: changes.offsetX, offsetY: changes.offsetY } });
+    },
+
+    /** A-4: 回転ハンドルのドラッグ開始値。写真の現在の回転角（度）。 */
+    getRotation() {
+        return getState().photoViewParams.rotation || 0;
+    },
+
+    /**
+     * A-4: 回転ハンドルのドラッグによる写真の回転を反映する。
+     * 角度は (-180, 180] に正規化して 0.1° 単位に丸める（textAdapter.commitRotate と同じ扱い）。
+     * @param {number} newRotationDeg
+     */
+    commitRotate(newRotationDeg) {
+        let deg = newRotationDeg % 360;
+        if (deg > 180) deg -= 360;
+        if (deg <= -180) deg += 360;
+        updateState({ photoViewParams: { rotation: Math.round(deg * 10) / 10 } });
     },
 
     /**

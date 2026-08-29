@@ -48,6 +48,8 @@ export const uiElements = {
     customAspectRatioHeightInput: document.getElementById('customAspectRatioHeight'),
     baseMarginPercentInput: document.getElementById('baseMarginPercent'),
     baseMarginPercentValueSpan: document.getElementById('baseMarginPercentValue'),
+    photoRotationInput: document.getElementById('photoRotation'),           // A-4
+    photoRotationValueSpan: document.getElementById('photoRotationValue'),  // A-4
 
     // 背景編集タブ
     bgTypeColorRadio: document.getElementById('bgTypeColor'),
@@ -484,6 +486,8 @@ export function initializeUIFromState() {
     syncOutputAspectUI(state);
     // A-10: スライダーは「大きさ」（photoSize の min/max/step）で見せ、値は margin→size 変換して入れる。
     setupInputAttributesAndValue(uiElements.baseMarginPercentInput, 'photoSize', marginToSize(state.baseMarginPercent));
+    // A-4: 写真の回転角（度）。保存キーは photoViewParams.rotation。
+    setupInputAttributesAndValue(uiElements.photoRotationInput, 'photoRotation', state.photoViewParams.rotation || 0);
 
     // 背景設定
     if (uiElements.bgTypeColorRadio) uiElements.bgTypeColorRadio.checked = (state.backgroundType === 'color');
@@ -550,6 +554,14 @@ export function updateSliderValueDisplays() {
         // select モードの四隅■ハンドルのドラッグでもこの値は変わりうるため、入力欄の値もあわせて同期する。
         if (document.activeElement !== uiElements.baseMarginPercentInput) {
             uiElements.baseMarginPercentInput.value = String(sizePercent);
+        }
+    }
+    if (uiElements.photoRotationValueSpan && uiElements.photoRotationInput) {
+        // A-4: 回転ハンドルのドラッグでも変わるので、入力欄の値もあわせて同期する。
+        const deg = getState().photoViewParams.rotation || 0;
+        uiElements.photoRotationValueSpan.textContent = `${Math.round(deg)}°`;
+        if (document.activeElement !== uiElements.photoRotationInput) {
+            uiElements.photoRotationInput.value = String(deg);
         }
     }
     if (uiElements.bgScaleValueSpan && uiElements.bgScaleSlider) {
@@ -1689,6 +1701,9 @@ export function setupEventListeners(redrawCallback) {
             lastSizeTap = now;
         });
     }
+    // A-4: 写真の回転角スライダー。保存キーは photoViewParams.rotation（度）。
+    // ダブルクリックで 0° に戻るのは addNumericInputListener の共通処理。
+    addNumericInputListener(uiElements.photoRotationInput, 'photoRotation', 'photoViewParams', 'rotation');
     // ... (その他すべての addNumericInputListener と addColorInputListener の呼び出し) ...
     // 「配置をリセット」: 枠内位置（photoViewParams）を中央へ、かつクロップ矩形のパンを中央へ戻す。
     // 切り抜き範囲のサイズ・比率は変えない（docs/roadmap.md A-1）。
@@ -1700,7 +1715,7 @@ export function setupEventListeners(redrawCallback) {
             const state = getState();
             const rect = resolveCropRect(state.cropSettings, state.originalWidth, state.originalHeight);
             updateState({
-                photoViewParams: { offsetX: 0.5, offsetY: 0.5 },
+                photoViewParams: { offsetX: 0.5, offsetY: 0.5, rotation: 0 },
                 cropSettings: { rect: cropRectWithPan(rect, 0.5, 0.5) },
                 baseMarginPercent: controlsConfig.baseMarginPercent.defaultValue
             });

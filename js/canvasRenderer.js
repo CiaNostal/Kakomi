@@ -263,32 +263,66 @@ function drawCropModeOverlay(ctx, img, currentState, frozenFrame) {
 }
 
 /**
- * select モードで、選択中の写真の四隅に ■ リサイズハンドルを描く。
- * ドラッグは baseMarginPercent（余白＝枠に対する写真の見かけの大きさ）に対応する。
- * 座標は photoCropStore に記録し、crop モードの L 字ハンドルと同じ当たり判定経路で拾う。
+ * select モードで、選択中の写真の四隅に ■ リサイズハンドル、上端中央に回転ハンドル（丸）を描く。
+ * ■ のドラッグは baseMarginPercent（余白＝枠に対する写真の見かけの大きさ）、
+ * 丸のドラッグは photoViewParams.rotation（A-4）に対応する。
+ * 座標（回転適用後の画面 px）は photoCropStore に記録し、canvasInteraction.js が当たり判定に読む。
  * @param {CanvasRenderingContext2D} ctx
- * @param {{x:number,y:number,width:number,height:number}} box - 写真のバウンディングボックス（プレビューpx）
+ * @param {{x:number,y:number,width:number,height:number}} box - 写真のバウンディングボックス（回転前、プレビューpx）
+ * @param {number} [rotationDeg=0] - 写真の回転角（度）。■・丸・接続線ともこの角度で回して描く
  */
-function drawPhotoResizeHandles(ctx, box) {
-    const corners = {
+function drawPhotoResizeHandles(ctx, box, rotationDeg = 0) {
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    const cornersLocal = {
         tl: { x: box.x, y: box.y },
         tr: { x: box.x + box.width, y: box.y },
         bl: { x: box.x, y: box.y + box.height },
         br: { x: box.x + box.width, y: box.y + box.height }
     };
-    setCropHandles({ corners, center: { x: box.x + box.width / 2, y: box.y + box.height / 2 } });
+    const rotateLocal = { x: cx, y: box.y - ROTATE_HANDLE_OFFSET };
+    // 当たり判定用は回転適用後の画面座標で記録する。
+    const corners = {};
+    for (const k of ['tl', 'tr', 'bl', 'br']) {
+        corners[k] = rotatePoint(cornersLocal[k].x, cornersLocal[k].y, cx, cy, rotationDeg);
+    }
+    const rotateScreen = rotatePoint(rotateLocal.x, rotateLocal.y, cx, cy, rotationDeg);
+    setCropHandles({ corners, center: { x: cx, y: cy }, rotate: rotateScreen });
 
-    // 白塗り・黒フチ。明暗どちらの背景でも見えるように。
     ctx.save();
+    if (rotationDeg) {
+        ctx.translate(cx, cy);
+        ctx.rotate(rotationDeg * Math.PI / 180);
+        ctx.translate(-cx, -cy);
+    }
     ctx.setLineDash([]);
+
+    // 回転ハンドルへの接続線
+    ctx.strokeStyle = '#1877f2';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx, box.y);
+    ctx.lineTo(rotateLocal.x, rotateLocal.y);
+    ctx.stroke();
+
+    // 四隅の ■（白塗り・黒フチ。明暗どちらの背景でも見えるように）
     ctx.fillStyle = '#ffffff';
     ctx.strokeStyle = 'rgba(0,0,0,0.9)';
     ctx.lineWidth = 2;
-    for (const corner of Object.values(corners)) {
-        const hx = corner.x - CROP_HANDLE_SIZE / 2, hy = corner.y - CROP_HANDLE_SIZE / 2;
+    for (const c of Object.values(cornersLocal)) {
+        const hx = c.x - CROP_HANDLE_SIZE / 2, hy = c.y - CROP_HANDLE_SIZE / 2;
         ctx.fillRect(hx, hy, CROP_HANDLE_SIZE, CROP_HANDLE_SIZE);
         ctx.strokeRect(hx, hy, CROP_HANDLE_SIZE, CROP_HANDLE_SIZE);
     }
+
+    // 回転ハンドル（丸）
+    ctx.strokeStyle = '#1877f2';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(rotateLocal.x, rotateLocal.y, ROTATE_HANDLE_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
     ctx.restore();
 }
 
@@ -359,8 +393,12 @@ export async function drawPreview(currentState, previewCanvas, previewCtx) { // 
         interactionRegistry.register({ id: 'background', type: 'background', x: 0, y: 0, width: previewCanvas.width, height: previewCanvas.height });
     }
 
+    // A-4: 写真中心まわりの回転角（度）。crop モード中は回転を一時的に無視する
+    // （クロップ編集は回転前の素の写真で行う）。
+    const photoRotationDeg = photoEditModeStore.isCropMode() ? 0 : (currentState.photoViewParams.rotation || 0);
+
     if (img && sourceWidth > 0 && sourceHeight > 0 && photoWidth > 0 && photoHeight > 0) {
-        interactionRegistry.register({ id: 'photo', type: 'photo', x: photoX, y: photoY, width: photoWidth, height: photoHeight });
+        interactionRegistry.register({ id: 'photo', type: 'photo', x: photoX, y: photoY, width: photoWidth, height: photoHeight, rotation: photoRotationDeg });
 
         // 写真を選択中かつ crop モードのときだけ、PowerPoint 風トリミングのオーバーレイ
         // （元画像全体を暗く敷き、クロップ矩形の内側だけ明るく＋L字ハンドル）に切り替える。
@@ -372,6 +410,15 @@ export async function drawPreview(currentState, previewCanvas, previewCtx) { // 
             drawCropModeOverlay(ctx, img, currentState, frozenFrame);
         } else {
             ctx.save(); // 写真とその装飾のためのコンテキスト保存
+
+            // A-4: 写真中心まわりに回転（装飾＝角丸・影・縁取りも一緒に回る）。
+            if (photoRotationDeg) {
+                const pcx = photoX + photoWidth / 2;
+                const pcy = photoY + photoHeight / 2;
+                ctx.translate(pcx, pcy);
+                ctx.rotate(photoRotationDeg * Math.PI / 180);
+                ctx.translate(-pcx, -pcy);
+            }
 
             // 2. ドロップシャドウ描画 (写真本体より先)
             if (currentState.frameSettings.shadowEnabled && currentState.frameSettings.shadowType === 'drop') {
@@ -397,11 +444,11 @@ export async function drawPreview(currentState, previewCanvas, previewCtx) { // 
                 applyBorder(ctx, currentState.frameSettings.border, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight, photoShortSidePx);
             }
 
-            ctx.restore(); // 写真と装飾のためのコンテキスト復元 (クリッピング解除)
+            ctx.restore(); // 写真と装飾のためのコンテキスト復元 (クリッピング・回転の解除)
 
-            // select モードで写真選択中: 四隅に ■ リサイズハンドルを重ねる
+            // select モードで写真選択中: 四隅に ■ リサイズハンドル＋上に回転ハンドルを重ねる
             if (photoSelected) {
-                drawPhotoResizeHandles(ctx, { x: photoX, y: photoY, width: photoWidth, height: photoHeight });
+                drawPhotoResizeHandles(ctx, { x: photoX, y: photoY, width: photoWidth, height: photoHeight }, photoRotationDeg);
             }
         }
     }
@@ -491,6 +538,17 @@ export async function renderFinal(currentState) { // async追加
 
     if (img && sourceWidth > 0 && sourceHeight > 0) {
         ctx.save(); // 写真とその装飾のためのコンテキスト保存
+
+        // A-4: 写真中心まわりに回転（装飾も一緒に回る）。layoutCalculator が
+        // photoDrawConfig.rotation に角度を入れ、外接矩形＋余白で出力キャンバスを取り直している。
+        const finalRotationDeg = currentState.photoDrawConfig.rotation || 0;
+        if (finalRotationDeg) {
+            const pcx = photoX + photoWidth / 2;
+            const pcy = photoY + photoHeight / 2;
+            ctx.translate(pcx, pcy);
+            ctx.rotate(finalRotationDeg * Math.PI / 180);
+            ctx.translate(-pcx, -pcy);
+        }
 
         // 2. ドロップシャドウ描画
         if (currentState.frameSettings.shadowEnabled && currentState.frameSettings.shadowType === 'drop') {
