@@ -10,7 +10,7 @@
  */
 import { getState, updateState } from '../../stateManager.js';
 import { controlsConfig } from '../../uiDefinitions.js';
-import { resolveCropRect, resolveCropAspectValue } from '../../utils/cropRect.js';
+import { resolveCropRect, resolveCropAspectValue, clampRectToRotatedImage } from '../../utils/cropRect.js';
 
 // select モードの四隅 ■ ハンドルのドラッグ感度。
 // 掴んだ隅を「中心→隅の方向」へ写真短辺ぶん動かすと、baseMarginPercent が
@@ -85,6 +85,19 @@ const photoAdapter = {
      */
     getCropRect() {
         const state = getState();
+        // A-3: 水平出し角度が付いているときは「画面に見えている（画像内に収まる）矩形」を返す。
+        // cropSettings.rect は水平出しで縮小せず“望むサイズ”のまま保持し、描画・当たり判定の入口で
+        // clampRectToRotatedImage を通す方式（Model B）。回転を戻せば元のサイズへ復帰する。
+        const raw = resolveCropRect(state.cropSettings, state.originalWidth, state.originalHeight);
+        const rotation = state.cropSettings.rotation || 0;
+        return rotation
+            ? clampRectToRotatedImage(raw, rotation, state.originalWidth, state.originalHeight)
+            : raw;
+    },
+
+    /** A-3: 縮小前の“望む”クロップ矩形（cropSettings.rect そのもの）。回転リサイズ後の書き戻しに使う。 */
+    getDesiredCropRect() {
+        const state = getState();
         return resolveCropRect(state.cropSettings, state.originalWidth, state.originalHeight);
     },
 
@@ -131,11 +144,31 @@ const photoAdapter = {
 
     /**
      * crop モードで算出した新しいクロップ矩形を反映する。
-     * 比率制約のクランプ・[0,1] へのクランプは呼び出し側（canvasInteraction.js）が済ませた前提。
+     * 比率制約・[0,1]・傾いた画像への収まり（A-3）は呼び出し側（canvasInteraction.js）が
+     * `resizeCropRect` ＋ `clampCropResizeToRotatedImage` / `clampCropPanToRotatedImage` で
+     * 済ませた前提。ここではそのまま書くだけ（rect は“見えているサイズ”＝以後それが望むサイズ）。
      * @param {{x:number,y:number,w:number,h:number}} rect
      */
     commitCropRect(rect) {
         updateState({ cropSettings: { rect: { x: rect.x, y: rect.y, w: rect.w, h: rect.h } } });
+    },
+
+    /** A-3: 現在の水平出し角度（度）。角度スライダー／オーバーレイ回転ドラッグの開始値。 */
+    getCropRotation() {
+        return getState().cropSettings.rotation || 0;
+    },
+
+    /**
+     * A-3: 水平出し角度を反映する。±45° にクランプするだけで **rect は変えない**（Model B）。
+     * クロップ窓が傾いた元画像からはみ出すぶんは、描画・当たり判定の入口で
+     * `clampRectToRotatedImage`（中心固定縮小）が吸収する。rect を保持することで、
+     * 「マウスを離さず逆方向に回すと元のサイズへ戻る」（Lightroom Web の挙動）になる。
+     * @param {number} newRotationDeg
+     */
+    commitCropRotation(newRotationDeg) {
+        const { min, max } = controlsConfig.cropRotation;
+        const deg = Math.round(Math.min(max, Math.max(min, newRotationDeg)) * 10) / 10;
+        updateState({ cropSettings: { rotation: deg } });
     }
 };
 

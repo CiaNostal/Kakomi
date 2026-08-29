@@ -17,6 +17,132 @@ function clamp01(v) {
     return Math.min(1, Math.max(0, v));
 }
 
+// ---- A-3: 切り抜き時の元画像回転（水平出し） -------------------------------
+// cropSettings.rotation（度、-45〜45）は「クロップ窓は出力フレーム内で軸平行のまま、
+// 元画像がその下で傾く」を表す。crop の矩形 rect は "straightened space"（＝クロップ窓が
+// 直立している座標系）での軸平行矩形で、回転 0 のとき image space と一致する。
+// straightened space ⇔ image space は、画像中心を軸に ±rotation の剛体回転で写る。
+
+/** 点(px, py) を中心(cx, cy) 周りに angleDeg 度回した座標（Canvas 座標系＝時計回り）。 */
+function rot(px, py, cx, cy, angleDeg) {
+    if (!angleDeg) return { x: px, y: py };
+    const r = angleDeg * Math.PI / 180;
+    const c = Math.cos(r), s = Math.sin(r);
+    const dx = px - cx, dy = py - cy;
+    return { x: cx + dx * c - dy * s, y: cy + dx * s + dy * c };
+}
+
+/**
+ * straightened space の割合矩形 rect（{x,y,w,h}、x/w は幅基準・y/h は高さ基準の割合）が、
+ * rotation 度だけ傾いた元画像（imgW×imgH px、画像中心が回転軸）の内側に完全に収まるか。
+ * rect の 4 隅を straightened px → image space（画像中心周りに −rotation）へ写し、
+ * [0,imgW]×[0,imgH] に入っているかで判定する。
+ */
+export function windowFitsInRotatedImage(rect, rotationDeg, imgW, imgH) {
+    // straightened space の [0,1] 内であることは常に要求する（cropSettings.rect を
+    // isValidRect が通る形＝[0,1] に保つため。回転で理論上もう少し大きく取れる余地は捨てる）。
+    const e01 = 1e-6;
+    if (rect.x < -e01 || rect.y < -e01 || rect.x + rect.w > 1 + e01 || rect.y + rect.h > 1 + e01) {
+        return false;
+    }
+    if (!rotationDeg) return true;
+    const cx = imgW / 2, cy = imgH / 2;
+    const eps = 1e-3;
+    const px = [rect.x, rect.x + rect.w];
+    const py = [rect.y, rect.y + rect.h];
+    for (const fx of px) {
+        for (const fy of py) {
+            const p = rot(fx * imgW, fy * imgH, cx, cy, -rotationDeg);
+            if (p.x < -eps || p.x > imgW + eps || p.y < -eps || p.y > imgH + eps) return false;
+        }
+    }
+    return true;
+}
+
+/** rect を点(px, py) 固定で s 倍した割合矩形（s=1 で不変、s→0 でその点へ潰れる）。 */
+function scaleRectAboutPoint(rect, s, px, py) {
+    return {
+        x: px + (rect.x - px) * s,
+        y: py + (rect.y - py) * s,
+        w: rect.w * s,
+        h: rect.h * s
+    };
+}
+
+/** rect を中心固定で s 倍（0<s≤1）に縮めた割合矩形。 */
+function scaleRectAboutCenter(rect, s) {
+    return scaleRectAboutPoint(rect, s, rect.x + rect.w / 2, rect.y + rect.h / 2);
+}
+
+/**
+ * A-3 仕様(a): クロップ窓（rect）が傾いた元画像からはみ出していたら、**中心を固定したまま
+ * 比率を保って**、画像内に収まる最大サイズへ縮める（二分探索）。既に収まっていれば
+ * rect をそのまま返す。rotation 0 のときは従来の clampRect と同じ（[0,1] へ寄せる）。
+ * @param {{x,y,w,h}} rect - straightened space の割合矩形
+ * @param {number} rotationDeg - -45〜45
+ * @param {number} imgW - 元画像の幅(px)
+ * @param {number} imgH - 元画像の高さ(px)
+ * @returns {{x:number,y:number,w:number,h:number}}
+ */
+export function clampRectToRotatedImage(rect, rotationDeg, imgW, imgH) {
+    if (!rotationDeg || !(imgW > 0) || !(imgH > 0)) return clampRect(rect);
+    if (windowFitsInRotatedImage(rect, rotationDeg, imgW, imgH)) return { ...rect };
+    let lo = 1e-3, hi = 1;
+    for (let i = 0; i < 24; i++) {
+        const mid = (lo + hi) / 2;
+        if (windowFitsInRotatedImage(scaleRectAboutCenter(rect, mid), rotationDeg, imgW, imgH)) lo = mid;
+        else hi = mid;
+    }
+    return scaleRectAboutCenter(rect, lo);
+}
+
+/**
+ * A-3 バグ修正: L 字ハンドルのリサイズを傾いた元画像に収める。
+ * **掴んだ隅の対角（アンカー）を固定したまま**、収まる最大サイズへ縮める（比率も保たれる）。
+ * `clampRectToRotatedImage`（中心固定）と違い、アンカー側の辺は動かないので
+ * 「片側をドラッグしたら反対側が近づいてくる」不具合が起きない。
+ * @param {{x,y,w,h}} rect - resizeCropRect が返した straightened space の割合矩形
+ * @param {'tl'|'tr'|'bl'|'br'} corner - 掴んだ隅
+ * @param {number} rotationDeg
+ * @param {number} imgW @param {number} imgH
+ */
+export function clampCropResizeToRotatedImage(rect, corner, rotationDeg, imgW, imgH) {
+    if (!rotationDeg || !(imgW > 0) || !(imgH > 0)) return rect;
+    if (windowFitsInRotatedImage(rect, rotationDeg, imgW, imgH)) return { ...rect };
+    // アンカー（掴んだ隅の対角）の座標
+    const ax = (corner === 'tl' || corner === 'bl') ? rect.x + rect.w : rect.x;
+    const ay = (corner === 'tl' || corner === 'tr') ? rect.y + rect.h : rect.y;
+    let lo = 0, hi = 1;
+    for (let i = 0; i < 24; i++) {
+        const mid = (lo + hi) / 2;
+        if (windowFitsInRotatedImage(scaleRectAboutPoint(rect, mid, ax, ay), rotationDeg, imgW, imgH)) lo = mid;
+        else hi = mid;
+    }
+    return scaleRectAboutPoint(rect, lo, ax, ay);
+}
+
+/**
+ * A-3 バグ修正: クロップ窓のパン（平行移動）を傾いた元画像に収める。
+ * 開始矩形（画像内に収まっている）から目標へ向けて、収まる範囲までで平行移動を頭打ちにする。
+ * @param {{x,y,w,h}} startRect - パン開始時の（収まっている）矩形
+ * @param {number} fdx @param {number} fdy - 割合空間での平行移動量
+ * @param {number} rotationDeg
+ * @param {number} imgW @param {number} imgH
+ */
+export function clampCropPanToRotatedImage(startRect, fdx, fdy, rotationDeg, imgW, imgH) {
+    const desired = { x: startRect.x + fdx, y: startRect.y + fdy, w: startRect.w, h: startRect.h };
+    if (!rotationDeg || !(imgW > 0) || !(imgH > 0)) return clampRect(desired);
+    if (windowFitsInRotatedImage(desired, rotationDeg, imgW, imgH)) return desired;
+    let lo = 0, hi = 1;
+    for (let i = 0; i < 24; i++) {
+        const mid = (lo + hi) / 2;
+        const r = { x: startRect.x + fdx * mid, y: startRect.y + fdy * mid, w: startRect.w, h: startRect.h };
+        if (windowFitsInRotatedImage(r, rotationDeg, imgW, imgH)) lo = mid;
+        else hi = mid;
+    }
+    return { x: startRect.x + fdx * lo, y: startRect.y + fdy * lo, w: startRect.w, h: startRect.h };
+}
+
 /**
  * アスペクト比文字列を数値（幅/高さ）に変換する。
  * 'free' / 'original' / 空 / 不正な文字列は null（＝比率の制約なし）を返す。
@@ -231,10 +357,13 @@ export function resizeCropRect(startRect, corner, fdx, fdy, aspectValue, imgAspe
     let x2 = startRect.x + startRect.w;
     let y2 = startRect.y + startRect.h;
 
-    if (movingLeft) x1 = Math.min(x2 - MIN, x1 + fdx);
-    else x2 = Math.max(x1 + MIN, x2 + fdx);
-    if (movingTop) y1 = Math.min(y2 - MIN, y1 + fdy);
-    else y2 = Math.max(y1 + MIN, y2 + fdy);
+    // 掴んだ辺だけを動かし、対角の辺（アンカー）は固定。
+    // バグ修正: 動かす辺を [0,1] で頭打ちにする。以前は下限を掛けておらず、辺を画像の外へ
+    // ドラッグすると末尾の clampRect が w と x を独立に丸めてアンカー側の辺まで動いていた。
+    if (movingLeft) x1 = Math.max(0, Math.min(x2 - MIN, x1 + fdx));
+    else x2 = Math.min(1, Math.max(x1 + MIN, x2 + fdx));
+    if (movingTop) y1 = Math.max(0, Math.min(y2 - MIN, y1 + fdy));
+    else y2 = Math.min(1, Math.max(y1 + MIN, y2 + fdy));
 
     let rect = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
 
@@ -276,14 +405,16 @@ export function migrateCropSettings(cropSettings, originalW, originalH) {
     if (!cropSettings || typeof cropSettings !== 'object') {
         return { aspectRatio: 'free', rect: { ...FULL_RECT } };
     }
+    const rotation = Number.isFinite(cropSettings.rotation) ? cropSettings.rotation : 0;
     if (isValidRect(cropSettings.rect)) {
         return {
             aspectRatio: cropSettings.aspectRatio || 'free',
-            rect: { ...cropSettings.rect }
+            rect: { ...cropSettings.rect },
+            rotation
         };
     }
     const rect = resolveCropRect(cropSettings, originalW, originalH);
     let aspectRatio = cropSettings.aspectRatio;
     if (!aspectRatio || aspectRatio === 'original') aspectRatio = 'free';
-    return { aspectRatio, rect };
+    return { aspectRatio, rect, rotation };
 }

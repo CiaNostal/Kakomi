@@ -9,8 +9,62 @@ import { getActiveGuides } from './interaction/guideStore.js';
 import { setTextHandles, clearTextHandles } from './interaction/textHandleStore.js';
 import { setCropHandles, clearCropHandles } from './interaction/photoCropStore.js';
 import * as photoEditModeStore from './interaction/photoEditModeStore.js';
-import { resolveCropRect } from './utils/cropRect.js';
+import { resolveCropRect, clampRectToRotatedImage } from './utils/cropRect.js';
 import { rotatePoint } from './utils/geometry.js';
+
+/**
+ * A-3: 実際に切り出す（画面に見える）クロップ矩形。cropSettings.rect は水平出しで縮小しない
+ * “望むサイズ”を保持するので、rotation が付いていたら傾いた元画像に収まるよう中心固定縮小する。
+ * layoutCalculator の cropRect 決定と同じロジック。
+ */
+function effectiveCropRect(currentState) {
+    const raw = resolveCropRect(currentState.cropSettings, currentState.originalWidth, currentState.originalHeight);
+    const rot = (currentState.cropSettings && currentState.cropSettings.rotation) || 0;
+    return rot
+        ? clampRectToRotatedImage(raw, rot, currentState.originalWidth, currentState.originalHeight)
+        : raw;
+}
+
+/**
+ * A-3: クロップ窓（photoX/Y/W/H）の中に元画像を描く。
+ * cropRotationDeg が 0 なら従来どおり drawImageWithPrecision（source 矩形 → dest 矩形）。
+ * 非0なら「窓にクリップ → 窓中心座標系へ → 画像中心まわりに cropRotation 回転 → 元画像全体を配置」で塗る。
+ * 空いた角が出ないことは clampRectToRotatedImage（rect が画像内に収まる保証）が担保する。
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {HTMLImageElement} img
+ * @param {{sourceX,sourceY,sourceWidth,sourceHeight}} src - 回転0時に使う source 矩形（px）
+ * @param {number} photoX @param {number} photoY @param {number} photoW @param {number} photoH - クロップ窓（canvas px）
+ * @param {number} cropRotationDeg
+ * @param {{x,y,w,h}} rect - straightened space の割合クロップ矩形
+ * @param {number} imgW @param {number} imgH - 元画像の実寸(px)
+ */
+function drawCroppedPhoto(ctx, img, src, photoX, photoY, photoW, photoH, cropRotationDeg, rect, imgW, imgH) {
+    if (!cropRotationDeg || !(imgW > 0) || !(imgH > 0)) {
+        drawImageWithPrecision(ctx, img,
+            src.sourceX, src.sourceY, src.sourceWidth, src.sourceHeight,
+            photoX, photoY, photoW, photoH);
+        return;
+    }
+    const winPxW = rect.w * imgW;
+    const winPxH = rect.h * imgH;
+    if (winPxW <= 0 || winPxH <= 0) return;
+    const sx = photoW / winPxW;
+    const sy = photoH / winPxH;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(photoX, photoY, photoW, photoH);
+    ctx.clip();
+    ctx.imageSmoothingEnabled = true;
+    if ('imageSmoothingQuality' in ctx) ctx.imageSmoothingQuality = 'high';
+    ctx.translate(photoX, photoY);
+    ctx.scale(sx, sy);
+    ctx.translate(-rect.x * imgW, -rect.y * imgH);
+    ctx.translate(imgW / 2, imgH / 2);
+    ctx.rotate(cropRotationDeg * Math.PI / 180);
+    ctx.translate(-imgW / 2, -imgH / 2);
+    ctx.drawImage(img, 0, 0, imgW, imgH);
+    ctx.restore();
+}
 
 const HANDLE_SIZE = 8; // 拡大ハンドル（四角）の一辺の長さ(px)
 const ROTATE_HANDLE_RADIUS = 4; // 回転ハンドル（丸）の半径(px)
@@ -158,27 +212,45 @@ function cropModeGeometry(frozenFrame, liveRect) {
  * @param {{scale:number, photoBox0:{x,y,width,height}, rect0:{x,y,w,h}}} frozenFrame
  */
 function drawCropModeOverlay(ctx, img, currentState, frozenFrame) {
-    const liveRect = resolveCropRect(currentState.cropSettings, currentState.originalWidth, currentState.originalHeight);
+    // A-3: 見えている（傾いた画像に収まる）矩形。回転を戻せば元サイズに復帰する。
+    const liveRect = effectiveCropRect(currentState);
     const { whole, cropScreen } = cropModeGeometry(frozenFrame, liveRect);
     if (whole.width <= 0 || whole.height <= 0) return;
 
     const imgW = currentState.originalWidth;
     const imgH = currentState.originalHeight;
+    // A-3: 水平出し角度。whole は「straightened space の画像矩形を画面へ写したもの」なので、
+    // 実際の画像はその中心まわりに cropRotation だけ傾いて見える。
+    const cropRot = currentState.cropSettings.rotation || 0;
+    const wcx = whole.x + whole.width / 2;
+    const wcy = whole.y + whole.height / 2;
+    const drawWholeImage = () => {
+        if (cropRot) {
+            ctx.save();
+            ctx.translate(wcx, wcy);
+            ctx.rotate(cropRot * Math.PI / 180);
+            ctx.translate(-wcx, -wcy);
+            ctx.drawImage(img, 0, 0, imgW, imgH, whole.x, whole.y, whole.width, whole.height);
+            ctx.restore();
+        } else {
+            drawImageWithPrecision(ctx, img, 0, 0, imgW, imgH, whole.x, whole.y, whole.width, whole.height);
+        }
+    };
 
     ctx.save();
 
-    // 1. 元画像全体を whole に敷く
-    drawImageWithPrecision(ctx, img, 0, 0, imgW, imgH, whole.x, whole.y, whole.width, whole.height);
+    // 1. 元画像全体を whole に敷く（傾けて）
+    drawWholeImage();
 
-    // 2. 全面を暗くマスク
+    // 2. 全面を暗くマスク（回転で whole の外へはみ出す分も覆えるようキャンバス全面）
     ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
-    ctx.fillRect(whole.x, whole.y, whole.width, whole.height);
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
     // 3. クロップ矩形の内側だけ、マスクなしで再描画
     ctx.beginPath();
     ctx.rect(cropScreen.x, cropScreen.y, cropScreen.width, cropScreen.height);
     ctx.clip();
-    drawImageWithPrecision(ctx, img, 0, 0, imgW, imgH, whole.x, whole.y, whole.width, whole.height);
+    drawWholeImage();
     ctx.restore();
 
     // 3.5 三分割グリッド（rule of thirds）。クロップ窓の内側だけに構図補助線を引く。
@@ -428,10 +500,14 @@ export async function drawPreview(currentState, previewCanvas, previewCtx) { // 
             // 3. 写真のクリッピングパス設定と適用 (角丸・超楕円)
             createAndApplyClippingPath(ctx, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight);
 
-            // 4. 写真本体の描画 (クリッピングパスの内側に描画される)
-            drawImageWithPrecision(ctx, img,
-                sourceX, sourceY, sourceWidth, sourceHeight,
-                photoX, photoY, photoWidth, photoHeight
+            // 4. 写真本体の描画 (クリッピングパスの内側に描画される)。
+            //    A-3: cropRotation が非0なら「窓の中で元画像を回して塗る」経路（drawCroppedPhoto）。
+            drawCroppedPhoto(ctx, img,
+                { sourceX, sourceY, sourceWidth, sourceHeight },
+                photoX, photoY, photoWidth, photoHeight,
+                currentState.photoDrawConfig.cropRotation || 0,
+                effectiveCropRect(currentState),
+                currentState.originalWidth, currentState.originalHeight
             );
 
             // 5. インナーシャドウ描画 (クリッピングされた写真の上に合成)
@@ -559,10 +635,13 @@ export async function renderFinal(currentState) { // async追加
         // 3. 写真のクリッピングパス設定と適用
         createAndApplyClippingPath(ctx, currentState.frameSettings, photoX, photoY, photoWidth, photoHeight);
 
-        // 4. 写真本体の描画
-        drawImageWithPrecision(ctx, img,
-            sourceX, sourceY, sourceWidth, sourceHeight,
-            photoX, photoY, photoWidth, photoHeight
+        // 4. 写真本体の描画（A-3: cropRotation 非0なら窓の中で元画像を回して塗る）
+        drawCroppedPhoto(ctx, img,
+            { sourceX, sourceY, sourceWidth, sourceHeight },
+            photoX, photoY, photoWidth, photoHeight,
+            currentState.photoDrawConfig.cropRotation || 0,
+            effectiveCropRect(currentState),
+            currentState.originalWidth, currentState.originalHeight
         );
 
         // 5. インナーシャドウ描画

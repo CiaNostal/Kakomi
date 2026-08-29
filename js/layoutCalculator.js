@@ -2,7 +2,7 @@
  * layout.js
  * レイアウト計算を担当するモジュール
  */
-import { resolveCropRect } from './utils/cropRect.js';
+import { resolveCropRect, clampRectToRotatedImage } from './utils/cropRect.js';
 
 /**
  * アスペクト比文字列から後方互換用の "custom:" プレフィックスを取り除く
@@ -39,12 +39,21 @@ function calculateLayout(currentState) {
     const { offsetX, offsetY } = currentState.photoViewParams;
     // A-4: クロップ後の写真をキャンバス内で回す角度（度）。
     const photoRotationDeg = currentState.photoViewParams.rotation || 0;
+    // A-3: 切り抜き時の元画像の水平出し角度（度）。出力解像度・キャンバス寸法には影響せず
+    // （クロップ窓のサイズは rect のまま）、レンダラが窓の中で元画像を回して塗るのに使う。
+    const cropRotationDeg = (currentState.cropSettings && currentState.cropSettings.rotation) || 0;
 
     // 1. 構図調整設定に基づいて、元画像から切り出す領域を決定する。
     // cropSettings.rect は「元画像に対する割合」 { x, y, w, h }（0–1）で切り出し矩形を表す。
     // 旧形式（zoom / offsetX / offsetY）の状態が渡された場合も resolveCropRect が矩形へ変換する。
     // 切り出した領域は元画像の解像度をそのまま維持して描画される（destWidth === sourceWidth）。
-    const cropRect = resolveCropRect(currentState.cropSettings, originalImgWidth, originalImgHeight);
+    // A-3: cropSettings.rect は水平出しで縮小しない“望むサイズ”を保持する（Model B）。
+    // 実際に切り出す矩形は、傾いた元画像に収まるよう入口で中心固定縮小する。
+    // rotation を 0 に戻せば元のサイズへ戻る。
+    let cropRect = resolveCropRect(currentState.cropSettings, originalImgWidth, originalImgHeight);
+    if (cropRotationDeg) {
+        cropRect = clampRectToRotatedImage(cropRect, cropRotationDeg, originalImgWidth, originalImgHeight);
+    }
     const sourceX = cropRect.x * originalImgWidth;
     const sourceY = cropRect.y * originalImgHeight;
     const sourceWidth = cropRect.w * originalImgWidth;
@@ -148,7 +157,9 @@ function calculateLayout(currentState) {
             destXonOutputCanvas: Math.round(photoXonCanvasPx),
             destYonOutputCanvas: Math.round(photoYonCanvasPx),
             // A-4: 写真中心まわりの回転角（度）。レンダラが drawImage 前に ctx.rotate する。
-            rotation: photoRotationDeg
+            rotation: photoRotationDeg,
+            // A-3: クロップ窓の中で元画像を回す角度（度）。レンダラが clip(窓)＋rotate で塗る。
+            cropRotation: cropRotationDeg
         },
         outputCanvasConfig: {
             width: Math.round(outputCanvasWidthPx),

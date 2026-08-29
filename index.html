@@ -239,7 +239,13 @@
                                 <label for="cropCustomAspectRatioHeight">高さ</label>
                                 <input type="number" id="cropCustomAspectRatioHeight" min="0.01" step="any" value="1">
                             </div>
-                            <p class="custom-text-drag-hint">パネルをクリック → プレビューで枠をドラッグ。Enter か外側クリックで確定。</p>
+                            <div class="form-row-slider">
+                                <label for="cropRotation">水平:</label>
+                                <input type="range" id="cropRotation">
+                                <span id="cropRotationValue">0°</span>
+                            </div>
+                            <p class="custom-text-drag-hint">パネルをクリック → プレビューで枠をドラッグ。暗い余白のドラッグで水平出し。Enter か外側クリックで確定。</p>
+                            <button type="button" id="resetCrop" class="placement-reset-btn">切り抜きをリセット</button>
                         </fieldset>
 
                         <fieldset>

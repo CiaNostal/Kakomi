@@ -110,7 +110,10 @@ let editState = {
     // 旧形式（zoom / offsetX / offsetY）はプリセット読込時に utils/cropRect.js で矩形へ移行する。
     cropSettings: {
         aspectRatio: 'free',
-        rect: { x: 0, y: 0, w: 1, h: 1 }
+        rect: { x: 0, y: 0, w: 1, h: 1 },
+        // A-3: 水平出し用の元画像回転（度、-45〜45）。クロップ窓は軸平行のまま、
+        // 元画像がその下で傾く。rect は「窓が直立した座標系」での軸平行矩形。
+        rotation: 0
     },
     // Exif情報
     exifData: null
@@ -371,8 +374,10 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
     // ・aspectRatio が固定比率なのに rect が既定の全体のまま（画像ロード前にプリセットを
     //   適用したケースなど、比率に合った矩形をまだ計算できていない状態）の場合も同じ再フィット。
     const crop = editState.cropSettings;
+    if (typeof crop.rotation !== 'number' || !Number.isFinite(crop.rotation)) crop.rotation = 0;
     if (isReplacingImage) {
         crop.rect = { ...FULL_RECT };
+        crop.rotation = 0; // A-3: 差し替え時は水平出しもリセット
         editState.photoViewParams = { offsetX: 0.5, offsetY: 0.5, rotation: 0 };
     }
     if (!isValidRect(crop.rect)) {
@@ -384,6 +389,9 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
     if (aspectValue != null && rectIsFull && img.width > 0 && img.height > 0) {
         crop.rect = fitRectToAspect(crop.rect, aspectValue, img.width / img.height);
     }
+    // A-3（Model B）: rect は水平出しで縮小しない“望むサイズ”を保持する。描画・当たり判定の
+    // 入口（layoutCalculator / canvasRenderer / photoAdapter.getCropRect）で
+    // clampRectToRotatedImage を通すので、ここで rect をいじる必要はない。
 
     // Reset relevant parts of the state for the new image
     // editState.photoViewParams = { offsetX: 0.5, offsetY: 0.5 };

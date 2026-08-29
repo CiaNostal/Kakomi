@@ -16,7 +16,7 @@ import { getLastPreviewContext } from '../canvasRenderer.js';
 import { isEditableElement } from '../utils/domUtils.js';
 import { getTextHandles } from './textHandleStore.js';
 import { getCropHandles } from './photoCropStore.js';
-import { clampRect, resizeCropRect } from '../utils/cropRect.js';
+import { clampRect, resizeCropRect, clampCropResizeToRotatedImage, clampCropPanToRotatedImage } from '../utils/cropRect.js';
 import textAdapter from './adapters/textAdapter.js';
 import photoAdapter from './adapters/photoAdapter.js';
 import backgroundAdapter from './adapters/backgroundAdapter.js';
@@ -200,9 +200,23 @@ export function initCanvasInteraction(canvas) {
                 canvas.classList.add('dragging-object');
                 return;
             }
-            // ハンドルでもクロップ窓内でもない = 枠の外。ドラッグは開始せず、
-            // pointerup でクリックとみなされたら crop モードを確定して抜ける。
+            // ハンドルでもクロップ窓内でもない = 枠の外（暗い余白）。
+            // A-3: ここをドラッグ → 水平出し角度の変更。短いタップのままなら（下の pointerup で）
+            // crop モードを確定して抜ける。両立させるため cropExitCandidate は立てたまま
+            // cropRotate のドラッグ状態も用意しておく（ドラッグ扱いになれば pointerup の
+            // タップ判定で弾かれ exitCrop は走らない）。
             pointerDownCtx.cropExitCandidate = true;
+            const rc = cropHandles.center || {
+                x: cropHandles.cropScreen.x + cropHandles.cropScreen.width / 2,
+                y: cropHandles.cropScreen.y + cropHandles.cropScreen.height / 2
+            };
+            dragState = {
+                mode: 'cropRotate',
+                center: rc,
+                startAngle: Math.atan2(y - rc.y, x - rc.x),
+                startRotation: photoAdapter.getCropRotation()
+            };
+            canvas.setPointerCapture(e.pointerId);
             return;
         }
 
@@ -304,10 +318,17 @@ export function initCanvasInteraction(canvas) {
             const w = dragState.whole;
             const fdx = w.width > 0 ? (x - dragState.startX) / w.width : 0;
             const fdy = w.height > 0 ? (y - dragState.startY) / w.height : 0;
-            const rect = resizeCropRect(
+            let rect = resizeCropRect(
                 dragState.startRect, dragState.corner, fdx, fdy,
                 dragState.aspectValue, dragState.imgAspectValue
             );
+            // A-3: 水平出し角度が付いていたら、掴んだ隅の対角を固定したまま
+            //      傾いた元画像に収まるサイズへ頭打ち（反対側の辺は動かさない）。
+            const cs = getState();
+            const rot = cs.cropSettings.rotation || 0;
+            if (rot) {
+                rect = clampCropResizeToRotatedImage(rect, dragState.corner, rot, cs.originalWidth, cs.originalHeight);
+            }
             photoAdapter.commitCropRect(rect);
             return;
         }
@@ -317,8 +338,13 @@ export function initCanvasInteraction(canvas) {
             const fdx = w.width > 0 ? (x - dragState.startX) / w.width : 0;
             const fdy = w.height > 0 ? (y - dragState.startY) / w.height : 0;
             const s = dragState.startRect;
+            const cs = getState();
+            const rot = cs.cropSettings.rotation || 0;
             // ドラッグ方向にクロップ窓が動く（右へドラッグ＝クロップ窓が右へ）。
-            const rect = clampRect({ x: s.x + fdx, y: s.y + fdy, w: s.w, h: s.h });
+            // A-3: 傾いた元画像の内側で頭打ち（端で止まる）。
+            const rect = rot
+                ? clampCropPanToRotatedImage(s, fdx, fdy, rot, cs.originalWidth, cs.originalHeight)
+                : clampRect({ x: s.x + fdx, y: s.y + fdy, w: s.w, h: s.h });
             photoAdapter.commitCropRect(rect);
             return;
         }
@@ -339,6 +365,19 @@ export function initCanvasInteraction(canvas) {
             let newRotation = dragState.startRotation + deltaDeg;
             if (e.shiftKey) newRotation = Math.round(newRotation / 15) * 15; // Shiftで15度刻みにスナップ
             photoAdapter.commitRotate(newRotation);
+            return;
+        }
+        if (dragState.mode === 'cropRotate') {
+            // A-3: crop オーバーレイの暗い余白のドラッグ = 水平出し角度。
+            // クロップ窓中心まわりのポインタ角度の変化量を開始角に加算（±45°クランプは commit 側）。
+            const { x, y } = toCanvasCoords(canvas, e.clientX, e.clientY);
+            const currentAngle = Math.atan2(y - dragState.center.y, x - dragState.center.x);
+            let deltaDeg = (currentAngle - dragState.startAngle) * 180 / Math.PI;
+            if (deltaDeg > 180) deltaDeg -= 360;
+            if (deltaDeg < -180) deltaDeg += 360;
+            let newRotation = dragState.startRotation + deltaDeg;
+            if (e.shiftKey) newRotation = Math.round(newRotation); // Shiftで1°刻み
+            photoAdapter.commitCropRotation(newRotation);
             return;
         }
 
@@ -498,11 +537,13 @@ export function initCanvasInteraction(canvas) {
             if (!hh || !hh.whole) return;
             e.preventDefault();
             const s = photoAdapter.getCropRect();
-            const rect = clampRect({
-                x: s.x + dxPx / hh.whole.width,
-                y: s.y + dyPx / hh.whole.height,
-                w: s.w, h: s.h
-            });
+            const fdx = dxPx / hh.whole.width;
+            const fdy = dyPx / hh.whole.height;
+            const cs = getState();
+            const rot = cs.cropSettings.rotation || 0;
+            const rect = rot
+                ? clampCropPanToRotatedImage(s, fdx, fdy, rot, cs.originalWidth, cs.originalHeight)
+                : clampRect({ x: s.x + fdx, y: s.y + fdy, w: s.w, h: s.h });
             photoAdapter.commitCropRect(rect);
             return;
         }

@@ -7,7 +7,8 @@ import {
     contentHasExif, contentHasDate, contentPreviewLabel, contentIsEmpty, resolveContentText
 } from './utils/textContent.js';
 import { stripCustomPrefix } from './layoutCalculator.js';
-import { growRectToAspect, resolveCropRect, resolveCropAspectValue } from './utils/cropRect.js';
+import { growRectToAspect, resolveCropRect, resolveCropAspectValue, FULL_RECT } from './utils/cropRect.js';
+import photoAdapter from './interaction/adapters/photoAdapter.js';
 import * as selectionStore from './interaction/selectionStore.js';
 import { requestEnterCropMode } from './interaction/canvasInteraction.js';
 import { enhanceAsScrubInput } from './ui/scrubInput.js';
@@ -50,6 +51,9 @@ export const uiElements = {
     baseMarginPercentValueSpan: document.getElementById('baseMarginPercentValue'),
     photoRotationInput: document.getElementById('photoRotation'),           // A-4
     photoRotationValueSpan: document.getElementById('photoRotationValue'),  // A-4
+    cropRotationInput: document.getElementById('cropRotation'),             // A-3（水平出し）
+    cropRotationValueSpan: document.getElementById('cropRotationValue'),    // A-3
+    resetCropButton: document.getElementById('resetCrop'),                 // A-3（切り抜きをリセット）
 
     // 背景編集タブ
     bgTypeColorRadio: document.getElementById('bgTypeColor'),
@@ -232,6 +236,8 @@ function applyCropAspect(aspectRatioString) {
     const imgAspect = (state.originalWidth > 0 && state.originalHeight > 0)
         ? state.originalWidth / state.originalHeight : 1;
     const newRect = aspectValue == null ? rect : growRectToAspect(rect, aspectValue, imgAspect);
+    // A-3（Model B）: rect は“望むサイズ”のまま保持する。水平出しで傾いた画像からはみ出すぶんは
+    // 描画・当たり判定の入口（effectiveCropRect / clampRectToRotatedImage）が中心固定で縮める。
     updateState({ cropSettings: { aspectRatio: aspectRatioString, rect: newRect } });
 }
 
@@ -488,6 +494,8 @@ export function initializeUIFromState() {
     setupInputAttributesAndValue(uiElements.baseMarginPercentInput, 'photoSize', marginToSize(state.baseMarginPercent));
     // A-4: 写真の回転角（度）。保存キーは photoViewParams.rotation。
     setupInputAttributesAndValue(uiElements.photoRotationInput, 'photoRotation', state.photoViewParams.rotation || 0);
+    // A-3: 切り抜き時の水平出し角度（度）。保存キーは cropSettings.rotation。
+    setupInputAttributesAndValue(uiElements.cropRotationInput, 'cropRotation', state.cropSettings.rotation || 0);
 
     // 背景設定
     if (uiElements.bgTypeColorRadio) uiElements.bgTypeColorRadio.checked = (state.backgroundType === 'color');
@@ -562,6 +570,14 @@ export function updateSliderValueDisplays() {
         uiElements.photoRotationValueSpan.textContent = `${Math.round(deg)}°`;
         if (document.activeElement !== uiElements.photoRotationInput) {
             uiElements.photoRotationInput.value = String(deg);
+        }
+    }
+    if (uiElements.cropRotationValueSpan && uiElements.cropRotationInput) {
+        // A-3: crop オーバーレイの余白ドラッグでも変わるので入力欄も同期。
+        const deg = getState().cropSettings.rotation || 0;
+        uiElements.cropRotationValueSpan.textContent = `${deg.toFixed(1)}°`;
+        if (document.activeElement !== uiElements.cropRotationInput) {
+            uiElements.cropRotationInput.value = String(deg);
         }
     }
     if (uiElements.bgScaleValueSpan && uiElements.bgScaleSlider) {
@@ -1641,12 +1657,13 @@ export function setupEventListeners(redrawCallback) {
     // 「写真のトリミング」セクション内をクリックしたら、写真を選択して crop モードへ自動で入る（A-13。
     // プレビュー上で選択済み写真を再タップするのと同じ。frozenFrame スナップショットは requestEnterCropMode
     // が作る）。**比率タイル（`<button class="ratio-tile">`）のクリックも crop モードへ入る**——A-13 の
-    // 当初仕様。除外するのは数値入力欄（カスタム幅高さ）と回転ボタン（`.ratio-rotate-btn`。向きの切り替えは
-    // メタ操作なので crop モードには入らない）だけ。Esc / Enter で select に戻る。
+    // 当初仕様。除外するのは数値入力欄（カスタム幅高さ・水平出しスライダー）と回転ボタン
+    // （`.ratio-rotate-btn`。向きの切り替えはメタ操作）と「切り抜きをリセット」（`#resetCrop`。A-3）だけ。
+    // Esc / Enter で select に戻る。
     const cropSection = document.getElementById('cropSection');
     if (cropSection) {
         cropSection.addEventListener('click', (e) => {
-            if (e.target.closest('input, textarea, .ratio-rotate-btn')) return;
+            if (e.target.closest('input, textarea, .ratio-rotate-btn, #resetCrop')) return;
             requestEnterCropMode();
         });
     }
@@ -1704,6 +1721,37 @@ export function setupEventListeners(redrawCallback) {
     // A-4: 写真の回転角スライダー。保存キーは photoViewParams.rotation（度）。
     // ダブルクリックで 0° に戻るのは addNumericInputListener の共通処理。
     addNumericInputListener(uiElements.photoRotationInput, 'photoRotation', 'photoViewParams', 'rotation');
+    // A-3: 水平出し角度スライダー。commitCropRotation が ±45° クランプ＋（傾いた画像から
+    // はみ出すぶんの）rect 中心固定縮小まで面倒を見る。汎用ヘルパーは使わない。
+    if (uiElements.cropRotationInput) {
+        uiElements.cropRotationInput.addEventListener('input', (e) => {
+            photoAdapter.commitCropRotation(parseFloat(e.target.value) || 0);
+            updateSliderValueDisplays();
+            redrawCallback();
+        });
+        const resetCropRotation = () => {
+            photoAdapter.commitCropRotation(0);
+            uiElements.cropRotationInput.value = '0';
+            updateSliderValueDisplays();
+            redrawCallback();
+        };
+        uiElements.cropRotationInput.addEventListener('dblclick', resetCropRotation);
+        let lastCropRotTap = 0;
+        uiElements.cropRotationInput.addEventListener('touchstart', (ev) => {
+            const now = Date.now();
+            if (now - lastCropRotTap < 300 && now - lastCropRotTap > 0) { ev.preventDefault(); resetCropRotation(); }
+            lastCropRotTap = now;
+        });
+    }
+    // A-3: 「切り抜きをリセット」。比率＝フリー・矩形＝全体・水平出し＝0 に戻す（大きさ・配置は触らない）。
+    if (uiElements.resetCropButton) {
+        uiElements.resetCropButton.addEventListener('click', () => {
+            cropCustomMode = false; // G-4: カスタム比率モードも抜ける
+            updateState({ cropSettings: { aspectRatio: 'free', rect: { ...FULL_RECT }, rotation: 0 } });
+            initializeUIFromState();
+            redrawCallback();
+        });
+    }
     // ... (その他すべての addNumericInputListener と addColorInputListener の呼び出し) ...
     // 「配置をリセット」: 枠内位置（photoViewParams）を中央へ、かつクロップ矩形のパンを中央へ戻す。
     // 切り抜き範囲のサイズ・比率は変えない（docs/roadmap.md A-1）。

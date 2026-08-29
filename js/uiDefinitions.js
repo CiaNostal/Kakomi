@@ -116,6 +116,9 @@ export const controlsConfig = {
     // A-4: クロップ後の写真をキャンバス内で回す角度（度）。保存キーは photoViewParams.rotation。
     // 全周（-180〜180）。Shift ドラッグで 15° スナップ（回転ハンドル操作時）。
     photoRotation: { defaultValue: 0, min: -180, max: 180, step: 1 },
+    // A-3: 切り抜き時の元画像の水平出し角度（度）。保存キーは cropSettings.rotation。
+    // Lightroom の角度補正と同じ ±45°。crop オーバーレイの余白ドラッグでも回せる。
+    cropRotation: { defaultValue: 0, min: -45, max: 45, step: 0.1 },
     // 背景編集タブ
     backgroundType: { defaultValue: 'color' }, // radio button のデフォルト選択値
     backgroundColor: { defaultValue: '#ffffff' }, // color input

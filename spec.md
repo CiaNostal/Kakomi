@@ -199,7 +199,8 @@ Kakomi/
     sourceX, sourceY, sourceWidth, sourceHeight,
     destWidth, destHeight,             // 実際に drawImage するサイズ（回転前・等倍）
     destXonOutputCanvas, destYonOutputCanvas,
-    rotation                           // A-4: 写真中心まわりの回転角（度）。レンダラが drawImage 前に ctx.rotate
+    rotation,                          // A-4: 写真中心まわりの回転角（度）。レンダラが drawImage 前に ctx.rotate
+    cropRotation                       // A-3: クロップ窓の中で元画像を回す角度（度）。窓にクリップして塗る
   },
   outputCanvasConfig: {               // 出力Canvas設定（計算結果）
     width: number,
@@ -239,11 +240,12 @@ Kakomi/
     quality: number,                  // JPEG品質（1-100）
     preserveExif: boolean
   },
-  cropSettings: {                     // 構図調整設定（内部実装、UI未公開）
-    aspectRatio: string,              // 'original' または '1:1', '4:3' など
-    zoom: number,                     // 1.0以上（中心から拡大）
-    offsetX: number,                  // 0.0-1.0（切り出し領域のX位置）
-    offsetY: number                   // 0.0-1.0（切り出し領域のY位置）
+  cropSettings: {                     // 構図調整（トリミング）設定
+    aspectRatio: string,              // 'free' / 'original' / '1:1' / '幅:高さ'（クロップ矩形に課す比率制約）
+    rect: { x, y, w, h },             // 切り出し矩形。0–1 の割合（x/w は幅基準・y/h は高さ基準）。
+                                      //   A-3: rotation≠0 のときは「クロップ窓が直立した座標系」での軸平行矩形。
+    rotation: number                  // A-3: 水平出し角度（度、-45〜45）。窓は軸平行のまま元画像がその下で傾く。
+    // ※旧形式 { aspectRatio, zoom, offsetX, offsetY } はプリセット読込時に utils/cropRect.js が rect へ移行する
   },
   exifData: Object                    // Exifデータ（piexif.js形式）
 }
@@ -299,7 +301,7 @@ UI要素の制御とイベントハンドリングを担当します。
 - **サブラベルは全廃（`docs/roadmap.md` E-9）**。タイルは「ラベル＋ミニ長方形」だけ。「インスタ」は正方形/4:5/ストーリーズ/リールで比率が違い一概に言えないため。
 - 各タイルは`<button class="ratio-tile" data-value aria-pressed>`（`data-value` はファミリー `id`＝向きに依存しない）。「フリー」タイルは破線、「オリジナル」タイルは二重線（`.is-original`）でミニ長方形は`uiController.syncOriginalTileShape()`が読み込み中の画像比で描く（`toggleOrientation`／`setValue` の再描画後に貼り直す）。カスタム幅高さ入力欄は折り返さない1行（`.ratio-custom-row`。⇄ ボタンは撤去）。
 - `editState` のキー・`layoutCalculator`・各レンダラは無変更（向きは常に文字列から導出）。
-- **「オリジナル」タイル（切り抜きのみ。`docs/roadmap.md` A-11）**: **切り抜き比率を元画像のアスペクト比で固定する**（Lightroom のクロップ「オリジナル」と同義。3:4 の画像なら 3:4 で固定）。選択すると`cropSettings.aspectRatio = 'original'`を保存し、他のプリセット比率と同じ経路（`applyCropAspect`）で中心維持のまま矩形を元画像比へ合わせる。**`rect`の全体リセットや`photoViewParams`の初期化はしない。** `aspectRatio`の数値解決は`utils/cropRect.js`の`resolveCropAspectValue(aspectRatio, imgW, imgH)`（`'original'` → `imgW/imgH`、`'free'`/空/画像未ロード → null、それ以外 → `parseAspectRatio`）が担い、`photoAdapter.getCropConstraint`（crop モードの隅ドラッグ制約）・`stateManager.setImage`（画像ロード／差し替え時の再フィット。`'original'`は新画像の比へ自動追従）・`uiController.applyCropAspect`の3か所で使う。タイルのミニ長方形は`uiController.syncOriginalTileShape()`が読み込み中の画像の縦横比で描く。押下表示は`aspectRatio === 'original'`のときのみ（`aspectRatio === 'free'`なら「フリー」）。<br>※「切り抜きをまるごとリセット」する操作は別途必要だが、A-3（クロップ時の元画像回転）実装とあわせて用意する。
+- **「オリジナル」タイル（切り抜きのみ。`docs/roadmap.md` A-11）**: **切り抜き比率を元画像のアスペクト比で固定する**（Lightroom のクロップ「オリジナル」と同義。3:4 の画像なら 3:4 で固定）。選択すると`cropSettings.aspectRatio = 'original'`を保存し、他のプリセット比率と同じ経路（`applyCropAspect`）で中心維持のまま矩形を元画像比へ合わせる。**`rect`の全体リセットや`photoViewParams`の初期化はしない。** `aspectRatio`の数値解決は`utils/cropRect.js`の`resolveCropAspectValue(aspectRatio, imgW, imgH)`（`'original'` → `imgW/imgH`、`'free'`/空/画像未ロード → null、それ以外 → `parseAspectRatio`）が担い、`photoAdapter.getCropConstraint`（crop モードの隅ドラッグ制約）・`stateManager.setImage`（画像ロード／差し替え時の再フィット。`'original'`は新画像の比へ自動追従）・`uiController.applyCropAspect`の3か所で使う。タイルのミニ長方形は`uiController.syncOriginalTileShape()`が読み込み中の画像の縦横比で描く。押下表示は`aspectRatio === 'original'`のときのみ（`aspectRatio === 'free'`なら「フリー」）。<br>※「切り抜きをまるごとリセット」は A-3 で「切り抜きをリセット」ボタン（`#resetCrop`）として実装済み（`cropSettings` を `free` / 全体 / `rotation:0` へ。7.2節）。
 - ピッカーは`ensureRatioPickers()`が一度だけ生成する（`initializeUIFromState()`が`setupEventListeners()`より先に走るため、両方から呼べるようにしてある）。`onSelect(value)`で、プリセット比率なら`updateState({ outputTargetAspectRatioString })`／`applyCropAspect(value)`を呼ぶ。**「カスタム」タイルはカスタム幅高さ入力欄（`#customAspectRatioContainer`／`#cropCustomAspectRatioContainer`）を表示するだけで、その時点では state を変えない**（反映は入力欄の編集時に`updateAspectRatioFromInputs()`／`updateCropAspectRatioFromInputs()`が行う）。カスタム欄は**「カスタムモード中」**（`outputCustomMode`／`cropCustomMode`。カスタムタイル押下・カスタム欄編集で`true`、別タイル押下で`false`）または「カスタム」タイルが実効的に押されているあいだ表示する（`updateOutputCustomVisibility()`／`updateCropCustomVisibility()`が`.hidden`をトグル）。
 - **G-4（カスタム値が既存比率に一致してもカスタム欄が閉じずフォーカスが飛ばない。`docs/roadmap.md` G-4）**: 以前はカスタム幅高さの値がプリセットタイルと同じ比率（例 4:5）になると`setValue`がそのタイルを押下→`getValue()`が`'custom'`でなくなり→カスタム欄が`display:none`になり、フォーカス中の子要素からフォーカスが外れていた。対処＝粘着フラグ`*CustomMode`と、`picker.setValue(value, { keepCustom: true })`（一致しても「カスタム」タイルの押下を維持）。プログラムからは`.focus()`を一切呼ばない。
 - state → UI の同期は`syncOutputAspectUI(state)`／`syncCropAspectUI(state)`が担い、`picker.setValue(value, { keepCustom: *CustomMode })`で該当タイルを押下状態にする（一致するタイルが無ければ「カスタム」タイルにフォールバック）。
@@ -382,7 +384,9 @@ C-1 で角丸/超楕円のモード別パラメータ行（半径 / 次数n の2
 
 **写真の四隅■＋回転ハンドルの描画（`drawPhotoResizeHandles`。A-4）:** select モードで写真選択中のとき、四隅に■リサイズハンドル（ドラッグ＝`baseMarginPercent`）、上端中央から離れた位置に回転ハンドル（丸、接続線付き。ドラッグ＝`photoViewParams.rotation`）を描画する。`photoViewParams.rotation` が非0のときはハンドル・接続線・写真本体を写真中心まわりに同じ角度で回して描く。■・回転ハンドルの画面座標（回転適用後）を `interaction/photoCropStore.js` に記録し、`canvasInteraction.js` が当たり判定に読む（crop モードのL字ハンドルと同じストア・同じ経路）。
 
-**写真選択中の四隅ハンドル／トリミングオーバーレイ描画（5.24節・5.25節・7.2節参照）:** 選択中オブジェクトが写真（`getSelectedId() === 'photo'`）の場合、`photoEditModeStore`のモードで分岐する。**crop モード**かつ`frozenFrame`があれば`drawCropModeOverlay()`を呼ぶ（`frozenFrame`から「元画像全体の画面矩形」を逆算し、暗くマスクした上で現在のクロップ矩形の内側だけ明るく再描画、クロップ窓の内側に三分割グリッド（rule of thirds。黒→白の順に重ねた細線）、四隅にL字ハンドル）。**それ以外**は通常のフレーム装飾（角丸・影・縁取り）込みで写真を描き、select モードで選択中なら`drawPhotoResizeHandles()`で四隅に■ハンドルを重ねる。
+**写真本体の塗り（`drawCroppedPhoto`。A-3）:** `photoDrawConfig.cropRotation === 0` なら従来どおり `drawImageWithPrecision(元画像, source矩形 → dest矩形)`。非0なら「クロップ窓（`dest*`）にクリップ → `translate(窓)`＋`scale`＋画像中心まわりに `cropRotation` 回転 → `drawImage(元画像全体)`」で塗る。`rect` は `canvasRenderer.effectiveCropRect()`（＝`clampRectToRotatedImage` を通した“見えているサイズ”）を渡す。`drawPreview` / `renderFinal` の両方が通る。
+
+**写真選択中の四隅ハンドル／トリミングオーバーレイ描画（5.24節・5.25節・7.2節参照）:** 選択中オブジェクトが写真（`getSelectedId() === 'photo'`）の場合、`photoEditModeStore`のモードで分岐する。**crop モード**かつ`frozenFrame`があれば`drawCropModeOverlay()`を呼ぶ（`frozenFrame`から「元画像全体の画面矩形 `whole`」を逆算し、**A-3: `cropSettings.rotation ≠ 0` なら `whole` を中心まわりに傾けて描画**、暗マスク（キャンバス全面）した上で現在のクロップ矩形の内側だけ明るく再描画、クロップ窓の内側に三分割グリッド、四隅にL字ハンドル）。クロップ窓（`cropScreen`）とL字ハンドルは軸平行のまま。**それ以外**は通常のフレーム装飾（角丸・影・縁取り）込みで写真を描き、select モードで選択中なら`drawPhotoResizeHandles()`で四隅に■＋回転ハンドルを重ねる。
 
 ### 5.6 backgroundRenderer.js
 背景描画を担当します。
@@ -541,10 +545,10 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 - **Deleteキーでのテキストレイヤー削除（D-5 / バケット4）**: 「テキスト」タブがアクティブ（`getActiveTab() === 'tab-text'`）で、選択中が `textSettings.layers` に存在するidのとき、`Delete` / `Backspace` で `removeTextLayer(id)` ＋ 選択解除（＝リスト行の × ボタンと同じ）。入力欄フォーカス中は無効。統合後は撮影日・Exif を含むレイヤーも削除対象（固定レイヤーの概念は無くなった）
 - **拡大・回転ハンドル（テキスト系オブジェクトのみ。自由テキスト・撮影日・Exifブロックいずれも対応）**: `pointerdown`時、通常のオブジェクト当たり判定（`interactionRegistry.hitTest()`）より先に`textHandleStore.getTextHandles()`のハンドル座標との距離判定を行う（当たり判定半径`HANDLE_HIT_RADIUS = 10px`）。ヒットした場合は`dragState.mode`を`'resize'`または`'rotate'`にしてドラッグを開始し、通常の移動ドラッグ（`mode: 'move'`）とは別処理で`textAdapter.commitResize()`/`commitRotate()`を直接呼ぶ（アダプタの`getValue`/`computeChanges`/`commit`という汎用インターフェースではなく、テキスト専用の`getTransform`/`commitResize`/`commitRotate`を使う。写真・背景にはこの概念がないため）
 - **写真の四隅ハンドルとトリミングモード（5.24節・5.25節、7.2節「オンキャンバス・トリミング」参照）**: 写真選択中は`photoEditModeStore`のモード（`select`/`crop`）で挙動を切り替える。
-  - `pointerdown`で、テキストハンドルと同様に通常のオブジェクト当たり判定より先に`photoCropStore.getCropHandles()`の四隅座標を距離判定する（半径`HANDLE_HIT_RADIUS`）。**select モード**でヒット → `dragState.mode = 'photoResize'`（開始点と「中心→掴んだ隅」方向の単位ベクトルを保持し、`pointermove`で符号付き投影量を`photoAdapter.commitMarginResizeByDrag()`に渡し`baseMarginPercent`を増減。中心からの距離比を使う旧方式は「中心を通り越すと余白が逆に減る」不具合があったため置き換えた）。**crop モード**でヒット → `dragState.mode = 'cropRectResize'`（掴んだ隅と`frozenFrame.whole`のサイズから`rect`の差分を計算し`resizeCropRect()`→`photoAdapter.commitCropRect()`）。crop モードでクロップ窓の内側なら`dragState.mode = 'cropPan'`（`rect.x/y`をドラッグ方向へ平行移動）。
+  - `pointerdown`で、テキストハンドルと同様に通常のオブジェクト当たり判定より先に`photoCropStore.getCropHandles()`の四隅座標を距離判定する（半径`HANDLE_HIT_RADIUS`）。**select モード**でヒット → `dragState.mode = 'photoResize'`（開始点と「中心→掴んだ隅」方向の単位ベクトルを保持し、`pointermove`で符号付き投影量を`photoAdapter.commitMarginResizeByDrag()`に渡し`baseMarginPercent`を増減。中心からの距離比を使う旧方式は「中心を通り越すと余白が逆に減る」不具合があったため置き換えた）。**crop モード**でヒット → `dragState.mode = 'cropRectResize'`（掴んだ隅と`frozenFrame.whole`のサイズから`rect`の差分を計算し`resizeCropRect()`。**A-3: `cropSettings.rotation` があれば `clampCropResizeToRotatedImage()` で掴んだ隅の対角を固定したまま傾いた画像に収める**→`photoAdapter.commitCropRect()`）。crop モードでクロップ窓の内側なら`dragState.mode = 'cropPan'`（`rect.x/y`をドラッグ方向へ平行移動。**回転時は `clampCropPanToRotatedImage()` で端で止める**）。**crop モードで「暗い余白」（ハンドルでも窓内でもない）をドラッグ → `dragState.mode = 'cropRotate'`（A-3。クロップ窓中心まわりのポインタ角度の変化量を `photoAdapter.commitCropRotation()` へ。Shift で 1° 刻み。`rect` は変えず `rotation` だけ更新＝逆方向へ回すと元サイズへ戻る）**。同じ余白の「短いタップ」は従来どおり crop モードの確定（`cropExitCandidate`）——ドラッグ扱いになれば `pointerup` のタップ判定で弾かれ `exitCrop` は走らない。
   - `pointerup`で、**pointerdown からの移動量が`CLICK_MOVE_THRESHOLD`(4px)未満、かつ押下時間が`CLICK_TAP_MS`(400ms)未満**のときだけ「短いタップ」とみなす: select モードで選択済みの写真本体タップ → `photoEditModeStore.enterCrop()`（現在のプレビュー座標を`frozenFrame`にスナップショット）。crop モードでクロップ窓の外のタップ → `photoEditModeStore.exitCrop()`（出力枠は変えない）。**動かさずに長押ししてから離した場合はモード切替が発動しない**（`pointerDownCtx.downTime` を `performance.now()` で記録して判定。以前は移動量だけを見ていたため、単なる長押しでも切り替わっていた）。`CLICK_TAP_MS` は手触りを見て調整可。
   - `Escape` / `Enter` キーでも crop モードを抜ける（`docs/roadmap.md` A-13）。crop モード中は矢印キーがクロップ矩形のパンになる。`Enter` は入力欄フォーカス中（`isEditableElement`）には効かない（keydown の先頭 return）。
-  - **レイアウトタブの「写真のトリミング」セクション（`#cropSection`）内をクリックしても crop モードに入る**（`docs/roadmap.md` A-13）。`uiController` が `#cropSection` の `click` で `canvasInteraction.requestEnterCropMode()` を呼ぶ（プレビュー上で選択済み写真を再タップするのと同じ経路。写真が未選択なら先に選択する）。比率タイル（`<button class="ratio-tile">`）・見出し・ヒント文のクリックはすべて crop モードへ入る。除外するのはカスタム幅高さの数値入力欄（`<input>` / `<textarea>`）と**縦横入れ替えの回転ボタン（`.ratio-rotate-btn`。向き切り替えはメタ操作なので crop モードに入らない。A-14）**だけ（`e.target.closest('input, textarea, .ratio-rotate-btn')` でガード）。`requestEnterCropMode()` は `enterCrop()` の frozenFrame スナップショット作成を集約したモジュール関数で、プレビュータップ側の `enterCropMode` もこれを使う。**すでに crop モードのときは何もしない**（`isCropMode()` なら即 return。`docs/roadmap.md` G-6）——frozenFrame は select モードのレイアウト基準なので、crop 済み（`rect0` が小さい）状態で取り直すと `cropModeGeometry` の `whole = photoBox0 / rect0` が一段拡大し、繰り返すと元画像が無限に拡大してクロップ枠が消える。
+  - **レイアウトタブの「写真のトリミング」セクション（`#cropSection`）内をクリックしても crop モードに入る**（`docs/roadmap.md` A-13）。`uiController` が `#cropSection` の `click` で `canvasInteraction.requestEnterCropMode()` を呼ぶ（プレビュー上で選択済み写真を再タップするのと同じ経路。写真が未選択なら先に選択する）。比率タイル（`<button class="ratio-tile">`）・見出し・ヒント文のクリックはすべて crop モードへ入る。除外するのは数値入力欄・水平出しスライダー（`<input>` / `<textarea>`）と**縦横入れ替えの回転ボタン（`.ratio-rotate-btn`。A-14）**と**「切り抜きをリセット」（`#resetCrop`。A-3）**だけ（`e.target.closest('input, textarea, .ratio-rotate-btn, #resetCrop')` でガード）。`requestEnterCropMode()` は `enterCrop()` の frozenFrame スナップショット作成を集約したモジュール関数で、プレビュータップ側の `enterCropMode` もこれを使う。**すでに crop モードのときは何もしない**（`isCropMode()` なら即 return。`docs/roadmap.md` G-6）——frozenFrame は select モードのレイアウト基準なので、crop 済み（`rect0` が小さい）状態で取り直すと `cropModeGeometry` の `whole = photoBox0 / rect0` が一段拡大し、繰り返すと元画像が無限に拡大してクロップ枠が消える。
   - **crop モード中は「キャンバスの外側」をクリックしてもクロップを確定できる**（`docs/roadmap.md` A-5）。`initCanvasInteraction()` が `previewCanvas.closest('.canvas-area')` にも `pointerdown`/`pointerup` を張り、**crop モード中かつ `e.target !== previewCanvas`**（`.canvas-area` のパディングや、出力比率が縦長／横長のときにキャンバス周囲へできるレターボックス）で、canvas 本体と同じ「短いタップ」判定（`CLICK_MOVE_THRESHOLD` / `CLICK_TAP_MS`）を満たしたときに `photoEditModeStore.exitCrop()` を呼ぶ。キャンバス本体上のクリックは上の `pointerup`（クロップ窓の外 → `exitCrop`）が扱うため、この余白リスナーは `e.target === previewCanvas` のイベントを無視する。select モードでは何もしない（キャンバス外クリックでの選択解除は A-5 の対象外＝別機能）。リスナーは `.canvas-area` に限定するので、設定パネル・上部バー・比率タイル等のクリックは従来どおり crop モードを抜けさせない。
   - 写真本体（ハンドル以外）の select モードでのドラッグは従来どおり`photoAdapter`の`move`処理（`photoViewParams`更新）。
   - **写真の回転ハンドル（A-4）**: select モードで写真選択中のとき、`pointerdown` で四隅■より先に `photoCropStore.getCropHandles().rotate`（回転適用後の画面座標）との距離判定（半径 `HANDLE_HIT_RADIUS`）を行い、ヒットしたら `dragState.mode = 'photoRotate'`。`pointermove` はテキストの `rotate` と同じ角度計算（ボックス中心から見たポインタ角度の変化量を開始角に加算、**Shift で15°刻みにスナップ**）で `photoAdapter.commitRotate(deg)` を呼ぶ（`(-180, 180]` に正規化、0.1°丸め）。crop モードでは無効。
@@ -559,7 +563,7 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 | アダプタ | 対象 | 値の単位系 | 備考 |
 |---|---|---|---|
 | `textAdapter.js` | `textSettings.layers[]`の各レイヤー（id ＝ レイヤーの uuid） | 写真短辺基準の% | `resolveLayer(id)`（`layers` から検索）＋ `updateTextLayer(id, changes)` で書き戻し。サイズのクランプは `controlsConfig.textLayerSize`（レイヤー共通の1範囲、最大50%） |
-| `photoAdapter.js` | 写真の枠内配置（`photoViewParams`） | 可動範囲(movable width/height)に対する0.0〜1.0の割合 | `layoutCalculator.js`の可動範囲計算と対応させる必要があり、`getLastPreviewContext().scale`を使った変換が必要。**A-4: 可動範囲は「回転後の外接矩形」基準で計算する**（`computeChanges` が `photoViewParams.rotation` から bbox を出す）。加えてトリミング用に、`getCropRect()`・`commitCropRect(rect)`・`getCropConstraint()`・`commitMarginResizeByDrag(startMargin, projPx, startShortSidePx)`、回転用に `getRotation()`（現在の回転角）・`commitRotate(deg)`（`(-180,180]` 正規化＋0.1°丸めで `photoViewParams.rotation` を更新）を持つ（5.16節参照。`textAdapter`の`getTransform`系と同種の拡張） |
+| `photoAdapter.js` | 写真の枠内配置（`photoViewParams`） | 可動範囲(movable width/height)に対する0.0〜1.0の割合 | `layoutCalculator.js`の可動範囲計算と対応させる必要があり、`getLastPreviewContext().scale`を使った変換が必要。**A-4: 可動範囲は「回転後の外接矩形」基準で計算する**（`computeChanges` が `photoViewParams.rotation` から bbox を出す）。加えてトリミング用に、`getCropRect()`（A-3: `cropSettings.rotation` があれば `clampRectToRotatedImage` を通した“見えているサイズ”を返す）・`getDesiredCropRect()`（縮小前の `cropSettings.rect`）・`commitCropRect(rect)`（そのまま書くだけ。クランプは呼び出し側）・`getCropConstraint()`・`commitMarginResizeByDrag(...)`、A-4 の回転用に `getRotation()`・`commitRotate(deg)`（`(-180,180]` 正規化＋0.1°丸めで `photoViewParams.rotation`）、A-3 の水平出し用に `getCropRotation()`・`commitCropRotation(deg)`（**±45 クランプするだけ。`rect` は変えない**＝Model B）を持つ（5.16節参照。`textAdapter`の`getTransform`系と同種の拡張） |
 | `backgroundAdapter.js` | 画像背景の位置（`imageBlurBackgroundParams`。`imageBlur` と `bgImage` で共有） | 写真短辺基準の%（textAdapterと同じ単位系） | 単色背景（`backgroundType === 'color'`）や、`bgImage` で別画像が未選択の場合はそもそも`interactionRegistry`に登録されないため、ドラッグ対象にならない。**背景のドラッグ位置調整は「背景」タブでのみ有効**で、そのタブでは写真の上を含むキャンバス全面のドラッグを`canvasInteraction.js`がこのアダプタへ振り替える。他タブでの余白ドラッグでは背景は動かない（5.16節「タブ別ドラッグ」参照）。原点スナップ用の`originSnapPx(startValue, ctx)`を持つ |
 | `shadowAdapter.js` | フレームの影のオフセット（`frameSettings.shadowParams.offsetX/offsetY`） | 写真短辺基準の%（-25〜25でクランプ。`controlsConfig.frameShadowOffsetX`） | 「フレーム」タブ表示中かつ`shadowEnabled === true`のときだけ、`canvasInteraction.js`が写真本体（テキスト以外）のドラッグをこのアダプタへ振り替える。`backgroundAdapter`と同じ`getValue`/`computeChanges`/`commit`＋`originSnapPx`パターン。0.1%丸めも同様（5.16節「タブ別ドラッグ」参照） |
 
@@ -754,18 +758,25 @@ Blobをダウンロード
 `cropSettings`として実装される。**2026年8月28日の再設計で、中央固定ズーム＋パン方式（`{ aspectRatio, zoom, offsetX, offsetY }`）から、非対称な切り抜き矩形をそのまま持つ方式（`{ aspectRatio, rect }`）に変更した**。詳細な経緯は `docs/session-log-2026-08-27-2.md` 参照。
 
 **データモデル:**
-- **`cropSettings.rect`**: 切り抜き矩形を「元画像に対する割合」 `{ x, y, w, h }`（いずれも 0–1、x/y が左上、w/h がサイズ）で保持する。これが唯一の表現。
+- **`cropSettings.rect`**: 切り抜き矩形を「元画像に対する割合」 `{ x, y, w, h }`（いずれも 0–1、x/y が左上、w/h がサイズ）で保持する。これが唯一の表現。A-3 の `rotation` が付いているときは「クロップ窓が直立した座標系（straightened space）」での軸平行矩形（回転 0 のとき image space と一致）。**`rect` は水平出しで縮小しない“望むサイズ”を保持する（Model B）**——傾いた元画像からはみ出すぶんは、描画・当たり判定の入口（`layoutCalculator` / `canvasRenderer.effectiveCropRect` / `photoAdapter.getCropRect`）で `clampRectToRotatedImage()` が中心固定縮小して吸収する。そのため**角度を戻すと切り抜きは元のサイズへ戻る**（Lightroom Web の角度補正と同じ）。L字ハンドルで手動リサイズしたときだけ、その“見えているサイズ”が新しい `rect` として確定する。
+- **`cropSettings.rotation`（A-3。`docs/roadmap.md` A-3）**: 水平出し（切り抜き時の元画像回転）角度、度、-45〜45（`controlsConfig.cropRotation`）。**クロップ窓は出力フレーム内で軸平行のまま、元画像がその下で傾く**（Lightroom の「角度補正」）。7.2節「切り抜きの水平出し」参照。
 - **`cropSettings.aspectRatio`**: 切り抜き矩形に課す比率制約。
   - `'free'`: 制約なし（自由比率、UI上は「フリー（自由比率）」）。既定値。
   - `'1:1'`, `'4:3'`, `'16:9'` など、または `'幅:高さ'` のカスタム: その比率でしか矩形をリサイズできない。比率を選ぶと、そのとき現在の矩形の中心を保ったまま、その比率へ**外接方向**で合わせる（`utils/cropRect.js` の `growRectToAspect`＝現在の矩形を含む最小の比率一致矩形。[0,1] 超は比率保持で頭打ち。既にその比率なら完全 no-op）。以前は `fitRectToAspect`（内接＝比率を選ぶたびに縮む）だったが、A-13 で比率タイルのクリックが crop モード遷移も兼ねるようになり、別々の比率を続けて押すとクロップ枠が 1px へ収束する不具合（`docs/roadmap.md` G-6 続報）が顕在化したため外接方式に変更した。`fitRectToAspect` は `stateManager.setImage` の画像ロード時再フィット（全体矩形から）でのみ使う。
 
 **操作方法:**
 - **プレビュー上（オンキャンバス）**: 5.16〜5.17節・7.2節「オンキャンバス・トリミング」参照。写真を選択した状態でもう一度クリック（またはレイアウトタブの「写真のトリミング」セクション内をクリック）すると「トリミングモード」に入り、四隅の L 字ハンドルで切り抜き範囲を指定、写真本体ドラッグで切り抜き範囲を平行移動、写真の外（またはキャンバスの外の余白。A-5）をクリックするか Esc / Enter で確定する。
-- **「レイアウト」パネルの UI**: 「写真のトリミング」は比率タイルピッカー（`#cropAspectRatioPicker`。オリジナル / フリー / 各比率ファミリー / カスタム幅高さ ＋ 見出しの回転ボタン。5.3節「比率タイルピッカー」参照）。**「切り抜き位置（横／縦）」スライダーはフェーズ2で撤去**（`docs/roadmap.md` A-1）。`rect` のパンはプレビュー上のジェスチャー（crop モードの本体ドラッグ・矢印キー）と「大きさと配置をリセット」ボタン（`#resetPhotoPlacement`。`uiController.js` の `cropRectWithPan(rect, 0.5, 0.5)` で中央へ）からのみ動かす。
+- **「レイアウト」パネルの UI**: 「写真のトリミング」は比率タイルピッカー（`#cropAspectRatioPicker`。オリジナル / フリー / 各比率ファミリー / カスタム幅高さ ＋ 見出しの回転ボタン。5.3節「比率タイルピッカー」参照）＋ **「水平」スライダー（`#cropRotation`。A-3）＋「切り抜きをリセット」ボタン（`#resetCrop`。A-3）**。**「切り抜き位置（横／縦）」スライダーはフェーズ2で撤去**（`docs/roadmap.md` A-1）。`rect` のパンはプレビュー上のジェスチャー（crop モードの本体ドラッグ・矢印キー）と「大きさと配置をリセット」ボタン（`#resetPhotoPlacement`。`uiController.js` の `cropRectWithPan(rect, 0.5, 0.5)` で中央へ）からのみ動かす。
 
 **実装詳細:**
 - `layoutCalculator.js` の `calculateLayout()` が `utils/cropRect.js` の `resolveCropRect(cropSettings, originalW, originalH)` を呼んで矩形を得る。`resolveCropRect` は `cropSettings.rect` が有効ならそれを、旧 `zoom`/`offset` 形式ならその場で矩形へ変換、どちらでもなければ全体（`{0,0,1,1}`）を返すため、未移行の状態でも描画は壊れない。
 - `sourceX = rect.x * originalW`、`sourceWidth = rect.w * originalW`（Y も同様）。`destWidth === sourceWidth`（元画像の解像度を一切変えないという中核不変条件は維持）。
+- **A-3 の水平出し（`cropSettings.rotation ≠ 0`）**: `layoutCalculator` は角度を `photoDrawConfig.cropRotation` に素通しし、さらに**切り出しに使う矩形を `clampRectToRotatedImage()` で「見えているサイズ」に縮めてから** `source*` / `dest*` を出す（`dest*` は縮んだぶん小さくなる＝水平出しで出力写真は少し小さくなる。出力キャンバス寸法はその `dest*` から。`rect` 自体は state 上では縮めない）。実際の塗りは `canvasRenderer.drawCroppedPhoto()` が「クロップ窓 `dest*` にクリップ → 窓中心座標系へ → 画像中心まわりに `cropRotation` 回転 → 元画像全体を配置して `drawImage`」で行う（`drawImage` の 4 数値 source では回転ソースを表せないため）。**空いた角が出ない**ことは `clampRectToRotatedImage()` が保証する（下記）。A-4 の写真ボックス回転とは入れ子（A-4 が外＝`dest*` 全体、A-3 が内＝`dest*` の塗り）。
+- **回転対応クランプ（`utils/cropRect.js`）** ——`windowFitsInRotatedImage(rect, θ, imgW, imgH)`: `rect` が straightened space の `[0,1]` に収まり、かつ 4 隅を image space へ写して（画像中心周りに `−θ`）`[0,imgW]×[0,imgH]` に入っているか。
+  - `clampRectToRotatedImage(rect, θ, imgW, imgH)`: はみ出していたら**中心固定・比率保持**で二分探索して収まる最大へ縮める（`θ=0` は従来の `clampRect`）。**描画・当たり判定の入口専用**（`layoutCalculator` / `effectiveCropRect` / `photoAdapter.getCropRect`）＝ state の `rect` は書き換えない。角度を戻せば元へ戻る。
+  - `clampCropResizeToRotatedImage(rect, corner, θ, imgW, imgH)`: L字ハンドルのリサイズ用。**掴んだ隅の対角（アンカー）を固定**したまま、そのアンカーを支点に二分探索スケールして収める（中心固定と違い反対側の辺が動かない＝「片側を引いたら反対側が近づく」不具合の修正）。
+  - `clampCropPanToRotatedImage(startRect, fdx, fdy, θ, imgW, imgH)`: パン用。開始矩形から目標へ向けて平行移動量を二分探索で頭打ち（端で止まる）。
+  - `resizeCropRect` の自由比率分岐は、動かす辺自体も `[0,1]` で頭打ちにする（回転なしでも「外へ引くと `clampRect` が w と x を独立に丸めてアンカー辺まで動く」不具合の修正）。
 - **旧形式からの移行**: 保存済みプリセットは `presetStore.js` の `applyPreset()` が `utils/cropRect.js` の `migrateCropSettings()` で `{ aspectRatio, rect }` に正規化してから適用する。旧 `'original'`＋ズーム1＋オフセット0.5 は `rect {0,0,1,1}` に完全一致、旧 `'original'` は `'free'` に寄せる。固定比率＋ズームありは幾何変換でベストエフォート移行し、画像ロード前に適用された場合は `stateManager.js` の `setImage()` が実際の画像比率で `rect` を再フィットする。
 
 ### 7.2 レイアウト設定
@@ -783,6 +794,8 @@ Blobをダウンロード
   - **数値スライダー（`#photoPosX/Y`）は 2026年8月のフェーズ2で撤去（`docs/roadmap.md` A-1）**。`photoViewParams` はデータとしては維持し、**プレビュー上で写真を直接ドラッグして調整する**（`interaction/adapters/photoAdapter.js`。ドラッグ中はキャンバス中央線・端・他オブジェクトへのスナップも働く）。パネルには「**大きさと配置をリセット**」ボタン（`#resetPhotoPlacement`。旧「配置をリセット」。`docs/roadmap.md` A-15）があり、`photoViewParams` を中央（`offsetX/Y=0.5`, `rotation=0`）へ・クロップ矩形のパンを中央へ・`baseMarginPercent` を既定 5（表示 90%）へ戻す（切り抜き範囲のサイズ・比率は変えない。押下後 `updateSliderValueDisplays()` で「大きさ」「角度」スライダーも同期）。
   - **注意:** 仕様書v1では「9点から選択」とあるが、現在の実装ではプレビュードラッグによる連続的な位置調整となっている
 - **写真の回転 / 「角度」スライダー（A-4。`docs/roadmap.md` A-4）**: クロップ確定後の写真を出力キャンバス内で回す（`photoViewParams.rotation`、度、-180〜180）。操作は2経路——(1)「大きさと配置」セクションの「角度」スライダー（`#photoRotation`。`controlsConfig.photoRotation` = min-180/max180/step1。ダブルクリックで 0° へ）、(2) select モードで写真選択中に上端の回転ハンドルをドラッグ（Shift で15°刻み。5.16節）。回転すると装飾（角丸・影・縁取り）も一緒に回り、`layoutCalculator` が**回転後の外接矩形＋余白**で出力キャンバスを取り直すので写真は切れない（余白・テキストサイズの基準となる「写真短辺」は回転前の値で固定）。crop モード中は回転を一時的に無視して素の写真でトリミングする。`baseMarginPercent`／「丸み」と同じく `updateSliderValueDisplays()` が「スライダーにフォーカス中は `.value` を書き換えない」ガードで表示・入力欄を同期する。
+- **切り抜きの水平出し / 「水平」スライダー（A-3。`docs/roadmap.md` A-3）**: 切り抜き時に**切り出し前の元画像**を回して水平を出す（`cropSettings.rotation`、度、-45〜45＝Lightroom の角度補正と同じ）。「写真のトリミング」セクションの「水平」スライダー（`#cropRotation`。`controlsConfig.cropRotation` = min-45/max45/step0.1。ダブルクリックで 0° へ）＋ **crop モードのオーバーレイの暗い余白をドラッグ**（クロップ窓中心まわりのポインタ角度の変化量。Shift で 1° 刻み。5.16節）。クロップ窓は軸平行のまま元画像が傾く。**`cropSettings.rect` は縮小しない“望むサイズ”を保持し（Model B）**、傾いた画像からはみ出すぶんは描画・当たり判定の入口で `clampRectToRotatedImage()`（中心固定・比率保持）が吸収する（仕様(a)＝空き角なし。そのぶん出力写真は少し小さくなるが、**角度を戻すと切り抜きは元のサイズへ戻る**）。専用リスナーが `photoAdapter.commitCropRotation()` を呼ぶ（±45 クランプのみ。汎用 `addNumericInputListener` は使わない）。A-4（`photoViewParams.rotation`）とは独立の別値・別コントロールで、レンダラ上は入れ子。
+- **「切り抜きをリセット」ボタン（`#resetCrop`。A-3）**: 「写真のトリミング」セクション。`cropSettings` を `{ aspectRatio: 'free', rect: 全体, rotation: 0 }` に戻す（大きさ・配置・出力比率は触らない）。`#cropSection` のクリック→crop モード遷移（A-13）のガードに `#resetCrop` を追加済み。
 
 **UI上のグルーピング（フェーズ4 A-8 で並べ替え、フェーズ7 A-12 で見出しを対象明示に）:** 「レイアウト」パネルを **① キャンバス → ② 写真のトリミング → ③ 大きさと配置** の3セクション（線区切り、`fieldset`＋`legend`）に分ける。ユーザーから見た自然な決定順（枠の形を決める → 元写真のどこを使うか決める → 写真の大きさと位置を決める）に合わせたもの。`baseMarginPercent` の値（旧「余白」。UI 表記は「大きさ」）は「キャンバス」から切り離して ③ に置く——写真の大きさの決定は出力キャンバスの形の決定ではなく構図の決定であり、かつ ② トリミングで写真の実効短辺（＝内部 % の基準）が変わるため、使う範囲を先に確定してから決めるほうが値がぶれない。①②の比率タイル、③の「大きさ」「角度」スライダー・「大きさと配置をリセット」ボタンはそれぞれ独立で、`cropSettings`と`photoViewParams`の状態・計算ロジックは統合していない。切り抜き位置・枠内位置の数値スライダーはフェーズ2で撤去済みで、これらの調整はすべてプレビュー上のジェスチャーに寄せている。
 
@@ -796,7 +809,8 @@ Blobをダウンロード
 |---|---|---|
 | 四隅ハンドル | ■（白塗り・黒フチ）。ドラッグ＝**余白 `baseMarginPercent` の増減**（外へ引く＝余白減＝写真が枠いっぱいへ。写真のピクセル数・写る範囲は不変）。「中心→掴んだ隅」方向への符号付き移動量で余白を動かす（`photoAdapter.commitMarginResizeByDrag`。中心を通り越しても反転せず、移動量に比例。感度は `MARGIN_RESIZE_FACTOR`） | L 字（白塗り・黒フチ）。ドラッグ＝**クロップ矩形 `cropSettings.rect` の変更**（掴んだ隅だけ動く。比率制約時は連動。`resizeCropRect`→`photoAdapter.commitCropRect`）。**比率固定で拡大していくと写真の端で止まり、比率固定は崩れない（`docs/roadmap.md` G-5）**——`resizeCropRect`が、掴んだ隅の対角を固定したまま矩形が[0,1]に収まる最大の幅（`h=w/R`も含む）で頭打ちにする。以前は末尾の`clampRect`が幅と高さを独立に丸めるため、短辺が端に当たると比率が壊れて画面枠いっぱいまで拡大できていた。 |
 | 写真本体ドラッグ | 出力枠内での写真位置（`photoViewParams`）。従来どおり | クロップ矩形の平行移動（`rect.x/y`。ドラッグ方向にクロップ窓が動く） |
-| 表示 | フレーム装飾（角丸・影・縁取り）込みで写真を描画＋■ハンドル | クロップ矩形の内側だけ明るく、外側を暗くマスクした周辺減光オーバーレイ＋三分割グリッド（rule of thirds）＋L字ハンドル。枠線・グリッド・ハンドルは黒フチ＋白で明暗どちらの背景でも視認できる |
+| 暗い余白のドラッグ | —（余白は動かない。5.16節） | **水平出し（`cropSettings.rotation`）**（A-3。クロップ窓中心まわりのポインタ角度。Shift で 1° 刻み。短いタップなら crop 確定） |
+| 表示 | フレーム装飾（角丸・影・縁取り）込みで写真を描画＋■＋回転ハンドル | クロップ矩形の内側だけ明るく、外側を暗くマスクした周辺減光オーバーレイ＋三分割グリッド＋L字ハンドル。**A-3: 水平出し中は元画像（`whole`）が傾き、クロップ窓は軸平行のまま**。枠線・グリッド・ハンドルは黒フチ＋白で明暗どちらの背景でも視認できる |
 | ホイール／矢印キー | ホイールは未使用、矢印＝`photoViewParams` の nudge | ホイール無効、矢印＝クロップ矩形のパン（本体ドラッグと同じ向き） |
 | 抜け方 | 選択済みの写真をもう一度クリック／**レイアウトタブの「写真のトリミング」セクション内をクリック**（`#cropSection`。数値入力欄を除く。A-13）→ crop へ | 写真の外をクリック／**キャンバスの外の余白（`.canvas-area`）をクリック**（A-5）／**Esc / Enter**（A-13）→ select へ戻る。**出力枠（`outputTargetAspectRatioString`）は変えない**。枠は固定のまま、切り抜かれた写真がそのクロップ比率の形で枠の中に配置される（横長にクロップすれば写真が横長の帯になり、上下に余白がつく） |
 
@@ -1032,6 +1046,7 @@ Blobをダウンロード
 - ✅ 構図調整（クロップのズーム・パン）の数値UI化（7.1節参照）
 - ✅ テキストの拡大・回転ハンドル（5.22節参照。自由テキスト・撮影日・Exifブロックいずれも対応。backgroundは対象外）
 - ✅ **写真の回転（A-4。7.2節「写真の回転 / 「角度」スライダー」・5.16節・5.17節参照）**: クロップ確定後の写真を出力キャンバス内で回す（`photoViewParams.rotation`）。「角度」スライダー ＋ select モードの上端回転ハンドル（Shift で15°刻み）。`layoutCalculator` が回転後の外接矩形＋余白でキャンバスを取り直すので写真は切れない（仕様(a)）。装飾も一緒に回る。Undo・プリセット（`photoViewParams`）に自動で乗る
+- ✅ **切り抜きの水平出し（A-3。7.1節・7.2節「切り抜きの水平出し」・5.5節・5.16節・5.17節参照）**: 切り抜き時に切り出し前の元画像を回す（`cropSettings.rotation`、±45°）。「水平」スライダー ＋ crop オーバーレイの暗い余白ドラッグ。クロップ窓は軸平行のまま元画像が傾く。**`cropSettings.rect` は縮小せず“望むサイズ”を保持し（Model B）**、はみ出すぶんは入口で `clampRectToRotatedImage`（中心固定）が吸収＝角度を戻すと元サイズへ戻る（仕様(a)＝空き角なし）。塗りは `drawCroppedPhoto`（窓にクリップ＋回転して元画像を配置）。L字ハンドルのリサイズ／パンは回転対応クランプ（`clampCropResizeToRotatedImage` はアンカー固定、`clampCropPanToRotatedImage` は端で止める）。`resizeCropRect` 自由比率の辺クランプ漏れ（回転なしでも反対辺が動く不具合）も修正。「切り抜きをリセット」ボタン（`#resetCrop`）も追加。Undo・プリセット（`cropSettings`）に自動で乗る
 - ✅ **オンキャンバス・トリミング（2026年8月27日に中央固定ズーム方式で実装 → 8月28日にPowerPoint型へ再設計、7.2節・5.16〜5.17節・5.25節参照）**: 写真選択中は`photoEditModeStore`が select / crop モードを持ち、プレビュー上のクリックで切り替える。select モードの四隅■ハンドル＝余白（`baseMarginPercent`）、写真本体ドラッグ＝枠内配置（`photoViewParams`）。crop モードの四隅L字ハンドル＝切り抜き矩形（`cropSettings.rect`）、写真本体ドラッグ＝切り抜き位置のパン。`cropSettings`は割合矩形 `{ aspectRatio, rect }` ベース。クロップ矩形のon-canvasパンは crop モードの写真本体ドラッグ／矢印キーで対応済み
 - 自由テキストレイヤーの並び替え・複製
 - 複数選択・一括移動
@@ -1120,11 +1135,12 @@ Blobをダウンロード
 - ✅ **A-15 / A-16（フェーズ7 バケット3.5）**: 「配置をリセット」→「大きさと配置をリセット」に改名＋`baseMarginPercent` も既定へ。「大きさと配置」セクションの説明文を削除（7.2節）
 - ✅ **B-6（フェーズ7 バケット5）**: 背景タイプに「別画像」。`editState.bgImage`（Undo・プリセット非対象）に別読み込み、見え方・色調・位置は `imageBlurBackgroundParams` を「ぼかし」と共有（5.6節・7.3節）
 - ✅ **A-4（フェーズ7 積み残し）**: クロップ確定後の写真を出力キャンバス内で回転（`photoViewParams.rotation`。「角度」スライダー＋回転ハンドル、Shift で15°刻み）。`layoutCalculator` が回転後の外接矩形＋余白でキャンバスを取り直す＝写真は切れない〈仕様(a)〉。装飾も一緒に回る（7.2節・5.4節・5.16節・5.17節）
+- ✅ **A-3（フェーズ7 積み残し）**: 切り抜き時の元画像の水平出し（`cropSettings.rotation`、±45°。「水平」スライダー＋オーバーレイの余白ドラッグ）。**Model B**＝`rect` は縮小せず、入口の `clampRectToRotatedImage`（中心固定）で吸収＝角度を戻すと元サイズへ戻る〈仕様(a)〉。塗りは `drawCroppedPhoto`。L字ハンドル／パンは回転対応クランプ（アンカー固定／端で止める）＋自由比率の辺クランプ漏れ修正。「切り抜きをリセット」（`#resetCrop`）も追加（7.1節・7.2節・5.5節・5.16節・5.17節）
 
 既知の不具合の解消（`docs/session-log-2026-08-28.md`）:
 - ✅ **G-3**（レイアウトタブ開閉のトランジション中に画面全体が一瞬下にずれて戻る）: 極小幅のパネル内容が縦に伸び、`.app-container`（`min-height:100vh`）が下方向に膨張していた。`@media (min-width:1025px)` で `.app-container { height:100dvh; min-height:0; overflow:hidden }` にしてデスクトップ3カラム時のシェル高をビューポートに固定（内側は各自スクロール）。1024px 以下の縦積みには適用しない。G-1 の残り 2px も解消（3.1節）
 
-未着手のロードマップ項目: **フェーズ7 積み残し** = A-3（クロップ時に切り出し前の元画像を回転・最大規模）。詳細は `docs/roadmap.md`。
+未着手のロードマップ項目: **フェーズ7 の前向きな一覧は消化済み**（残りは方向性未確定の A-3 派生検討や新規要望のみ）。詳細は `docs/roadmap.md`。
 
 ## 12. 仕様書v1との対応状況
 
