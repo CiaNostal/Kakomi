@@ -1548,6 +1548,16 @@ export function setupEventListeners(redrawCallback) {
     moduleRedraw = redrawCallback;
     ensureRatioPickers();
 
+    // E-10 / E-11: 見出しの ? で開く操作ヒント（<details class="op-hint">）は
+    // 外側クリック / Esc で閉じる（<details> は本来クリックしても閉じないため）。
+    const closeOpenHints = (except) => {
+        document.querySelectorAll('details.op-hint[open]').forEach((d) => {
+            if (!except || !d.contains(except)) d.open = false;
+        });
+    };
+    document.addEventListener('pointerdown', (e) => closeOpenHints(e.target));
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeOpenHints(null); });
+
     const addNumericInputListener = (element, configKey, stateKey, nestedKey = '', subNestedKey = '') => {
         if (!element) return;
         element.addEventListener('input', (e) => {
@@ -1657,13 +1667,13 @@ export function setupEventListeners(redrawCallback) {
     // 「写真のトリミング」セクション内をクリックしたら、写真を選択して crop モードへ自動で入る（A-13。
     // プレビュー上で選択済み写真を再タップするのと同じ。frozenFrame スナップショットは requestEnterCropMode
     // が作る）。**比率タイル（`<button class="ratio-tile">`）のクリックも crop モードへ入る**——A-13 の
-    // 当初仕様。除外するのは数値入力欄（カスタム幅高さ・水平出しスライダー）と回転ボタン
-    // （`.ratio-rotate-btn`。向きの切り替えはメタ操作）と「切り抜きをリセット」（`#resetCrop`。A-3）だけ。
-    // Esc / Enter で select に戻る。
+    // 当初仕様。除外するのは数値入力欄（カスタム幅高さ・水平出しスライダー）と、見出し右端の
+    // セクション操作ボタン群（`.legend-tools` ＝ 縦横入れ替え `.ratio-rotate-btn` ／ リセット
+    // `.reset-btn`）と、「操作」開閉（`.op-hint`）だけ。Esc / Enter で select に戻る。
     const cropSection = document.getElementById('cropSection');
     if (cropSection) {
         cropSection.addEventListener('click', (e) => {
-            if (e.target.closest('input, textarea, .ratio-rotate-btn, #resetCrop')) return;
+            if (e.target.closest('input, textarea, .legend-tools, .op-hint')) return;
             requestEnterCropMode();
         });
     }

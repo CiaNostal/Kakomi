@@ -68,6 +68,8 @@
 | B-6 | 背景タイプに「別画像」を追加（単色／ぼかしに続く3つ目 `#bgTypeImage` = `backgroundType:'bgImage'`）。`editState.bgImage`（`EDITABLE_SETTINGS_KEYS` 外＝Undo・プリセット非対象。`getState()` のクローン時は `image` と同様に除外）に別途読み込む（`stateManager.setBackgroundImage` / `fileManager.processBackgroundImageFile`）。スライダー（拡大率・ぼかし・明るさ・彩度・位置）は `imageBlurBackgroundParams` を「ぼかし」と共有＝`drawBlurredImageBackground()` に別画像を全体で渡すだけ。別画像へ切替時、ぼかし既定 3 のままなら 0 へ寄せる。プレビュードラッグ位置調整も共有。プリセットに `bgImage` 型が入っていて画像未ロードなら単色にフォールバック | `session-log-2026-08-29-2.md` |
 | A-4 | クロップ確定後の写真を出力キャンバス内で回転（`photoViewParams.rotation`、度、-180〜180。`EDITABLE_SETTINGS_KEYS` の `photoViewParams` に含まれるので Undo・プリセットに自動追随）。操作は「大きさと配置」の「角度」スライダー（`#photoRotation`）＋ select モードの上端回転ハンドル（`photoCropStore` に `rotate` 座標追加、Shift で15°刻み、ダブルクリックで 0°）。`layoutCalculator` が**回転後の外接矩形＋余白**で出力キャンバスを取り直す＝写真は切れない〈仕様(a)〉。`destWidth/Height` は回転前のまま＝`canvasRenderer` が `drawPreview`／`renderFinal` で写真中心の `ctx.rotate` で包んで描く（装飾も一緒に回る）。余白・テキストの基準「写真短辺」は回転前で固定。crop モード中は回転を無視して素の写真でトリミング。`cropRect.js` は無変更 | `session-log-2026-08-29-3.md` |
 | A-3 | 切り抜き時の元画像の水平出し（`cropSettings.rotation`、度、-45〜45＝Lightroom の角度補正。`cropSettings` が追跡キーなので Undo・プリセットに自動追随）。クロップ窓は出力フレーム内で軸平行のまま、元画像がその下で傾く。`rect` は「窓が直立した座標系（straightened space）」での軸平行矩形（回転0で従来と一致）。**Model B**＝`rect` は水平出しで縮小せず“望むサイズ”を保持し、はみ出すぶんは描画・当たり判定の入口（`layoutCalculator`／`canvasRenderer.effectiveCropRect`／`photoAdapter.getCropRect`）で `clampRectToRotatedImage()`〈中心固定・比率保持で二分探索縮小〉が吸収〈仕様(a)＝空き角なし。出力写真は少し小さくなるが**角度を戻すと元サイズへ復帰**〉。塗りは `drawCroppedPhoto()`〈窓にクリップ → 窓中心座標系 → 画像中心まわりに回転 → `drawImage(元画像全体)`〉で `drawPreview`／`renderFinal` 両方。crop オーバーレイは `whole` を傾けて描画・暗マスクはキャンバス全面・窓とL字ハンドルは軸平行のまま。L字ハンドルのリサイズは `clampCropResizeToRotatedImage()`〈掴んだ隅の対角を固定〉、パンは `clampCropPanToRotatedImage()`〈端で止める〉。`resizeCropRect` の自由比率で辺を `[0,1]` 頭打ちにする修正も同梱（回転なしでも「外へ引くと反対辺が動く」不具合）。操作は「写真のトリミング」の「水平」スライダー（`#cropRotation`、step0.1、ダブルクリックで0°）＋ crop オーバーレイの暗い余白ドラッグ（Shift で1°刻み。短いタップは従来どおり crop 確定）。「切り抜きをリセット」ボタン（`#resetCrop` ＝ `cropSettings` を free/全体/0 へ）も追加。A-4 とは独立の別値・別コントロールでレンダラ上は入れ子 | `session-log-2026-08-29-4.md` / 不具合修正 `-5.md` |
+| E-10 | パネル内の文章による操作説明（旧 `.custom-text-drag-hint` の静的インスタンス）を廃止。UI が十分に自明なため。発見しにくいプレビュー操作（crop 中の余白ドラッグ＝水平出し、背景タブのキャンバスドラッグ＝背景移動など）だけ、畳んだ「操作」開閉（`<details class="op-hint">`）として残す。修飾キー説明は箇条書きに `（Shift: 1°）` の形で吸収。概念説明（「撮影日・Exif も1つのテキスト」「チェックした項目だけ保存」）は削除、後者は `#savePresetButton` の `title` へ。`.op-hint` はレイアウト「写真のトリミング」「大きさと配置」・背景「位置」の3か所。新スプライト `#i-help` | `session-log-2026-08-29-6.md` |
+| E-11 | E-10 をさらに文字なしに。**(1)「操作」開閉** の `<summary>` を `? アイコンだけ`（「操作」の文字なし）に、位置を**セクション見出しの文字のすぐ右**へ（`fieldset legend` に入れる／背景「位置」は `<p>`→`<div class="op-head subsection-heading with-rule">` の flex 行に）。開くと見出しのすぐ下にポップオーバー（`.op-hint > ul` = `position:absolute` の flex カード、`<li>` は `white-space:nowrap` の2列、`left:0/right:0` で見出し幅、位置基準は `legend`/`.op-head`〈`position:relative`〉、`z-index:40`＋影）。外側クリック / Esc で閉じる（`uiController.setupEventListeners` で `document` に薄いリスナー。`<details>` は本来クリックで閉じないため）。**(2) リセットボタン** `#resetCrop` / `#resetPhotoPlacement` / `#resetBgOffset` を**文字なしのアイコンボタン**（`.reset-btn`。新スプライト `#i-reset`＝ほぼ一周する反時計回りの矢印。上部バー Undo〈↶〉とは弧の長さで差別化。意味は `title`/`aria-label`）に。**(3) レイアウトタブの見出し行そろえ**: 右端のセクション操作ボタン（縦横入れ替え／リセット）を `<span class="legend-tools">`（`margin-left:auto` ＋ CSS Grid 固定スロット `26px 26px`、`grid-column` で 1＝縦横入れ替え / 2＝リセット）にまとめ、片方だけの段でも空スロットが幅を確保して**全段で縦位置がそろう**（キャンバスの縦横入れ替え＝トリミングの縦横入れ替え、トリミングのリセット＝大きさと配置のリセット）。3つのリセットは本文から `.legend-tools` へ移動。`#cropSection` の click→crop ガードを `input, textarea, .legend-tools, .op-hint` に整理。id・ハンドラ・挙動は不変 | `session-log-2026-08-29-7.md` |
 
 ダブルクリックでオフセットをリセットする案は「他の操作が暴発しそう」としてユーザー判断で見送り。
 
@@ -473,6 +475,37 @@ controlsConfig.baseMarginPercent.defaultValue`（5＝表示 90%）を追加し�
 誤解を招く。タイルは「ラベル＋ミニ長方形」だけ。A-14 と同じ実装で対応。
 詳細は「完了済み」表と `docs/session-log-2026-08-28-3.md`。
 
+### E-10.（完了）
+
+パネル内の文章による操作説明（旧 `.custom-text-drag-hint` の静的インスタンス）を廃止。UI が十分に親切なため。
+**発見しにくいプレビュー操作だけ**、畳んだ「操作」開閉（`<details class="op-hint">`）として残す。修飾キー（Shift）の
+説明は箇条書きに `（Shift: 1°）` の形で吸収。概念説明は削除（プリセットの「写真は含まれません」だけ
+`#savePresetButton` の `title` へ）。`.op-hint` はレイアウト「写真のトリミング」「大きさと配置」・
+背景「位置」の3か所。新スプライト `#i-help`。エディタ内など動的に出る短いヒントはそのまま。
+（E-11 でさらに `? アイコンだけ` にして見出し右へ移動＋リセットボタンもアイコン化した。）
+詳細は「完了済み」表と `docs/session-log-2026-08-29-6.md`。
+
+### E-11.（完了）
+
+E-10 をさらに文字なしに。**(1)「操作」開閉** の `<summary>` を `? アイコンだけ`（「操作」の文字なし）に、
+位置を**見出しの文字のすぐ右**へ（`fieldset legend` に入れる／背景「位置」は `<p>` → `<div class="op-head
+subsection-heading with-rule">` に変えて flex 行に）。開くと見出しのすぐ下にポップオーバー
+（`.op-hint > ul` = `position:absolute` の flex カード、各 `<li>` は `white-space:nowrap` の2列、
+`left:0/right:0` で見出し幅に、位置基準は `legend`/`.op-head`〈`position:relative`〉、`z-index:40`＋影）。
+外側クリック / Esc で閉じる（`<details>` は本来クリックで閉じないため `uiController.setupEventListeners` が
+`document` に薄いリスナーを張る）。
+**(2) リセットボタン** `#resetCrop` / `#resetPhotoPlacement` / `#resetBgOffset` を文字なしのアイコンボタン
+（`.reset-btn`。新スプライト `#i-reset` ＝ ほぼ一周する反時計回りの矢印。上部バー Undo〈↶〉とは弧の長さで
+差別化。意味は `title` / `aria-label` に）に。
+**(3) レイアウトタブの見出し行そろえ**: 右端のセクション操作ボタン（縦横入れ替え／リセット）を
+`<span class="legend-tools">`（`margin-left:auto` ＋ CSS Grid の固定スロット `grid-template-columns:
+26px 26px`。`grid-column` で 1＝`.ratio-rotate-btn` / 2＝`.reset-btn`）にまとめ、片方だけの段でも
+空スロットが 26px を確保して**全段で縦位置がそろう**（キャンバスの縦横入れ替え＝トリミングの縦横入れ替え、
+トリミングのリセット＝大きさと配置のリセット）。背景「位置」は縦横入れ替えが無いので 1スロット。
+3つのリセットは本文から `.legend-tools` へ移動（id・ハンドラ不変）。`#cropSection` の click→crop 遷移
+ガード（A-13）を `input, textarea, .legend-tools, .op-hint` に整理。
+詳細は「完了済み」表と `docs/session-log-2026-08-29-7.md`。
+
 ---
 
 ## F. プリセットタブ
@@ -615,6 +648,16 @@ no-op に、`uiController.applyCropAspect` を内接 `fitRectToAspect` → 外�
   は追跡キーなので Undo・プリセットに自動追随。`historyManager`・`presetStore` 無変更。a3-test 25/25 ＋
   a4/b6/a5/c1/g1/phase5/phase7b4/phase7b4-regress 回帰全通し。ユーザーのブラウザ目視も確認済み・push 済み
   〈実装＋2不具合修正を1コミットに〉）。**→ フェーズ7（改訂版）の前向きな一覧はすべて消化。次はユーザーと相談。**
+- **E-10 完了**（`docs/session-log-2026-08-29-6.md`。パネル内の文章説明を廃止し、発見しにくいプレビュー操作
+  だけ畳んだ「操作」開閉 `<details class="op-hint">` に。`#i-help` スプライト追加。ユーザーのブラウザ目視で
+  「もっと文字を減らしたい／`?` だけにして見出し右へ」「リセットボタンもアイコンだけに」の要望 → E-11 へ）。
+- **E-11 完了**（`docs/session-log-2026-08-29-7.md`。「操作」開閉を `? アイコンだけ` にして**見出しの文字のすぐ右**へ、
+  開くと見出し下にポップオーバー（外側クリック / Esc で閉じる薄い JS を追加）。3つのリセットボタンを文字なしの
+  アイコンボタン `.reset-btn` に（新スプライト `#i-reset` ＝ ほぼ一周する反時計回りの矢印。意味は `title` へ）。
+  レイアウトタブは右端のボタン群を `.legend-tools`（CSS Grid 固定スロット）でまとめ、縦横入れ替え／リセットが
+  全段で縦にそろうように。id・ハンドラ不変。`outputRotateButton`/`cropRotateButton` の x 一致・`resetCrop`/
+  `resetPhotoPlacement` の x 一致を確認。a3-test 25/25 ほか回帰全通し。ユーザーのブラウザ目視も確認済み・
+  push 済み〈E-10＋E-11 をまとめて1コミット〉）。
 - 比率タイルピッカー（`js/ui/ratioPicker.js`）は「形で見せて選ぶ」の再利用ネタ（C-1 で採った「感覚に合わせて曲げる」も同系）。
 - 「タブでプレビュー操作の意味を変える」系は、`tabManager.getActiveTab()` ＋ `canvasInteraction.js` の分岐に足していける。
   フェーズ4 で「パネルを畳んだ（`getActiveTab()`＝`null`）」状態が加わった＝写真ドラッグは枠内配置にフォールバックする。

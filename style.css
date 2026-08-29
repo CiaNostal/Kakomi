@@ -391,10 +391,43 @@ fieldset legend .legend-icon {
     color: var(--ink-dim);
 }
 
-/* A-14: 見出しに「キャンバス」「写真のトリミング」の文字＋右端に縦横入れ替えボタンを並べるための伸縮ラッパ。 */
+/* 見出しの対象名。E-11.1: flex:1 をやめて自然幅にし、? はそのすぐ右へ、
+   右端のボタン群は .legend-tools（margin-left:auto）でまとめる。 */
 fieldset legend .legend-text {
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
+}
+
+/* E-11.1: 見出し行の右端に並ぶセクション操作ボタン（縦横入れ替え／リセット）を、
+   段（キャンバス／トリミング／大きさと配置）をまたいで縦にそろえるための固定スロット。
+   レイアウトタブは2スロット（1＝縦横入れ替え、2＝リセット。片方だけの段でも位置がずれない）。 */
+fieldset legend .legend-tools,
+.op-head .legend-tools {
+    margin-left: auto;
+    display: grid;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+fieldset legend .legend-tools {
+    grid-template-columns: 26px 26px;
+}
+
+.legend-tools > .ratio-rotate-btn {
+    grid-column: 1;
+}
+
+.legend-tools > .reset-btn {
+    grid-column: 2;
+}
+
+/* 背景タブの「位置」見出しには縦横入れ替えが無いので、リセット1個ぶんだけ。 */
+.op-head .legend-tools {
+    grid-template-columns: 26px;
+}
+
+.op-head .legend-tools > .reset-btn {
+    grid-column: 1;
 }
 
 /* A-14: アスペクト比の縦横を入れ替える回転ボタン（見出し右端）。押すたびに縦↔横が切り替わる
@@ -1169,6 +1202,132 @@ fieldset div span {
 
 .custom-text-drag-hint {
     margin-top: 0.35rem;
+}
+
+/* E-10 / E-11: セクション見出しの右端に置く「操作」の ? アイコンだけの開閉。
+   開くと「操作 → 結果」の短い箇条書きを、見出し下にポップオーバーで出す（文章ヒントは廃止）。 */
+
+/* ポップオーバーの位置基準は「見出し行」（幅いっぱい）にする。? ボタン（.op-hint、20px）を
+   基準にすると絶対配置の子が 20px 幅に閉じ込められて右へあふれてクリップされるため。 */
+fieldset legend,
+.op-head {
+    position: relative;
+}
+
+/* 背景タブの「位置」小見出しを見出し行にして、? を文字のすぐ右・リセットを右端に置くためのラッパ。 */
+.op-head {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+/* E-11.1: ? は見出しの文字のすぐ右（見出し行の右端ではない）。 */
+.op-hint {
+    flex-shrink: 0;
+}
+
+.op-hint > summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    color: var(--ink-faint);
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+}
+
+.op-hint > summary::-webkit-details-marker {
+    display: none;
+}
+
+.op-hint > summary:hover,
+.op-hint[open] > summary {
+    color: var(--accent);
+}
+
+.op-hint > summary svg {
+    display: block;
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+}
+
+/* ポップオーバー本体。見出し行の右端・すぐ下で開く（基準は legend / .op-head）。
+   flex 縦積み＋各行 white-space:nowrap で「絶対折り返さない」を担保し、
+   コンテナ幅は width:max-content で一番長い行に合わせる（grid + max-content 列は
+   絶対配置の小さな包含ブロックと相性が悪くクリップされたため flex に変更）。 */
+.op-hint > ul {
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 0;
+    right: 0;
+    z-index: 40;
+    margin: 0;
+    padding: 0.55rem 0.75rem;
+    list-style: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+    color: var(--ink-faint);
+    font-size: 0.75rem;
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 400;
+    line-height: 1.35;
+    display: flex;
+    flex-direction: column;
+    gap: 0.28rem;
+}
+
+.op-hint > ul > li {
+    display: flex;
+    gap: 0.7rem;
+    white-space: nowrap;
+}
+
+.op-hint > ul > li > b {
+    flex: 0 0 auto;
+    min-width: 8.4em;
+    font-weight: 600;
+    color: var(--ink-dim);
+}
+
+.op-hint > ul > li > span {
+    flex: 1;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* E-11: 各セクションの「◯◯をリセット」を文字なしのアイコンボタンに。詳細は title / aria-label。 */
+.reset-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+    color: var(--ink-dim);
+    cursor: pointer;
+}
+
+.reset-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.reset-btn svg {
+    display: block;
+    width: 15px;
+    height: 15px;
 }
 
 /* デスクトップの3カラム時は、アプリシェルの高さをビューポートに固定して余剰をクリップする。

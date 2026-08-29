@@ -77,6 +77,21 @@
                 <path d="M12 11v5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
                 <circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none" />
             </symbol>
+            <!-- セクション見出し脇の「操作方法」開閉（.op-hint）用の ? アイコン -->
+            <symbol id="i-help" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.6" />
+                <path d="M9.7 9.3a2.5 2.5 0 0 1 4.8 1c0 1.7-2.1 2-2.1 3.5" fill="none"
+                    stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+                <circle cx="12.3" cy="16.6" r="0.95" fill="currentColor" stroke="none" />
+            </symbol>
+            <!-- 「リセット」ボタン（E-11）: ほぼ一周する反時計回りの矢印。上部バーの Undo(↶) とは
+                 「浅い弧」と「ほぼ全周」で差をつける。 -->
+            <symbol id="i-reset" viewBox="0 0 24 24">
+                <path d="M5.2 8.4A7.2 7.2 0 1 1 4.9 13.4" fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round" />
+                <path d="M4.4 4.6l0.9 4.1 4.1-0.9" fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </symbol>
             <!-- Exif 各項目のアイコン（E-3。値だけを見せ、項目名は dt の title 属性でツールチップ表示） -->
             <symbol id="i-aperture" viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"
@@ -209,10 +224,12 @@
                             <legend>
                                 <svg class="legend-icon" aria-hidden="true"><use href="#i-canvas"></use></svg>
                                 <span class="legend-text">キャンバス</span>
-                                <button type="button" id="outputRotateButton" class="ratio-rotate-btn"
-                                    title="縦横を入れ替え" aria-label="キャンバスの縦横を入れ替え">
-                                    <svg aria-hidden="true"><use href="#i-rotate"></use></svg>
-                                </button>
+                                <span class="legend-tools">
+                                    <button type="button" id="outputRotateButton" class="ratio-rotate-btn"
+                                        title="縦横を入れ替え" aria-label="キャンバスの縦横を入れ替え">
+                                        <svg aria-hidden="true"><use href="#i-rotate"></use></svg>
+                                    </button>
+                                </span>
                             </legend>
                             <div id="outputAspectRatioPicker" class="ratio-picker"></div>
                             <div id="customAspectRatioContainer" class="ratio-custom-row hidden">
@@ -227,10 +244,26 @@
                             <legend>
                                 <svg class="legend-icon" aria-hidden="true"><use href="#i-photo-crop"></use></svg>
                                 <span class="legend-text">写真のトリミング</span>
-                                <button type="button" id="cropRotateButton" class="ratio-rotate-btn"
-                                    title="縦横を入れ替え" aria-label="トリミングの縦横を入れ替え">
-                                    <svg aria-hidden="true"><use href="#i-rotate"></use></svg>
-                                </button>
+                                <details class="op-hint">
+                                    <summary aria-label="操作方法"><svg aria-hidden="true"><use href="#i-help"></use></svg></summary>
+                                    <ul>
+                                        <li><b>パネルをクリック</b><span>トリミング開始</span></li>
+                                        <li><b>枠をドラッグ</b><span>切り抜き範囲</span></li>
+                                        <li><b>写真をドラッグ</b><span>切り抜き位置</span></li>
+                                        <li><b>余白をドラッグ</b><span>水平出し（Shift: 1°）</span></li>
+                                        <li><b>Enter / 外側</b><span>確定</span></li>
+                                    </ul>
+                                </details>
+                                <span class="legend-tools">
+                                    <button type="button" id="cropRotateButton" class="ratio-rotate-btn"
+                                        title="縦横を入れ替え" aria-label="トリミングの縦横を入れ替え">
+                                        <svg aria-hidden="true"><use href="#i-rotate"></use></svg>
+                                    </button>
+                                    <button type="button" id="resetCrop" class="reset-btn" title="切り抜きをリセット"
+                                        aria-label="切り抜きをリセット">
+                                        <svg aria-hidden="true"><use href="#i-reset"></use></svg>
+                                    </button>
+                                </span>
                             </legend>
                             <div id="cropAspectRatioPicker" class="ratio-picker"></div>
                             <div id="cropCustomAspectRatioContainer" class="ratio-custom-row hidden">
@@ -244,12 +277,27 @@
                                 <input type="range" id="cropRotation">
                                 <span id="cropRotationValue">0°</span>
                             </div>
-                            <p class="custom-text-drag-hint">パネルをクリック → プレビューで枠をドラッグ。暗い余白のドラッグで水平出し。Enter か外側クリックで確定。</p>
-                            <button type="button" id="resetCrop" class="placement-reset-btn">切り抜きをリセット</button>
                         </fieldset>
 
                         <fieldset>
-                            <legend><svg class="legend-icon" aria-hidden="true"><use href="#i-size-place"></use></svg>大きさと配置</legend>
+                            <legend>
+                                <svg class="legend-icon" aria-hidden="true"><use href="#i-size-place"></use></svg>
+                                <span class="legend-text">大きさと配置</span>
+                                <details class="op-hint">
+                                    <summary aria-label="操作方法"><svg aria-hidden="true"><use href="#i-help"></use></svg></summary>
+                                    <ul>
+                                        <li><b>写真をドラッグ</b><span>配置</span></li>
+                                        <li><b>四隅の ■</b><span>大きさ</span></li>
+                                        <li><b>上の丸ハンドル</b><span>角度（Shift: 15°）</span></li>
+                                    </ul>
+                                </details>
+                                <span class="legend-tools">
+                                    <button type="button" id="resetPhotoPlacement" class="reset-btn"
+                                        title="大きさと配置をリセット" aria-label="大きさと配置をリセット">
+                                        <svg aria-hidden="true"><use href="#i-reset"></use></svg>
+                                    </button>
+                                </span>
+                            </legend>
                             <div class="form-row-slider">
                                 <label for="baseMarginPercent">大きさ:</label>
                                 <input type="range" id="baseMarginPercent">
@@ -260,8 +308,6 @@
                                 <input type="range" id="photoRotation">
                                 <span id="photoRotationValue">0°</span>
                             </div>
-                            <p class="custom-text-drag-hint" style="margin-top:0;">写真を選択 → 上のハンドルをドラッグでも回転（Shiftで15°刻み）。</p>
-                            <button type="button" id="resetPhotoPlacement" class="placement-reset-btn">大きさと配置をリセット</button>
                         </fieldset>
                     </div>
                     <div id="tab-background" class="tab-pane">
@@ -335,11 +381,22 @@
                                 <span id="bgSaturationValue">100%</span>
                             </div>
 
-                            <p class="subsection-heading with-rule">位置</p>
-                            <p class="custom-text-drag-hint" style="margin-top:0;">
-                                このタブを開いている間、プレビューをドラッグで移動（中央付近でスナップ）。
-                            </p>
-                            <button type="button" id="resetBgOffset" class="placement-reset-btn">位置をリセット</button>
+                            <div class="subsection-heading with-rule op-head">
+                                <span>位置</span>
+                                <details class="op-hint">
+                                    <summary aria-label="操作方法"><svg aria-hidden="true"><use href="#i-help"></use></svg></summary>
+                                    <ul>
+                                        <li><b>キャンバスをドラッグ</b><span>背景を移動</span></li>
+                                        <li><b>矢印キー</b><span>微調整（Shiftで大きく）</span></li>
+                                    </ul>
+                                </details>
+                                <span class="legend-tools">
+                                    <button type="button" id="resetBgOffset" class="reset-btn"
+                                        title="背景の位置をリセット" aria-label="背景の位置をリセット">
+                                        <svg aria-hidden="true"><use href="#i-reset"></use></svg>
+                                    </button>
+                                </span>
+                            </div>
                         </fieldset>
                     </div>
                     <div id="tab-frame" class="tab-pane">
@@ -485,9 +542,6 @@
                     <div id="tab-text" class="tab-pane">
                         <fieldset>
                             <legend>テキスト</legend>
-                            <p class="custom-text-drag-hint" style="margin-top:0; margin-bottom:0.7rem;">
-                                撮影日・Exif・自由テキストは、すべて1つの「テキスト」として追加します。
-                            </p>
                             <!-- バケット4 / D-1・D-3: レイヤー一覧（#textLayersList）→「＋ テキストを追加」で
                                  作成フォーム、選択で編集フォーム（どちらも uiController.buildTextEditor が組む）。 -->
                             <div class="text-layers-list" id="textLayersList"></div>
@@ -505,9 +559,9 @@
                             <div class="preset-tree" id="presetSectionChecks"></div>
                             <div class="form-row-simple">
                                 <input type="text" id="presetNameInput" placeholder="プリセット名" style="flex: 1;">
-                                <button type="button" id="savePresetButton">保存</button>
+                                <button type="button" id="savePresetButton"
+                                    title="チェックした項目だけを保存します（写真自体は含まれません）">保存</button>
                             </div>
-                            <p class="custom-text-drag-hint">チェックした項目だけを保存します（写真自体は含まれません）。</p>
                         </fieldset>
                         <fieldset>
                             <legend>保存済み</legend>
