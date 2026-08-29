@@ -352,7 +352,10 @@ export async function drawPreview(currentState, previewCanvas, previewCtx) { // 
     drawBackground(ctx, previewCanvas.width, previewCanvas.height, currentState, photoShortSidePx);
     // 拡大ぼかし背景のみドラッグで位置調整できるようにする（単色背景には位置の概念がないため対象外）。
     // 写真より先に登録することで、写真と重なる領域は写真側が優先してヒットするようにする。
-    if (currentState.backgroundType === 'imageBlur') {
+    // B-6: 「別画像」背景も、画像が選択されていればドラッグで位置調整できる（backgroundAdapter を共有）。
+    const bgIsDraggable = currentState.backgroundType === 'imageBlur'
+        || (currentState.backgroundType === 'bgImage' && !!currentState.bgImage);
+    if (bgIsDraggable) {
         interactionRegistry.register({ id: 'background', type: 'background', x: 0, y: 0, width: previewCanvas.width, height: previewCanvas.height });
     }
 

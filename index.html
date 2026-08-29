@@ -115,6 +115,14 @@
                     stroke-dasharray="1.5 3" />
                 <circle cx="12" cy="12" r="3.5" fill="none" stroke="currentColor" stroke-width="1.6" />
             </symbol>
+            <!-- B-6 背景タイプ「別画像」: 枠の中に山と太陽（写真を1枚敷くイメージ） -->
+            <symbol id="i-bg-photo" viewBox="0 0 24 24">
+                <rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="none" stroke="currentColor"
+                    stroke-width="1.6" />
+                <circle cx="9" cy="9.5" r="1.6" fill="currentColor" stroke="none" />
+                <path d="M4 17l4.5-5 3 3L15 11l5 6" fill="none" stroke="currentColor" stroke-width="1.6"
+                    stroke-linecap="round" stroke-linejoin="round" />
+            </symbol>
             <!-- A-12 二重四角: 実線＝いま操作する対象 / 丸ドット点線＝相手側。ブランドマーク（二重四角）が親。 -->
             <symbol id="i-canvas" viewBox="0 0 24 24">
                 <rect x="3" y="3" width="18" height="18" rx="2.5" fill="none" stroke="currentColor"
@@ -263,6 +271,14 @@
                                         </svg></span>
                                     ぼかし
                                 </label>
+                                <label class="segment">
+                                    <input type="radio" id="bgTypeImage" name="backgroundType"
+                                        value="bgImage">
+                                    <span class="segment-icon"><svg>
+                                            <use href="#i-bg-photo"></use>
+                                        </svg></span>
+                                    別画像
+                                </label>
                             </div>
                         </fieldset>
 
@@ -275,7 +291,15 @@
                         </fieldset>
 
                         <fieldset id="imageBlurSettingsContainer" class="hidden">
-                            <legend>拡大ぼかし背景設定</legend>
+                            <legend>画像背景の設定</legend>
+                            <!-- B-6: 「別画像」タイプのときだけ表示。ぼかしタイプでは前景写真を使うので不要。 -->
+                            <div id="bgImagePickerRow" class="bg-image-picker hidden">
+                                <button type="button" id="bgImageSelectButton" class="bg-image-select-btn">
+                                    背景画像を選択
+                                </button>
+                                <img id="bgImageThumb" class="bg-image-thumb hidden" alt="選択中の背景画像">
+                                <input type="file" id="bgImageLoader" accept="image/*">
+                            </div>
                             <p class="subsection-heading">見え方</p>
                             <div class="form-row-slider">
                                 <label for="bgScale">拡大倍率:</label>

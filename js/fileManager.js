@@ -1,5 +1,5 @@
 // js/fileManager.js
-import { getState, setImage } from './stateManager.js';
+import { getState, setImage, setBackgroundImage } from './stateManager.js';
 import { initializeUIFromState, uiElements } from './uiController.js';
 import { renderFinal } from './canvasRenderer.js';
 import { extractExifFromFile, embedExifToJpeg } from './exifHandler.js';
@@ -52,6 +52,36 @@ export async function processImageFile(file, redrawCallback) {
         alert('画像ファイルを選択またはドラッグ＆ドロップしてください。');
         if (uiElements.imageLoader) uiElements.imageLoader.value = '';
     }
+}
+
+/**
+ * B-6: 背景タイプ「別画像」用の画像を読み込む。
+ * 前景写真の読み込み（processImageFile）と違い、Exif 抽出・トリミング初期化・
+ * UI 全体の再初期化は行わず、editState.bgImage を差し替えて再描画するだけ。
+ * @param {File} file - 画像ファイル
+ * @param {Function} redrawCallback - 再描画コールバック（main.js の requestRedraw）
+ */
+export function processBackgroundImageFile(file, redrawCallback) {
+    if (!file || !file.type.startsWith('image/')) {
+        alert('画像ファイルを選択またはドラッグ＆ドロップしてください。');
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+            setBackgroundImage(img);
+            if (typeof redrawCallback === 'function') redrawCallback();
+        };
+        img.onerror = () => { alert('背景画像の読み込みに失敗しました。'); };
+        if (e.target && typeof e.target.result === 'string') {
+            img.src = e.target.result;
+        } else {
+            alert('ファイルの読み込み結果が不正です。');
+        }
+    };
+    reader.onerror = () => { alert('ファイルの読み込みに失敗しました。'); };
+    reader.readAsDataURL(file);
 }
 
 export async function handleDownload() {

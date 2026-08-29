@@ -52,8 +52,14 @@ export const uiElements = {
     // 背景編集タブ
     bgTypeColorRadio: document.getElementById('bgTypeColor'),
     bgTypeImageBlurRadio: document.getElementById('bgTypeImageBlur'),
+    bgTypeImageRadio: document.getElementById('bgTypeImage'), // B-6: 「別画像」
     bgColorSettingsContainer: document.getElementById('bgColorSettingsContainer'),
     imageBlurSettingsContainer: document.getElementById('imageBlurSettingsContainer'),
+    // B-6: 「別画像」タイプの画像ピッカー（#imageBlurSettingsContainer 内、ぼかしのときは隠す）
+    bgImagePickerRow: document.getElementById('bgImagePickerRow'),
+    bgImageSelectButton: document.getElementById('bgImageSelectButton'),
+    bgImageLoader: document.getElementById('bgImageLoader'),
+    bgImageThumb: document.getElementById('bgImageThumb'),
     backgroundColorInput: document.getElementById('backgroundColor'),
     bgScaleSlider: document.getElementById('bgScale'),
     bgBlurSlider: document.getElementById('bgBlur'),
@@ -482,6 +488,8 @@ export function initializeUIFromState() {
     // 背景設定
     if (uiElements.bgTypeColorRadio) uiElements.bgTypeColorRadio.checked = (state.backgroundType === 'color');
     if (uiElements.bgTypeImageBlurRadio) uiElements.bgTypeImageBlurRadio.checked = (state.backgroundType === 'imageBlur');
+    if (uiElements.bgTypeImageRadio) uiElements.bgTypeImageRadio.checked = (state.backgroundType === 'bgImage');
+    updateBgImageThumb(state); // B-6
     if (uiElements.backgroundColorInput) uiElements.backgroundColorInput.value = state.backgroundColor;
     setupInputAttributesAndValue(uiElements.bgScaleSlider, 'bgScale', state.imageBlurBackgroundParams.scale);
     setupInputAttributesAndValue(uiElements.bgBlurSlider, 'bgBlur', state.imageBlurBackgroundParams.blurAmountPercent);
@@ -590,8 +598,32 @@ export function updateSliderValueDisplays() {
 export function toggleBackgroundSettingsVisibility() {
     if (!uiElements.bgColorSettingsContainer || !uiElements.imageBlurSettingsContainer) return;
     const currentBackgroundType = getState().backgroundType;
+    // B-6: 「見え方／色調／位置」のスライダー群（#imageBlurSettingsContainer）は
+    // 「ぼかし」と「別画像」で共有する。画像ピッカー行だけ「別画像」のときに出す。
     uiElements.bgColorSettingsContainer.classList.toggle('hidden', currentBackgroundType !== 'color');
-    uiElements.imageBlurSettingsContainer.classList.toggle('hidden', currentBackgroundType !== 'imageBlur');
+    const usesImageSettings = currentBackgroundType === 'imageBlur' || currentBackgroundType === 'bgImage';
+    uiElements.imageBlurSettingsContainer.classList.toggle('hidden', !usesImageSettings);
+    if (uiElements.bgImagePickerRow) {
+        uiElements.bgImagePickerRow.classList.toggle('hidden', currentBackgroundType !== 'bgImage');
+    }
+}
+
+/**
+ * B-6: 「別画像」背景のサムネイル表示を現在の editState.bgImage に同期する。
+ * 画像ロード時（initializeUIFromState）と再描画時（main.js の requestRedraw）から呼ぶ。
+ */
+export function updateBgImageThumb(state) {
+    const thumb = uiElements.bgImageThumb;
+    if (!thumb) return;
+    const bgImg = (state || getState()).bgImage;
+    const src = bgImg && bgImg.src ? bgImg.src : '';
+    if (src) {
+        if (thumb.getAttribute('src') !== src) thumb.setAttribute('src', src);
+        thumb.classList.remove('hidden');
+    } else {
+        thumb.removeAttribute('src');
+        thumb.classList.add('hidden');
+    }
 }
 
 /**
@@ -1678,6 +1710,22 @@ export function setupEventListeners(redrawCallback) {
     }
     addOptionChangeListener(uiElements.bgTypeColorRadio, 'backgroundType', 'color');
     addOptionChangeListener(uiElements.bgTypeImageBlurRadio, 'backgroundType', 'imageBlur');
+    // B-6: 「別画像」タイプ。スライダー群は「ぼかし」と共有するが、別画像の初期ぼかし量は 0%
+    // （ぼかし既定 3 のまま未調整なら 0 に寄せる。ユーザーが値を触っていれば尊重）。
+    if (uiElements.bgTypeImageRadio) {
+        uiElements.bgTypeImageRadio.addEventListener('change', (e) => {
+            if (!e.target.checked) return;
+            const patch = { backgroundType: 'bgImage' };
+            if (getState().imageBlurBackgroundParams.blurAmountPercent === 3) {
+                patch.imageBlurBackgroundParams = { blurAmountPercent: 0 };
+                if (uiElements.bgBlurSlider) uiElements.bgBlurSlider.value = '0';
+            }
+            updateState(patch);
+            toggleBackgroundSettingsVisibility();
+            updateSliderValueDisplays();
+            redrawCallback();
+        });
+    }
     addColorInputListener(uiElements.backgroundColorInput, 'backgroundColor');
     addNumericInputListener(uiElements.bgScaleSlider, 'bgScale', 'imageBlurBackgroundParams', 'scale');
     addNumericInputListener(uiElements.bgBlurSlider, 'bgBlur', 'imageBlurBackgroundParams', 'blurAmountPercent');

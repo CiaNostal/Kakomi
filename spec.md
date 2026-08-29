@@ -30,7 +30,7 @@ Kakomiは、写真にフレーム加工とテキストオーバーレイを追�
 - 写真の読み込み（ファイル選択またはドラッグ&ドロップ）
 - 構図調整（アスペクト比、拡大率、位置調整）
 - レイアウト設定（出力アスペクト比、余白、写真位置調整）
-- 背景編集（単色背景、拡大ぼかし背景）
+- 背景編集（単色背景、拡大ぼかし背景、別画像背景）
 - フレーム加工（角丸、超楕円、影、縁取り）
 - テキストオーバーレイ（撮影日、Exif情報、自由テキスト。自由テキストは個数無制限で追加可能）
 - プレビュー上でのインタラクティブなドラッグ操作（写真配置・背景位置・自由テキスト。スナップ/ガイド、矢印キーでの微調整に対応）
@@ -183,15 +183,17 @@ Kakomi/
   outputTargetAspectRatioString: string, // 出力アスペクト比
   baseMarginPercent: number,         // 余白（写真短辺に対する%、0-300）。UIスライダーは「大きさ」表記でこの逆数的な見かけ値を扱う（A-10）
   backgroundColor: string,            // 背景色（HEX）
-  backgroundType: 'color' | 'imageBlur', // 背景タイプ
-  imageBlurBackgroundParams: {        // ぼかし背景パラメータ
+  backgroundType: 'color' | 'imageBlur' | 'bgImage', // 背景タイプ（bgImage＝B-6「別画像」）
+  imageBlurBackgroundParams: {        // 画像背景パラメータ。「ぼかし」と「別画像」で共有（B-6）
     scale: number,                    // 拡大倍率
-    blurAmountPercent: number,        // ぼかし強度（%）
+    blurAmountPercent: number,        // ぼかし強度（%）。「別画像」へ切り替えた瞬間、既定3のままなら0へ寄せる（B-6）
     brightness: number,                // 明るさ（%）
     saturation: number,                // 彩度（%）
     offsetXPercent: number,            // Xオフセット（%）
     offsetYPercent: number             // Yオフセット（%）
   },
+  // bgImage: HTMLImageElement | null   // B-6「別画像」背景で使う2枚目の画像。image と同じく
+  //   EDITABLE_SETTINGS_KEYS 外＝Undo・プリセット非対象。getState() のクローンでは除外する。
   photoDrawConfig: {                  // 写真描画設定（計算結果）
     sourceX, sourceY, sourceWidth, sourceHeight,
     destWidth, destHeight,
@@ -249,6 +251,7 @@ Kakomi/
 - `getState()`: 現在の状態のディープコピーを取得
 - `updateState(updates, options)`: 状態を更新（ディープマージ）。`options.silent`が`true`の場合はリスナーへの通知を行わない（後述）
 - `setImage(img, exifData, fileName)`: 新しい画像を設定。**G-2: すでに画像がある状態での差し替え時（`editState.image` が真）は、トリミングだけ初期化する**——`cropSettings.rect` を全体（`FULL_RECT`）へ、`photoViewParams` を中央（`{0.5, 0.5}`）へ戻す。`cropSettings.aspectRatio`（比率制約）は維持し、直後の「固定比率 ＋ 全体 rect → `fitRectToAspect`」で新しい画像のアスペクトに合う最大内接矩形へ作り直す。`cropSettings.rect` は元画像に対する正規化座標なので、アスペクト比の違う画像へ同じ rect を引き継ぐと切り抜き形状が崩れる（1:1 で切ったのに 1:1 でなくなる）ため。背景・フレーム・出力比率・余白・テキストは引き継ぐ。初回ロードでは初期化しない（`docs/roadmap.md` G-2、`docs/session-log-2026-08-27-7.md`）
+- `setBackgroundImage(img)`: **B-6**。背景タイプ「別画像」で使う `editState.bgImage` を設定（`null` でクリア）し、`notifyStateChange()`。前景写真の `setImage` と違い Exif 抽出・トリミング初期化・UI 全体の再初期化はしない。`bgImage` は `EDITABLE_SETTINGS_KEYS` 外＝Undo・プリセット非対象で、`getState()` のクローン時は `image` と同様に一時的に外して復元する
 - `addStateChangeListener(listener)` / `removeStateChangeListener(listener)`: 状態変更リスナーの登録／解除
 - `addTextLayer(partial)`: テキストレイヤーを1つ追加し、そのidを返す（`partial` に content・見た目の初期値。既定値へマージ）
 - `removeTextLayer(id)`: 指定idのテキストレイヤーを削除（撮影日・Exif も含めすべて対象）
@@ -353,7 +356,7 @@ C-1 で角丸/超楕円のモード別パラメータ行（半径 / 次数n の2
 - `clearContainerSizeCache()`: プレビューコンテナ寸法のキャッシュ（`cachedContainerSize`。canvasサイズ変更でレイアウトが揺れる＝正のフィードバックを防ぐためのキャッシュ）を破棄する。従来は`window`の`resize`でのみクリアしていたが、フェーズ4で設定パネルの畳み／展開でもキャンバス幅が変わるようになったため、`main.js`が`ResizeObserver`経由でこれを呼んで次の`drawPreview`に寸法を取り直させる。**ただし「幅」の変化に限定**（既知の不具合 G-1 への多重防御。根本原因の`#previewCanvas`ボーダーは`outline`化で解消済み。3.1節・`docs/session-log-2026-08-27-5.md` §13・`docs/session-log-2026-08-27-6.md`）
 
 **描画順序（`drawPreview`。`renderFinal`は8・9を除く1〜7のみ）:**
-1. 背景描画（拡大ぼかし背景の場合、当たり判定用に背景の矩形を`interactionRegistry`へ登録）
+1. 背景描画（`imageBlur`、または `bgImage` で別画像が選択済みのとき、当たり判定用に背景の矩形を`interactionRegistry`へ登録＝プレビュードラッグで位置調整できる）
 2. ドロップシャドウ（有効な場合）
 3. 写真の当たり判定用矩形を`interactionRegistry`へ登録
 4. クリッピングパス設定（角丸/超楕円）
@@ -373,12 +376,15 @@ C-1 で角丸/超楕円のモード別パラメータ行（半径 / 次数n の2
 背景描画を担当します。
 
 **主要関数:**
-- `drawBackground(ctx, canvasWidth, canvasHeight, currentState, basePhotoShortSideForBlurPxIfPreview)`: 背景を描画。ぼかし背景時は `currentState.photoDrawConfig.sourceX/Y/Width/Height` から「クロップ後の写真範囲」`sourceRect` を作って渡す
+- `drawBackground(ctx, canvasWidth, canvasHeight, currentState, basePhotoShortSideForBlurPxIfPreview)`: 背景を描画。`backgroundType` で分岐する:
+  - `'color'`（または画像未ロード）→ `drawColorBackground`
+  - `'imageBlur'` → 前景写真（`currentState.image`）を `currentState.photoDrawConfig.sourceX/Y/Width/Height` から作った「クロップ後の写真範囲」`sourceRect` で `drawBlurredImageBackground`
+  - `'bgImage'`（**B-6「別画像」**）→ `currentState.bgImage` を **クロップせず全体**（`sourceRect = {0,0,bgImage.width,bgImage.height}`）で `drawBlurredImageBackground`。パラメータは `imageBlurBackgroundParams` を共有。`bgImage` が未選択なら `drawColorBackground` にフォールバック
 - `drawColorBackground(ctx, canvasWidth, canvasHeight, color)`: 単色背景を描画
-- `drawBlurredImageBackground(ctx, canvasWidth, canvasHeight, img, blurParams, basePhotoShortSideForBlurPx, sourceRect)`: 拡大ぼかし背景を描画。`sourceRect`（省略時は画像全体）で指定した範囲だけを `drawImage` のソースに使う
+- `drawBlurredImageBackground(ctx, canvasWidth, canvasHeight, img, blurParams, basePhotoShortSideForBlurPx, sourceRect)`: 拡大ぼかし／別画像背景を描画。`sourceRect`（省略時は画像全体）で指定した範囲だけを `drawImage` のソースに使う。「ぼかし」と「別画像」で共通
 
-**ぼかし背景の処理:**
-- **元にするのはクロップ後の写真**（`sourceRect`。フェーズ3で修正。`docs/roadmap.md` B-3。7.3節参照）
+**画像背景の処理（`imageBlur` / `bgImage` 共通）:**
+- 元にする範囲は `sourceRect`（`imageBlur`＝クロップ後の前景写真、`bgImage`＝別画像の全体。フェーズ3で `imageBlur` のクロップ追従を修正。`docs/roadmap.md` B-3。7.3節参照）
 - そのクロップ範囲がCanvas全体を覆うように拡大（cover方式。アスペクト比も範囲基準）
 - ユーザー指定の拡大倍率を適用
 - ぼかし、明るさ、彩度のフィルターを適用
@@ -436,6 +442,7 @@ C-1 で角丸/超楕円のモード別パラメータ行（半径 / 次数n の2
   - Exif情報を抽出
   - 画像を状態に設定
   - UIを更新
+- `processBackgroundImageFile(file, redrawCallback)`（**B-6**）: 背景タイプ「別画像」用の画像を読み込む。`FileReader` → `Image` → `stateManager.setBackgroundImage(img)` → `redrawCallback()`。Exif 抽出・トリミング初期化・`initializeUIFromState()` は行わない
 - `handleDownload()`: 最終画像をダウンロード
   - 高解像度Canvasを生成
   - JPEG Blobに変換
@@ -540,7 +547,7 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 |---|---|---|---|
 | `textAdapter.js` | `textSettings.layers[]`の各レイヤー（id ＝ レイヤーの uuid） | 写真短辺基準の% | `resolveLayer(id)`（`layers` から検索）＋ `updateTextLayer(id, changes)` で書き戻し。サイズのクランプは `controlsConfig.textLayerSize`（レイヤー共通の1範囲、最大50%） |
 | `photoAdapter.js` | 写真の枠内配置（`photoViewParams`） | 可動範囲(movable width/height)に対する0.0〜1.0の割合 | `layoutCalculator.js`の可動範囲計算と対応させる必要があり、`getLastPreviewContext().scale`を使った変換が必要。加えてトリミング用に、`getCropRect()`（`resolveCropRect`で現在の割合矩形を返す）・`commitCropRect(rect)`（`cropSettings.rect`を更新）・`getCropConstraint()`（比率制約の取得）・`commitMarginResizeByDrag(startMargin, projPx, startShortSidePx)`（select モードの四隅ハンドル→`baseMarginPercent`、符号付き投影量ベース）を持つ（5.16節参照。`textAdapter`の`getTransform`系と同種の拡張） |
-| `backgroundAdapter.js` | 拡大ぼかし背景の位置（`imageBlurBackgroundParams`） | 写真短辺基準の%（textAdapterと同じ単位系） | 単色背景（`backgroundType === 'color'`）の場合はそもそも`interactionRegistry`に登録されないため、ドラッグ対象にならない。**背景のドラッグ位置調整は「背景」タブでのみ有効**で、そのタブでは写真の上を含むキャンバス全面のドラッグを`canvasInteraction.js`がこのアダプタへ振り替える。他タブでの余白ドラッグでは背景は動かない（5.16節「タブ別ドラッグ」参照）。原点スナップ用の`originSnapPx(startValue, ctx)`を持つ |
+| `backgroundAdapter.js` | 画像背景の位置（`imageBlurBackgroundParams`。`imageBlur` と `bgImage` で共有） | 写真短辺基準の%（textAdapterと同じ単位系） | 単色背景（`backgroundType === 'color'`）や、`bgImage` で別画像が未選択の場合はそもそも`interactionRegistry`に登録されないため、ドラッグ対象にならない。**背景のドラッグ位置調整は「背景」タブでのみ有効**で、そのタブでは写真の上を含むキャンバス全面のドラッグを`canvasInteraction.js`がこのアダプタへ振り替える。他タブでの余白ドラッグでは背景は動かない（5.16節「タブ別ドラッグ」参照）。原点スナップ用の`originSnapPx(startValue, ctx)`を持つ |
 | `shadowAdapter.js` | フレームの影のオフセット（`frameSettings.shadowParams.offsetX/offsetY`） | 写真短辺基準の%（-25〜25でクランプ。`controlsConfig.frameShadowOffsetX`） | 「フレーム」タブ表示中かつ`shadowEnabled === true`のときだけ、`canvasInteraction.js`が写真本体（テキスト以外）のドラッグをこのアダプタへ振り替える。`backgroundAdapter`と同じ`getValue`/`computeChanges`/`commit`＋`originSnapPx`パターン。0.1%丸めも同様（5.16節「タブ別ドラッグ」参照） |
 
 **単位変換上の注意（重要）:** `getLastPreviewContext()`が返す`photoShortSidePx`は、写真の実解像度ではなく**プレビュー描画時に縮小された後の短辺px**を指す。ドラッグのポインタ移動量（`dxPx`/`dyPx`）も同じプレビューcanvasのpx空間の値であるため、`textAdapter`や`backgroundAdapter`ではscaleによる再変換は不要で、単純な比率計算（`dxPx / photoShortSidePx * 100`）だけで正しく変換できる。過去にここへ誤って`/ scale`を追加してしまい、プレビューの縮小率次第でドラッグ量が数倍に増幅される不具合が発生したことがあるため、新しいアダプタを追加する際は注意すること。
@@ -583,7 +590,7 @@ immediate-mode描画（毎回全部描き直す）という既存の設計を変
 |---|---|---|
 | `output`＝キャンバス | —（葉） | `outputTargetAspectRatioString` / `baseMarginPercent` / `outputSettings` |
 | `crop`＝写真のトリミング | —（葉） | `cropSettings` / `photoViewParams` |
-| `background`＝背景 | `type` / `color` / `blur` | `backgroundType` ／ `backgroundColor` ／ `imageBlurBackgroundParams` |
+| `background`＝背景 | `type` / `color` / `blur` | `backgroundType`（単色／ぼかし／別画像）／ `backgroundColor` ／ `imageBlurBackgroundParams`（画像背景の見え方・色調・位置。B-6 で「ぼかし」「別画像」共有）。※ B-6 の別画像そのもの（`editState.bgImage`）は保存対象外 |
 | `frame`＝フレーム | `corner` / `border` / `shadow` | `frameSettings.cornerStyle`ほか ／ `frameSettings.border` ／ `frameSettings.{shadowEnabled,shadowType,shadowParams}` |
 | `text`＝テキスト | —（葉。バケット4 で子グループ廃止） | `textSettings` |
 
@@ -784,10 +791,17 @@ Blobをダウンロード
 （写真のキャンバス内位置まで crop 枠で決める案はユーザーの意向で一旦後回し。）
 
 ### 7.3 背景編集
-- **背景タイプ**: 「単色」または「写真の拡大ぼかし画像」から選択。**B-5（フェーズ6）でラジオボタンから、フレームタブ「角のスタイル」と同じアイコンセグメント（`.corner-segmented` ＋ `.segment` ＋ `.segment-icon`）に変更**（`#i-fill`＝単色、`#i-blur`＝ぼかし）。`<input type="radio">`の`id`（`bgTypeColor` / `bgTypeImageBlur`）・`name`・`value`は据え置きで、`uiController.js`の配線（`addOptionChangeListener` / `toggleBackgroundSettingsVisibility()`）は無変更。
+- **背景タイプ**: 「単色」「ぼかし」（写真の拡大ぼかし画像）「別画像」（**B-6**）から選択。**B-5（フェーズ6）でラジオボタンから、フレームタブ「角のスタイル」と同じアイコンセグメント（`.corner-segmented` ＋ `.segment` ＋ `.segment-icon`）に変更**（`#i-fill`＝単色、`#i-blur`＝ぼかし、`#i-bg-photo`＝別画像）。`<input type="radio">`の`id`（`bgTypeColor` / `bgTypeImageBlur` / `bgTypeImage`）・`name`・`value`（`color` / `imageBlur` / `bgImage`）は据え置きで、単色・ぼかしの配線（`addOptionChangeListener` / `toggleBackgroundSettingsVisibility()`）は無変更。「別画像」の `#bgTypeImage` だけは専用の `change` リスナーで、切り替え時に `blurAmountPercent` が既定 3 のままなら 0 へ寄せる（別画像の初期ぼかしは 0%）。
 
 **単色背景:**
 - カラーピッカーで色を選択
+
+**別画像背景（B-6）:**
+- **背景タイプ「別画像」を選ぶと、`#imageBlurSettingsContainer`（見え方／色調／位置のスライダー群）を「ぼかし」と共有で表示**し、その先頭に画像ピッカー行 `#bgImagePickerRow`（「背景画像を選択」ボタン `#bgImageSelectButton` ＋ 44px サムネ `#bgImageThumb` ＋ 隠し `<input type="file" id="bgImageLoader">`）が出る。ピッカー行は「別画像」のときだけ表示（`toggleBackgroundSettingsVisibility()`）。
+- ボタン／ファイル入力は `main.js` で配線。`fileManager.processBackgroundImageFile(file, redrawCallback)` が `FileReader` → `Image` → `stateManager.setBackgroundImage(img)` → 再描画。前景写真の `processImageFile` と違い Exif 抽出・トリミング初期化・`initializeUIFromState()` は呼ばない。
+- `editState.bgImage` は Undo・プリセット非対象（`EDITABLE_SETTINGS_KEYS` 外）。プリセットに `backgroundType:'bgImage'` が保存されていても、適用時に画像が無ければ `backgroundRenderer` が単色へフォールバックする（パネルは「別画像」選択＋空サムネで、ユーザーが画像を選べる状態）。
+- スライダー（拡大倍率・ぼかし強度・明るさ・彩度）と「位置をリセット」ボタン、プレビュードラッグでの位置調整はすべて「ぼかし」と同じ（`imageBlurBackgroundParams` を共有）。描画は `drawBlurredImageBackground()` に別画像を全体（クロップなし）で渡すだけ（5.6節）。
+- サムネの同期は `uiController.updateBgImageThumb(state)`（`initializeUIFromState` と `main.js` の `requestRedraw` から呼ぶ）。
 
 **拡大ぼかし背景:**
 - **拡大倍率**: 1.0-8.0倍（デフォルト2.0倍）

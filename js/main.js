@@ -2,10 +2,10 @@
 // アプリケーションのエントリーポイント。各モジュールをインポートし、初期化処理を行います。
 
 import { getState, updateState, addStateChangeListener } from './stateManager.js';
-import { uiElements, initializeUIFromState, setupEventListeners, syncUIFromState } from './uiController.js'; // updateFrameSettingsVisibility を追加
+import { uiElements, initializeUIFromState, setupEventListeners, syncUIFromState, updateBgImageThumb } from './uiController.js'; // updateFrameSettingsVisibility を追加
 import { calculateLayout } from './layoutCalculator.js'; // 正しいレイアウト計算モジュール
 import { drawPreview, clearContainerSizeCache } from './canvasRenderer.js';     // 現在の描画モジュール
-import { processImageFile, handleDownload } from './fileManager.js';
+import { processImageFile, processBackgroundImageFile, handleDownload } from './fileManager.js';
 import { displayExifInfo } from './exifHandler.js';   // Exif表示用
 import { initializeTabs, onTabChange } from './tabManager.js';
 import { initCanvasInteraction } from './interaction/canvasInteraction.js';
@@ -32,6 +32,7 @@ export function updateImagePresenceUI() {
 export async function requestRedraw() {
     const currentState = getState(); // 状態を一度だけ取得
     updateImagePresenceUI();
+    updateBgImageThumb(currentState); // B-6: 「別画像」背景のサムネイルを editState.bgImage に同期
 
     if (!currentState.image) {
         if (uiElements.previewCtx && uiElements.previewCanvas) {
@@ -77,6 +78,12 @@ if (typeof location !== 'undefined' && new URLSearchParams(location.search).has(
     // 写真の編集サブモード（'select' / 'crop'）。A-5 スモークが「キャンバス外クリックで
     // クロップ確定」を検査するのに使う。
     window.__kakomiGetPhotoEditMode = photoEditModeStore.getMode;
+    // B-6 スモーク用。editState.bgImage は HTMLImageElement で evaluate では直接読めないため、
+    // 有無と寸法だけを返す軽量フック。
+    window.__kakomiBgImageInfo = () => {
+        const bg = getState().bgImage;
+        return bg ? { width: bg.width, height: bg.height } : null;
+    };
 }
 
 // DOMContentLoadedイベントでアプリケーションを初期化
@@ -165,6 +172,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // 隠しファイル入力を開く（ラベルの for="imageLoader" でも開くが、ボタンは明示的に click する）。
     if (uiElements.openImageButton && uiElements.imageLoader) {
         uiElements.openImageButton.addEventListener('click', () => uiElements.imageLoader.click());
+    }
+
+    // B-6: 背景タイプ「別画像」の画像選択。processBackgroundImageFile が setBackgroundImage →
+    // requestRedraw までやる（前景写真と違い Exif 抽出・トリミング初期化はしない）。
+    if (uiElements.bgImageSelectButton && uiElements.bgImageLoader) {
+        uiElements.bgImageSelectButton.addEventListener('click', () => uiElements.bgImageLoader.click());
+        uiElements.bgImageLoader.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) processBackgroundImageFile(file, requestRedraw);
+            event.target.value = '';
+        });
     }
 
     // フェーズ4(E-5): ダウンロードは上部バー右。押すと画質ポップオーバーを開き、「書き出す」で実行。

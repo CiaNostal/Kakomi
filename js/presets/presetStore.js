@@ -30,9 +30,9 @@ export const PRESET_SECTIONS = {
     background: {
         label: '背景',
         groups: {
-            type: { label: 'タイプ（単色／ぼかし）', keys: ['backgroundType'] },
+            type: { label: 'タイプ（単色／ぼかし／別画像）', keys: ['backgroundType'] },
             color: { label: '色', keys: ['backgroundColor'] },
-            blur: { label: 'ぼかしの見え方・色調・位置', keys: ['imageBlurBackgroundParams'] },
+            blur: { label: '画像背景の見え方・色調・位置', keys: ['imageBlurBackgroundParams'] },
         },
     },
     frame: {

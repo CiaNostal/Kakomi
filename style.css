@@ -707,13 +707,44 @@ fieldset div span {
     text-decoration: underline;
 }
 
-#imageLoader {
+#imageLoader,
+#bgImageLoader {
     /* ファイル入力は隠し、「クリックして選択」ラベルと上部バーの「画像を開く」ボタンから開く。 */
     position: absolute;
     width: 1px;
     height: 1px;
     opacity: 0;
     pointer-events: none;
+}
+
+/* B-6: 背景タイプ「別画像」の画像ピッカー行（#imageBlurSettingsContainer 内の先頭）。 */
+.bg-image-picker {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.bg-image-select-btn {
+    font-size: 0.82rem;
+    padding: 5px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--ink);
+    cursor: pointer;
+}
+
+.bg-image-select-btn:hover {
+    background: var(--surface-sunken);
+}
+
+.bg-image-thumb {
+    width: 44px;
+    height: 44px;
+    object-fit: cover;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
 }
 
 .canvas-container {

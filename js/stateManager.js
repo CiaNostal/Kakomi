@@ -27,6 +27,11 @@ const EDITABLE_SETTINGS_KEYS = [
 // アプリケーションの状態を保持するオブジェクト
 let editState = {
     image: null,
+    // B-6: 背景タイプ「別画像」で使う2枚目の画像。editState.image と同じく
+    // EDITABLE_SETTINGS_KEYS には含めない ＝ Undo にもプリセットにも乗らない
+    // （プリセット適用で backgroundType==='bgImage' でも画像が無ければ
+    //  backgroundRenderer が単色にフォールバックする）。
+    bgImage: null,
     originalWidth: 0,
     originalHeight: 0,
     originalFileName: null,
@@ -309,9 +314,11 @@ function migrateTextSettings(ts) {
  */
 function getState() {
     const originalImage = editState.image;
+    const originalBgImage = editState.bgImage; // B-6: これも HTMLImageElement なので clone 対象から外す
     let stateCopy;
     if (typeof structuredClone === 'function') {
         editState.image = null;
+        editState.bgImage = null;
         try {
             stateCopy = structuredClone(editState);
         } catch (e) {
@@ -319,11 +326,14 @@ function getState() {
             stateCopy = JSON.parse(JSON.stringify(editState));
         }
         editState.image = originalImage;
+        editState.bgImage = originalBgImage;
         stateCopy.image = originalImage;
+        stateCopy.bgImage = originalBgImage;
     } else {
         console.warn("[StateManager] structuredClone is not available. Using JSON.parse/stringify with manual image handling.");
         stateCopy = JSON.parse(JSON.stringify(editState));
         stateCopy.image = originalImage;
+        stateCopy.bgImage = originalBgImage;
     }
     return stateCopy;
 }
@@ -380,8 +390,19 @@ function setImage(img, exifData = null, fileName = null) { // ADDED: fileName �
     notifyStateChange();
 }
 
+/**
+ * B-6: 背景タイプ「別画像」で使う背景画像を設定する。
+ * editState.image（前景写真）とは独立で、Undo・プリセットの対象外。
+ * @param {HTMLImageElement | null} img - 背景に使う画像。null でクリア。
+ */
+function setBackgroundImage(img) {
+    editState.bgImage = img || null;
+    notifyStateChange();
+}
+
 export {
     getState, updateState, addStateChangeListener, removeStateChangeListener, setImage,
+    setBackgroundImage,
     addTextLayer, removeTextLayer, updateTextLayer, reorderTextLayers, migrateTextSettings,
     EDITABLE_SETTINGS_KEYS
 };

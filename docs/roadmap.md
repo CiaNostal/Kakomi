@@ -65,6 +65,7 @@
 | D-3 | 撮影日・Exif・自由テキストを1本の `textSettings.layers[]` に統合。`kind` フィールドは持たず「Exif を含むか」等は `content` から導出。フォント・大きさ・不透明度・位置・回転など見た目の設定は種類を問わず共通の1セット。旧形式プリセットは `migrateTextSettings()` が `applyPreset` の入口で変換 | `session-log-2026-08-28-4.md` |
 | C-1 | 角丸「半径」と超楕円「次数n」を1つの「丸み」スライダー（`#frameRoundness`、0-100、右ほど丸い）に統合。角のスタイルは2択（角丸/超楕円、「なし」廃止＝丸み0 が実質「なし」）。角丸は `半径% = 丸み/2`、超楕円は角の詰まり `F=2^(-1/n)` を等間隔に刻む非線形マッピング（丸み0→n40、丸み100→n3。逆関数でプリセット位置復元）。モード切替は丸み位置を保持。`createSuperellipsePath` は `Math.round` を撤去し clamp のみ（非整数 n 可）。`layoutCalculator`・データモデル・Undo・`presetStore` は無変更 | `session-log-2026-08-28-5.md` |
 | A-5 | crop モード中は「キャンバスの外側」（`.canvas-area` のパディング／出力比率が縦長・横長のときのレターボックス）をクリックしてもクロップを確定できる。`initCanvasInteraction()` が `previewCanvas.closest('.canvas-area')` に `pointerdown`/`pointerup` を張り、`e.target !== previewCanvas` かつ crop モードのときだけ canvas 本体と同じ「短いタップ」判定で `exitCrop()`。select モードは無反応（キャンバス外クリックでの選択解除は対象外）。`?debug` 用に `window.__kakomiGetPhotoEditMode` を追加 | `session-log-2026-08-29.md` |
+| B-6 | 背景タイプに「別画像」を追加（単色／ぼかしに続く3つ目 `#bgTypeImage` = `backgroundType:'bgImage'`）。`editState.bgImage`（`EDITABLE_SETTINGS_KEYS` 外＝Undo・プリセット非対象。`getState()` のクローン時は `image` と同様に除外）に別途読み込む（`stateManager.setBackgroundImage` / `fileManager.processBackgroundImageFile`）。スライダー（拡大率・ぼかし・明るさ・彩度・位置）は `imageBlurBackgroundParams` を「ぼかし」と共有＝`drawBlurredImageBackground()` に別画像を全体で渡すだけ。別画像へ切替時、ぼかし既定 3 のままなら 0 へ寄せる。プレビュードラッグ位置調整も共有。プリセットに `bgImage` 型が入っていて画像未ロードなら単色にフォールバック | `session-log-2026-08-29-2.md` |
 
 ダブルクリックでオフセットをリセットする案は「他の操作が暴発しそう」としてユーザー判断で見送り。
 
@@ -171,9 +172,13 @@ phase7b1-regress 18/18・phase7b2 27/27・phase7b3 24/24。実装後に A-13「�
     データモデルを単一 `textSettings.layers[]` に統合（`kind` は持たず `content` から導出）、撮影日／Exif も複数レイヤー化・
     コントロールは共通の1セット。旧 localStorage プリセットは `migrateTextSettings()` で変換。
 
-**バケット5 — 将来（登録のみ）:**
+**バケット5 — 背景に別画像: ✅ 完了。ユーザーのブラウザ目視も確認済み・push 済み**
+（`docs/session-log-2026-08-29-2.md`。方向性を AskUserQuestion で全推奨案に確定 → 実装。b6-test 25/25 ＋
+a5 / g1 / c1 / phase5 / phase7b4 / phase7b4-regress 回帰全通し）。上の「完了済み」表と B-6 の（完了）スタブへ。
 
-34. **B-6** 背景タイプに「別画像」を追加。規模見積もりは後日。
+34. ✅ **B-6** 背景タイプに「別画像」を追加。`editState.bgImage`（Undo・プリセット非対象）に別途読み込み、
+    見え方・色調・位置のスライダーは「ぼかし」と共有。当初「大規模」と見積もっていたが、ぼかしレンダラが
+    既に `img` / `sourceRect` でパラメータ化されていたため中規模で収まった。
 
 **バケット後の積み残し:** ~~C-1（超楕円スライダーの体感等間隔マッピング）~~ ✅ 完了（`docs/session-log-2026-08-28-5.md`）／
 ~~A-5（クロップ確定をキャンバス外クリックでも）~~ ✅ 完了（`docs/session-log-2026-08-29.md`）／
@@ -313,14 +318,18 @@ controlsConfig.baseMarginPercent.defaultValue`（5＝表示 90%）を追加し�
 `id` / `name` / `value` は据え置きで `uiController.js` の配線は無変更。詳細は「完了済み」表と
 `docs/session-log-2026-08-27-7.md`。
 
-### B-6. 背景タイプに「別画像」を追加（将来）
+### B-6.（完了）
 
-**要望:** 単色／ぼかしに加え、別画像を読み込んで背景にできるオプション。読み込んだ画像へのスライダー
-（拡大倍率・ぼかし強度・明るさ・彩度）と「位置をリセット」は現在の「ぼかし」と同じものを流用する想定。
-
-**検討メモ（暫定）:** 難所は 2 枚目の画像をどこに持つか（`editState` に画像スロットを追加／プリセットには
-含めない＝Undo と同じ扱い）と、ぼかし背景レンダラの入力を「編集中の写真」から任意画像へ一般化する部分。
-大規模。設計の難易度・規模見積もりは着手前に別途出す。
+背景タイプに「別画像」（`#bgTypeImage` = `backgroundType:'bgImage'`）を追加。2 枚目の画像は
+`editState.bgImage` に持ち、`EDITABLE_SETTINGS_KEYS` 外＝Undo・プリセット非対象（`getState()` の
+`structuredClone` からは `image` と同様に除外して復元）。読み込みは `stateManager.setBackgroundImage()`
+＋ `fileManager.processBackgroundImageFile()`（Exif 抽出・トリミング初期化・UI 全再構築なし）。見え方・
+色調・位置のスライダーと位置リセット・プレビュードラッグは `imageBlurBackgroundParams` を「ぼかし」と
+共有し、`drawBlurredImageBackground()` に別画像を全体（クロップなし）で渡すだけ。別画像へ切り替えた瞬間、
+ぼかし強度が既定 3 のまま未調整なら 0 へ寄せる。プリセットに `bgImage` 型が保存されていて画像未ロードなら
+`backgroundRenderer` が単色にフォールバック。当初「大規模」見積もりだったが、ぼかしレンダラが既に
+`img` / `sourceRect` でパラメータ化されていたため中規模で収まった。
+詳細は「完了済み」表と `docs/session-log-2026-08-29-2.md`。
 
 ---
 
@@ -562,8 +571,13 @@ no-op に、`uiController.applyCropAspect` を内接 `fitRectToAspect` → 外�
 - **A-5 完了**（`docs/session-log-2026-08-29.md`。crop モード中は `.canvas-area` の余白クリックでもクロップ確定。
   `initCanvasInteraction()` が `.canvas-area` に薄い pointerdown/up リスナーを追加、`?debug` に
   `window.__kakomiGetPhotoEditMode` を追加。a5-test 14/14 ＋ g1 13/13・phase5 25/25・c1 37/37・phase7b4 41/41・
-  phase7b4-regress 16/16 回帰全通し。ユーザーのブラウザ目視も確認済み・push 済み）。**次はバケット5（B-6
-  背景に別画像、登録のみ）** → 積み残し A-4（クロップ後の写真を回転）／A-3（クロップ時に元画像を回転・最大規模）。
+  phase7b4-regress 16/16 回帰全通し。ユーザーのブラウザ目視も確認済み・push 済み）。
+- **B-6 完了**（`docs/session-log-2026-08-29-2.md`。バケット5。背景タイプ「別画像」＝ `editState.bgImage`
+  （Undo・プリセット非対象）に別読み込み、見え方・色調・位置は `imageBlurBackgroundParams` を「ぼかし」と共有、
+  レンダラは `drawBlurredImageBackground()` に別画像を全体で渡すだけ。ぼかしレンダラが既にパラメータ化されて
+  いたため中規模で収まった。b6-test 25/25 ＋ a5/g1/c1/phase5/phase7b4/phase7b4-regress 回帰全通し。
+  ユーザーのブラウザ目視も確認済み・push 済み）。**次は積み残し A-4（クロップ後の
+  写真をキャンバス内で回転）／A-3（クロップ時に切り出し前の元画像を回転・最大規模）。** 優先順位はユーザーと相談。
 - 比率タイルピッカー（`js/ui/ratioPicker.js`）は「形で見せて選ぶ」の再利用ネタ（C-1 で採った「感覚に合わせて曲げる」も同系）。
 - 「タブでプレビュー操作の意味を変える」系は、`tabManager.getActiveTab()` ＋ `canvasInteraction.js` の分岐に足していける。
   フェーズ4 で「パネルを畳んだ（`getActiveTab()`＝`null`）」状態が加わった＝写真ドラッグは枠内配置にフォールバックする。

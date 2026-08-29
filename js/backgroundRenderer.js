@@ -13,6 +13,22 @@
 function drawBackground(ctx, canvasWidth, canvasHeight, currentState, basePhotoShortSideForBlurPxIfPreview) {
     if (currentState.backgroundType === 'color' || !currentState.image) {
         drawColorBackground(ctx, canvasWidth, canvasHeight, currentState.backgroundColor);
+    } else if (currentState.backgroundType === 'bgImage') {
+        // B-6: 背景タイプ「別画像」。editState.bgImage をクロップせず全体を使い、
+        // ぼかし背景と同じ cover スケール／フィルタ／位置ロジックで敷く
+        // （パラメータは imageBlurBackgroundParams を共有）。画像未選択なら単色にフォールバック。
+        const bg = currentState.bgImage;
+        if (!bg || !bg.width || !bg.height) {
+            drawColorBackground(ctx, canvasWidth, canvasHeight, currentState.backgroundColor);
+        } else {
+            const baseLength = basePhotoShortSideForBlurPxIfPreview !== undefined
+                ? basePhotoShortSideForBlurPxIfPreview
+                : Math.min(currentState.photoDrawConfig.destWidth, currentState.photoDrawConfig.destHeight);
+            drawBlurredImageBackground(
+                ctx, canvasWidth, canvasHeight, bg, currentState.imageBlurBackgroundParams, baseLength,
+                { x: 0, y: 0, w: bg.width, h: bg.height }
+            );
+        }
     } else if (currentState.backgroundType === 'imageBlur') {
         // プレビュー時はプレビュー上の写真短辺、出力時は出力上の写真短辺を渡す
         const baseLength = basePhotoShortSideForBlurPxIfPreview !== undefined
