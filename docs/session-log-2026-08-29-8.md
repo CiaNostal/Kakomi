@@ -83,9 +83,32 @@
   公開して初めて計測が始まるので、`main` へのマージ時に一緒に反映される。
 - ローカル HTTP サーバー（`python3 -m http.server 8420`）は起動したまま。
 
-## 5. 未着手・次にやること
+## 5. 公開（feature → main、リリース v2.0）
 
-- **マイルドな公開**は撤回済み（対応なし）。将来やるなら本ログ §1 の案を参照。
+アクセス解析のコミット後、ユーザーの判断で公開に移行。手順は「A → B → C」で合意:
+
+- **A. feature 版を本番 URL で先行確認**
+  - GitHub Pages は「ブランチから配信」（legacy / `build_type: legacy`）で、ソースは `main` / ルート。
+  - `gh api -X PUT repos/CiaNostal/Kakomi/pages` でソースを一時的に `feature/interactive-editing` に変更。
+  - **ハマりどころ**: API でソースブランチを変えても Pages は自動で再ビルドしない。最新ビルドは
+    8/22 の `637d194`（旧 main）のままだった。`gh api -X POST repos/CiaNostal/Kakomi/pages/builds` で
+    **手動でビルドをリクエスト**して解決（対象コミット `818fd06` ＝ feature HEAD）。約1分でデプロイ。
+  - 検証: 本番 URL に Cloudflare ビーコンのトークン・feature 専用マーカー（`op-hint` / `reset-btn` /
+    `i-reset` / `legend-tools` / `bgTypeImage`）17 箇所・`js/main.js` の最新デバッグフックを確認。
+    ユーザーのブラウザ目視も確認済み。
+- **B. main へマージ**
+  - Pages のソースを `main` に戻す（config のみ）。
+  - `index.html` の版マーカーを `<!-- v1.9 -->` → `<!-- v2.0 -->` に（main・feature とも v1.9 のまま
+    一度もバンプされていなかった）。
+  - `feature/interactive-editing`（main より 35 コミット先行）を **PR 経由・マージコミット1個**で `main` に
+    マージ。push で `main` の Pages ビルドが自動起動。
+- **C. リリースタグ**
+  - マージコミットに `v2.0` タグを付けて push。以後のロールバックは `git revert -m 1 <マージコミット>` で
+    リリースまるごと1コマンド。
+
+## 6. 未着手・次にやること
+
+- **マイルドな公開**（更新通知バナー等）は撤回済み（対応なし）。将来やるなら本ログ §1 の案を参照。
 - `docs/roadmap.md` の前向き項目は引き続き空。次は `spec.md` 11.5 節の積み残し
   （`frameBorderStyle` 破線の去就／`@media` 1024px 以下の実機確認／Exif タブ拡充）か新規要望を
   ユーザーと相談して決める。
