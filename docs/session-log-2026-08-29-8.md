@@ -106,6 +106,13 @@
   - マージコミットに `v2.0` タグを付けて push。以後のロールバックは `git revert -m 1 <マージコミット>` で
     リリースまるごと1コマンド。
 
+- **結果（すべて完了）**: PR [#2](https://github.com/CiaNostal/Kakomi/pull/2) をマージコミット `e8e1f6c` で
+  マージ（`origin/main` `637d194` → `e8e1f6c`）。タグ `v2.0` を `e8e1f6c` に付与・push。マージ push で
+  Pages ビルドが自動起動し `e8e1f6c` をデプロイ。本番 `https://cianostal.github.io/Kakomi/` を検証:
+  HTTP 200・版マーカー `<!-- v2.0 -->`・Cloudflare ビーコンのトークン・feature 専用マーカー 17 箇所。
+  **ロールバック**: `git revert -m 1 e8e1f6c && git push origin main`（反映は約1分＋HTML キャッシュ最大10分）。
+  `feature/interactive-editing` は今後も開発ブランチとして継続（次回以降も PR で `main` へ）。
+
 ## 6. 未着手・次にやること
 
 - **マイルドな公開**（更新通知バナー等）は撤回済み（対応なし）。将来やるなら本ログ §1 の案を参照。
