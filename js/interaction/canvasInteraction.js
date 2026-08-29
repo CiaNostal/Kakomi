@@ -1,0 +1,562 @@
+// js/interaction/canvasInteraction.js
+/**
+ * canvasInteraction.js
+ * previewCanvas上でのクリック選択・ドラッグ移動・矢印キーnudgeを扱う共通コントローラ。
+ *
+ * 対象がテキストであろうと（将来的に）写真や背景であろうと同じロジックで処理できるよう、
+ * 実際の値の読み書きは type ごとのアダプタ（./adapters/*.js）に委譲している。
+ * ここでの責務は「座標変換」「当たり判定」「ドラッグ状態の管理」「キー入力」のみ。
+ */
+import * as interactionRegistry from './interactionRegistry.js';
+import * as selectionStore from './selectionStore.js';
+import * as photoEditModeStore from './photoEditModeStore.js';
+import { setActiveGuides, clearActiveGuides } from './guideStore.js';
+import { computeSnapCorrection } from './snapEngine.js';
+import { getLastPreviewContext } from '../canvasRenderer.js';
+import { isEditableElement } from '../utils/domUtils.js';
+import { getTextHandles } from './textHandleStore.js';
+import { getCropHandles } from './photoCropStore.js';
+import { clampRect, resizeCropRect, clampCropResizeToRotatedImage, clampCropPanToRotatedImage } from '../utils/cropRect.js';
+import textAdapter from './adapters/textAdapter.js';
+import photoAdapter from './adapters/photoAdapter.js';
+import backgroundAdapter from './adapters/backgroundAdapter.js';
+import shadowAdapter from './adapters/shadowAdapter.js';
+import { getActiveTab } from '../tabManager.js';
+import { getState, removeTextLayer } from '../stateManager.js';
+
+// pointerdown→pointerup が「ドラッグではなく短いタップ」とみなされる条件。
+// 選択モード↔クロップモードの切り替えはこのタップ判定で行う。移動量がこの px 未満で、
+// かつ押下時間が CLICK_TAP_MS 未満のときだけタップ扱いにする（長押ししてから離しても
+// モード切替が発動しないようにするため。値は手触りを見て調整可）。
+const CLICK_MOVE_THRESHOLD = 4;
+const CLICK_TAP_MS = 400;
+
+// 背景・影のドラッグで、オフセット値が中立(0)にこの px 以内まで近づいたら 0 にスナップし、
+// 赤い中央ガイド線を表示する（snapEngine の SNAP_THRESHOLD_PX と揃えている）。
+const ORIGIN_SNAP_PX = 6;
+
+function pointInRect(px, py, r) {
+    return r && px >= r.x && px <= r.x + r.width && py >= r.y && py <= r.y + r.height;
+}
+
+const adaptersByType = {
+    text: textAdapter,
+    photo: photoAdapter,
+    background: backgroundAdapter
+};
+
+// 拡大・回転ハンドルは小さいため、実際の描画サイズより広めの当たり判定半径を設ける（px）
+const HANDLE_HIT_RADIUS = 10;
+
+let dragState = null;
+// pointerdown 時点の情報。pointerup でドラッグ量がわずかなら「クリック」とみなし、
+// 選択モード↔クロップモードの切り替えに使う。
+let pointerDownCtx = null;
+
+function toCanvasCoords(canvas, clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = rect.width > 0 ? canvas.width / rect.width : 1;
+    const scaleY = rect.height > 0 ? canvas.height / rect.height : 1;
+    return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+}
+
+function distance(x1, y1, x2, y2) {
+    return Math.hypot(x1 - x2, y1 - y2);
+}
+
+/**
+ * crop モードに入る。現在のプレビュー座標（写真ボックス・スケール・クロップ矩形）を
+ * frozenFrame としてスナップショットし、以降 crop モード中の描画・当たり判定の基準にする。
+ * プレビュー上での「選択済み写真の再タップ」からも、レイアウトタブの「トリミング」パネルの
+ * クリック（uiController）からも呼ばれる。写真が未ロードなら何もしない。
+ *
+ * **すでに crop モードのときは何もしない。** frozenFrame は「select モードのレイアウト（写真は
+ * クロップ後でも枠いっぱいに拡大表示される）」を基準にしているので、crop モード中に取り直すと、
+ * 枠いっぱいの photoBox0 と縮んだ rect0 から whole を逆算する際に元画像が一段拡大される。
+ * これを繰り返すと画像が無限に拡大してクロップ枠が消える（`docs/roadmap.md` G-6）。
+ * @returns {boolean} crop モードに入れた（またはすでに入っていた）か
+ */
+export function requestEnterCropMode() {
+    if (photoEditModeStore.isCropMode()) return true;
+    const photoBox = interactionRegistry.getById('photo');
+    if (!photoBox) return false;
+    // パネルクリック経由では写真がまだ選択されていないことがある。crop モードの描画・当たり判定は
+    // selectedId === 'photo' を前提にしているので、先に写真を選択しておく。
+    if (selectionStore.getSelectedId() !== 'photo') {
+        selectionStore.setSelectedId('photo');
+    }
+    const ctx = getLastPreviewContext() || {};
+    photoEditModeStore.enterCrop({
+        scale: ctx.scale || 1,
+        photoBox0: { x: photoBox.x, y: photoBox.y, width: photoBox.width, height: photoBox.height },
+        rect0: photoAdapter.getCropRect()
+    });
+    return true;
+}
+
+/**
+ * previewCanvasにポインタ操作（クリック選択・ドラッグ）とキーボードnudgeを配線する。
+ * main.js からアプリ初期化時に一度だけ呼び出す。
+ * @param {HTMLCanvasElement} canvas
+ */
+export function initCanvasInteraction(canvas) {
+    if (!canvas) return;
+
+    canvas.addEventListener('pointerdown', (e) => {
+        const { x, y } = toCanvasCoords(canvas, e.clientX, e.clientY);
+
+        // 選択中テキストの拡大・回転ハンドルへの当たり判定を、通常のオブジェクト選択より先に行う。
+        // （ハンドルはそのオブジェクトが選択されている間だけ表示・有効なため）
+        const handles = getTextHandles();
+        if (handles) {
+            if (distance(x, y, handles.resize.x, handles.resize.y) <= HANDLE_HIT_RADIUS) {
+                const startValue = textAdapter.getTransform(handles.id);
+                if (startValue) {
+                    dragState = {
+                        mode: 'resize', id: handles.id, center: handles.center,
+                        startDist: distance(x, y, handles.center.x, handles.center.y),
+                        startSize: startValue.size
+                    };
+                    canvas.setPointerCapture(e.pointerId);
+                    canvas.classList.add('dragging-object');
+                    return;
+                }
+            }
+            if (distance(x, y, handles.rotate.x, handles.rotate.y) <= HANDLE_HIT_RADIUS) {
+                const startValue = textAdapter.getTransform(handles.id);
+                if (startValue) {
+                    dragState = {
+                        mode: 'rotate', id: handles.id, center: handles.center,
+                        startAngle: Math.atan2(y - handles.center.y, x - handles.center.x),
+                        startRotation: startValue.rotation
+                    };
+                    canvas.setPointerCapture(e.pointerId);
+                    canvas.classList.add('dragging-object');
+                    return;
+                }
+            }
+        }
+
+        // 写真が選択されているときの、四隅ハンドル／クロップ操作の当たり判定。
+        // photoEditModeStore のモード（select / crop）で挙動を切り替える。
+        const editMode = photoEditModeStore.getMode();
+        const photoSelected = selectionStore.getSelectedId() === 'photo';
+        const cropHandles = getCropHandles();
+
+        pointerDownCtx = {
+            clientX: e.clientX, clientY: e.clientY,
+            downTime: performance.now(),
+            modeAtDown: editMode,
+            photoWasSelected: photoSelected,
+            onPhotoBody: false,
+            cropExitCandidate: false
+        };
+
+        // --- select モード: 上端の回転ハンドルのドラッグ = 写真の回転（A-4） ---
+        if (editMode === 'select' && photoSelected && cropHandles && cropHandles.rotate) {
+            const rh = cropHandles.rotate;
+            if (distance(x, y, rh.x, rh.y) <= HANDLE_HIT_RADIUS) {
+                dragState = {
+                    mode: 'photoRotate',
+                    center: cropHandles.center,
+                    startAngle: Math.atan2(y - cropHandles.center.y, x - cropHandles.center.x),
+                    startRotation: photoAdapter.getRotation()
+                };
+                canvas.setPointerCapture(e.pointerId);
+                canvas.classList.add('dragging-object');
+                return;
+            }
+        }
+
+        // --- crop モード: L 字ハンドルでクロップ矩形をリサイズ / クロップ窓内で写真をパン ---
+        if (editMode === 'crop' && photoSelected && cropHandles && cropHandles.whole) {
+            let grabbedCorner = null;
+            for (const key of ['tl', 'tr', 'bl', 'br']) {
+                const c = cropHandles.corners[key];
+                if (c && distance(x, y, c.x, c.y) <= HANDLE_HIT_RADIUS) { grabbedCorner = key; break; }
+            }
+            if (grabbedCorner) {
+                const { aspectValue, imgAspectValue } = photoAdapter.getCropConstraint();
+                dragState = {
+                    mode: 'cropRectResize',
+                    corner: grabbedCorner,
+                    startRect: photoAdapter.getCropRect(),
+                    whole: cropHandles.whole,
+                    aspectValue, imgAspectValue,
+                    startX: x, startY: y
+                };
+                canvas.setPointerCapture(e.pointerId);
+                canvas.classList.add('dragging-object');
+                return;
+            }
+            if (pointInRect(x, y, cropHandles.cropScreen)) {
+                dragState = {
+                    mode: 'cropPan',
+                    startRect: photoAdapter.getCropRect(),
+                    whole: cropHandles.whole,
+                    startX: x, startY: y
+                };
+                canvas.setPointerCapture(e.pointerId);
+                canvas.classList.add('dragging-object');
+                return;
+            }
+            // ハンドルでもクロップ窓内でもない = 枠の外（暗い余白）。
+            // A-3: ここをドラッグ → 水平出し角度の変更。短いタップのままなら（下の pointerup で）
+            // crop モードを確定して抜ける。両立させるため cropExitCandidate は立てたまま
+            // cropRotate のドラッグ状態も用意しておく（ドラッグ扱いになれば pointerup の
+            // タップ判定で弾かれ exitCrop は走らない）。
+            pointerDownCtx.cropExitCandidate = true;
+            const rc = cropHandles.center || {
+                x: cropHandles.cropScreen.x + cropHandles.cropScreen.width / 2,
+                y: cropHandles.cropScreen.y + cropHandles.cropScreen.height / 2
+            };
+            dragState = {
+                mode: 'cropRotate',
+                center: rc,
+                startAngle: Math.atan2(y - rc.y, x - rc.x),
+                startRotation: photoAdapter.getCropRotation()
+            };
+            canvas.setPointerCapture(e.pointerId);
+            return;
+        }
+
+        // --- select モード: 四隅 ■ ハンドルのドラッグ = 余白（baseMarginPercent）の増減 ---
+        if (editMode === 'select' && photoSelected && cropHandles) {
+            for (const corner of Object.values(cropHandles.corners)) {
+                if (distance(x, y, corner.x, corner.y) <= HANDLE_HIT_RADIUS) {
+                    // 「中心 → 掴んだ隅」方向の単位ベクトル。以降このベクトルへの符号付き投影量で
+                    // 余白を動かす（中心を通り越しても反転しない・移動量に比例する）。
+                    const cx = cropHandles.center.x, cy = cropHandles.center.y;
+                    const len = Math.hypot(corner.x - cx, corner.y - cy) || 1;
+                    dragState = {
+                        mode: 'photoResize',
+                        startPointer: { x, y },
+                        u: { x: (corner.x - cx) / len, y: (corner.y - cy) / len },
+                        startMargin: photoAdapter.getMarginPercent(),
+                        startShortSide: getLastPreviewContext().photoShortSidePx || 1
+                    };
+                    canvas.setPointerCapture(e.pointerId);
+                    canvas.classList.add('dragging-object');
+                    return;
+                }
+            }
+        }
+
+        // --- 通常のオブジェクト選択・移動 ---
+        const hit = interactionRegistry.hitTest(x, y);
+
+        // 「背景」「フレーム」タブを開いているときは、テキスト以外の場所（写真本体・余白）の
+        // ドラッグの意味を差し替える。背景タブ = 背景（拡大ぼかし）の位置、フレームタブ = 影のオフセット。
+        // これらは選択状態を変えず、クロップモードへの入口（onPhotoBody）にもしない。
+        const activeTab = getActiveTab();
+        if (hit && hit.type !== 'text' && (activeTab === 'tab-background' || activeTab === 'tab-frame')) {
+            if (activeTab === 'tab-background') {
+                dragState = {
+                    mode: 'move', id: 'background', adapter: backgroundAdapter,
+                    startClientX: e.clientX, startClientY: e.clientY,
+                    startValue: backgroundAdapter.getValue('background'),
+                    startBox: interactionRegistry.getById('background') || hit, originSnap: true
+                };
+                canvas.setPointerCapture(e.pointerId);
+                canvas.classList.add('dragging-object');
+            } else if (getState().frameSettings.shadowEnabled) {
+                dragState = {
+                    mode: 'move', id: 'shadow', adapter: shadowAdapter,
+                    startClientX: e.clientX, startClientY: e.clientY,
+                    startValue: shadowAdapter.getValue('shadow'),
+                    startBox: hit, originSnap: true
+                };
+                canvas.setPointerCapture(e.pointerId);
+                canvas.classList.add('dragging-object');
+            }
+            // フレームタブで影が無効なときは何もしない（無反応）。いずれの場合も選択は変えない。
+            return;
+        }
+
+        // 背景（拡大ぼかし）の位置調整ドラッグは「背景」タブでのみ行う（上の分岐で処理済み）。
+        // それ以外のタブで余白（背景ボックス）をクリック／ドラッグしても背景は動かさず、
+        // 単なる選択解除として扱う。
+        if (hit && hit.type === 'background') {
+            selectionStore.setSelectedId(null);
+            return;
+        }
+
+        selectionStore.setSelectedId(hit ? hit.id : null);
+        if (!hit) return;
+        if (hit.id === 'photo') pointerDownCtx.onPhotoBody = true;
+
+        const adapter = adaptersByType[hit.type];
+        if (!adapter) return;
+        const startValue = adapter.getValue(hit.id);
+        if (!startValue) return;
+
+        dragState = { mode: 'move', id: hit.id, adapter, startClientX: e.clientX, startClientY: e.clientY, startValue, startBox: hit };
+        canvas.setPointerCapture(e.pointerId);
+        canvas.classList.add('dragging-object');
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+        if (!dragState) return;
+
+        if (dragState.mode === 'resize') {
+            const { x, y } = toCanvasCoords(canvas, e.clientX, e.clientY);
+            const currentDist = distance(x, y, dragState.center.x, dragState.center.y);
+            const scaleFactor = dragState.startDist > 0 ? currentDist / dragState.startDist : 1;
+            textAdapter.commitResize(dragState.id, dragState.startSize, scaleFactor);
+            return;
+        }
+        if (dragState.mode === 'photoResize') {
+            const { x, y } = toCanvasCoords(canvas, e.clientX, e.clientY);
+            // ドラッグ開始点からの移動量を「中心→隅」方向へ符号付き投影する
+            const proj = (x - dragState.startPointer.x) * dragState.u.x
+                + (y - dragState.startPointer.y) * dragState.u.y;
+            photoAdapter.commitMarginResizeByDrag(dragState.startMargin, proj, dragState.startShortSide);
+            return;
+        }
+        if (dragState.mode === 'cropRectResize') {
+            const { x, y } = toCanvasCoords(canvas, e.clientX, e.clientY);
+            const w = dragState.whole;
+            const fdx = w.width > 0 ? (x - dragState.startX) / w.width : 0;
+            const fdy = w.height > 0 ? (y - dragState.startY) / w.height : 0;
+            let rect = resizeCropRect(
+                dragState.startRect, dragState.corner, fdx, fdy,
+                dragState.aspectValue, dragState.imgAspectValue
+            );
+            // A-3: 水平出し角度が付いていたら、掴んだ隅の対角を固定したまま
+            //      傾いた元画像に収まるサイズへ頭打ち（反対側の辺は動かさない）。
+            const cs = getState();
+            const rot = cs.cropSettings.rotation || 0;
+            if (rot) {
+                rect = clampCropResizeToRotatedImage(rect, dragState.corner, rot, cs.originalWidth, cs.originalHeight);
+            }
+            photoAdapter.commitCropRect(rect);
+            return;
+        }
+        if (dragState.mode === 'cropPan') {
+            const { x, y } = toCanvasCoords(canvas, e.clientX, e.clientY);
+            const w = dragState.whole;
+            const fdx = w.width > 0 ? (x - dragState.startX) / w.width : 0;
+            const fdy = w.height > 0 ? (y - dragState.startY) / w.height : 0;
+            const s = dragState.startRect;
+            const cs = getState();
+            const rot = cs.cropSettings.rotation || 0;
+            // ドラッグ方向にクロップ窓が動く（右へドラッグ＝クロップ窓が右へ）。
+            // A-3: 傾いた元画像の内側で頭打ち（端で止まる）。
+            const rect = rot
+                ? clampCropPanToRotatedImage(s, fdx, fdy, rot, cs.originalWidth, cs.originalHeight)
+                : clampRect({ x: s.x + fdx, y: s.y + fdy, w: s.w, h: s.h });
+            photoAdapter.commitCropRect(rect);
+            return;
+        }
+        if (dragState.mode === 'rotate') {
+            const { x, y } = toCanvasCoords(canvas, e.clientX, e.clientY);
+            const currentAngle = Math.atan2(y - dragState.center.y, x - dragState.center.x);
+            let deltaDeg = (currentAngle - dragState.startAngle) * 180 / Math.PI;
+            let newRotation = dragState.startRotation + deltaDeg;
+            if (e.shiftKey) newRotation = Math.round(newRotation / 15) * 15; // Shiftで15度刻みにスナップ
+            textAdapter.commitRotate(dragState.id, newRotation);
+            return;
+        }
+        if (dragState.mode === 'photoRotate') {
+            // A-4: 写真の回転ハンドルのドラッグ。テキストの rotate と同じ角度計算。
+            const { x, y } = toCanvasCoords(canvas, e.clientX, e.clientY);
+            const currentAngle = Math.atan2(y - dragState.center.y, x - dragState.center.x);
+            let deltaDeg = (currentAngle - dragState.startAngle) * 180 / Math.PI;
+            let newRotation = dragState.startRotation + deltaDeg;
+            if (e.shiftKey) newRotation = Math.round(newRotation / 15) * 15; // Shiftで15度刻みにスナップ
+            photoAdapter.commitRotate(newRotation);
+            return;
+        }
+        if (dragState.mode === 'cropRotate') {
+            // A-3: crop オーバーレイの暗い余白のドラッグ = 水平出し角度。
+            // クロップ窓中心まわりのポインタ角度の変化量を開始角に加算（±45°クランプは commit 側）。
+            const { x, y } = toCanvasCoords(canvas, e.clientX, e.clientY);
+            const currentAngle = Math.atan2(y - dragState.center.y, x - dragState.center.x);
+            let deltaDeg = (currentAngle - dragState.startAngle) * 180 / Math.PI;
+            if (deltaDeg > 180) deltaDeg -= 360;
+            if (deltaDeg < -180) deltaDeg += 360;
+            let newRotation = dragState.startRotation + deltaDeg;
+            if (e.shiftKey) newRotation = Math.round(newRotation); // Shiftで1°刻み
+            photoAdapter.commitCropRotation(newRotation);
+            return;
+        }
+
+        let dxPx = e.clientX - dragState.startClientX;
+        let dyPx = e.clientY - dragState.startClientY;
+        const ctx = getLastPreviewContext();
+
+        // Shiftを押しながらドラッグすると、移動量の大きい方の軸だけに固定する（縦だけ／横だけ）。
+        if (e.shiftKey) {
+            if (Math.abs(dxPx) >= Math.abs(dyPx)) dyPx = 0; else dxPx = 0;
+        }
+
+        // Altキーを押しながらドラッグすると、細かい位置調整のためスナップを一時的に無効化できる。
+        if (e.altKey) {
+            clearActiveGuides();
+        } else if (dragState.originSnap) {
+            // 背景・影のドラッグ: オフセットが中立(0)に近づいたら 0 にスナップし、赤い中央ガイドを出す。
+            // adapter.originSnapPx() が「各軸を 0 に戻すためのドラッグ量(px)」を返す。
+            const { xPx, yPx } = dragState.adapter.originSnapPx(dragState.startValue, ctx);
+            const guides = [];
+            if (Math.abs(dxPx - xPx) < ORIGIN_SNAP_PX) { dxPx = xPx; guides.push({ axis: 'x', value: canvas.width / 2 }); }
+            if (Math.abs(dyPx - yPx) < ORIGIN_SNAP_PX) { dyPx = yPx; guides.push({ axis: 'y', value: canvas.height / 2 }); }
+            setActiveGuides(guides);
+        } else {
+            const candidateBox = {
+                x: dragState.startBox.x + dxPx,
+                y: dragState.startBox.y + dyPx,
+                width: dragState.startBox.width,
+                height: dragState.startBox.height
+            };
+            const otherBoxes = interactionRegistry.getAll().filter(b => b.id !== dragState.id);
+            const snap = computeSnapCorrection(candidateBox, canvas.width, canvas.height, otherBoxes);
+            dxPx += snap.dx;
+            dyPx += snap.dy;
+            setActiveGuides(snap.guideLines);
+        }
+
+        const changes = dragState.adapter.computeChanges(dragState.startValue, dxPx, dyPx, ctx);
+        dragState.adapter.commit(dragState.id, changes);
+    });
+
+    const endDrag = () => {
+        dragState = null;
+        canvas.classList.remove('dragging-object');
+        clearActiveGuides();
+    };
+
+    // crop モードに入る（frozenFrame スナップショット作成は requestEnterCropMode に集約）。
+    const enterCropMode = requestEnterCropMode;
+
+    canvas.addEventListener('pointerup', (e) => {
+        const pd = pointerDownCtx;
+        pointerDownCtx = null;
+        endDrag();
+        if (!pd) return;
+
+        // 「ほとんど動かさず、かつ短時間で離した」＝短いタップのときだけモードを切り替える。
+        // 動かさずに長押ししてから離した場合は切り替えない。
+        const moved = Math.hypot(e.clientX - pd.clientX, e.clientY - pd.clientY);
+        const heldMs = performance.now() - pd.downTime;
+        if (moved > CLICK_MOVE_THRESHOLD || heldMs > CLICK_TAP_MS) return;
+
+        if (pd.modeAtDown === 'select' && pd.photoWasSelected && pd.onPhotoBody) {
+            // 選択済みの写真をもう一度クリック → クロップモードへ
+            enterCropMode();
+        } else if (pd.modeAtDown === 'crop' && pd.cropExitCandidate) {
+            // クロップ窓の外をクリック → クロップ確定（select モードへ戻る）。
+            // 出力枠のアスペクト比は変えない（枠は固定、中の写真だけがクロップされる）。
+            photoEditModeStore.exitCrop();
+        }
+    });
+    canvas.addEventListener('pointercancel', () => { pointerDownCtx = null; endDrag(); });
+
+    // A-5: crop モード中は「キャンバスの外側」（.canvas-area のパディングや、
+    // 出力比率が縦長／横長のときにキャンバス周囲へできるレターボックス）をクリックしても
+    // クロップを確定できるようにする。previewCanvas 自身へのクリックは上の pointerup が
+    // 扱う（クロップ枠の外 → exitCrop）ため、ここではキャンバス以外の要素へ落ちた
+    // クリックだけを拾う。select モードでは何もしない（キャンバス外クリックでの選択解除は
+    // 別機能なので A-5 の対象外）。
+    const cropArea = canvas.closest('.canvas-area');
+    if (cropArea) {
+        let areaDownCtx = null;
+        cropArea.addEventListener('pointerdown', (e) => {
+            if (e.target === canvas || !photoEditModeStore.isCropMode()) {
+                areaDownCtx = null;
+                return;
+            }
+            areaDownCtx = { clientX: e.clientX, clientY: e.clientY, downTime: performance.now() };
+        });
+        cropArea.addEventListener('pointerup', (e) => {
+            const ad = areaDownCtx;
+            areaDownCtx = null;
+            if (!ad || !photoEditModeStore.isCropMode()) return;
+            // canvas 上の pointerup と同じ「短いタップ」判定を使う。
+            const moved = Math.hypot(e.clientX - ad.clientX, e.clientY - ad.clientY);
+            const heldMs = performance.now() - ad.downTime;
+            if (moved > CLICK_MOVE_THRESHOLD || heldMs > CLICK_TAP_MS) return;
+            photoEditModeStore.exitCrop();
+        });
+        cropArea.addEventListener('pointercancel', () => { areaDownCtx = null; });
+    }
+
+    // 矢印キーによる微調整（Shiftで10px相当、通常は1px相当。ドラッグと同じ「プレビュー上のpx」単位で扱う）
+    document.addEventListener('keydown', (e) => {
+        if (isEditableElement(document.activeElement)) return; // 入力欄編集中はナッジしない
+
+        // Esc / Enter: crop モードを抜けて select モードへ戻す（出力枠は変えない）
+        if ((e.key === 'Escape' || e.key === 'Enter') && photoEditModeStore.isCropMode()) {
+            e.preventDefault();
+            photoEditModeStore.exitCrop();
+            return;
+        }
+
+        // D-5 / バケット4: 「テキスト」タブがアクティブでテキストレイヤーを選択中のとき、
+        // Delete / Backspace で削除する（撮影日・Exif も含め、すべてのレイヤーが対象）。
+        // × ボタン（uiController）と同じく、削除 → 選択解除の順で呼ぶと onSelectionChange 経由で
+        // リスト・設定パネルが再描画される。
+        if ((e.key === 'Delete' || e.key === 'Backspace') && getActiveTab() === 'tab-text') {
+            const sel = selectionStore.getSelectedId();
+            const isTextLayer = sel && (getState().textSettings.layers || []).some(l => l.id === sel);
+            if (isTextLayer) {
+                e.preventDefault();
+                removeTextLayer(sel);
+                selectionStore.setSelectedId(null);
+                return;
+            }
+        }
+
+        let dxPx = 0, dyPx = 0;
+        const step = e.shiftKey ? 10 : 1;
+        if (e.key === 'ArrowLeft') dxPx = -step;
+        else if (e.key === 'ArrowRight') dxPx = step;
+        else if (e.key === 'ArrowUp') dyPx = -step;
+        else if (e.key === 'ArrowDown') dyPx = step;
+        else return;
+
+        // 「背景」「フレーム」タブでは、矢印キーを背景／影のオフセット微調整に割り当てる
+        // （本体ドラッグのタブ別振り分けと同じ考え方。写真・テキストの選択有無に依らない）。
+        const activeTab = getActiveTab();
+        const tabAdapter = activeTab === 'tab-background'
+            ? backgroundAdapter
+            : (activeTab === 'tab-frame' && getState().frameSettings.shadowEnabled ? shadowAdapter : null);
+        if (tabAdapter) {
+            const id = tabAdapter === backgroundAdapter ? 'background' : 'shadow';
+            e.preventDefault();
+            const sv = tabAdapter.getValue(id);
+            tabAdapter.commit(id, tabAdapter.computeChanges(sv, dxPx, dyPx, getLastPreviewContext()));
+            return;
+        }
+
+        const selectedId = selectionStore.getSelectedId();
+        if (!selectedId) return;
+
+        // crop モードで写真を選択中: 矢印はクロップ矩形のパン（本体ドラッグと同じ向き）
+        if (photoEditModeStore.isCropMode() && selectedId === 'photo') {
+            const hh = getCropHandles();
+            if (!hh || !hh.whole) return;
+            e.preventDefault();
+            const s = photoAdapter.getCropRect();
+            const fdx = dxPx / hh.whole.width;
+            const fdy = dyPx / hh.whole.height;
+            const cs = getState();
+            const rot = cs.cropSettings.rotation || 0;
+            const rect = rot
+                ? clampCropPanToRotatedImage(s, fdx, fdy, rot, cs.originalWidth, cs.originalHeight)
+                : clampRect({ x: s.x + fdx, y: s.y + fdy, w: s.w, h: s.h });
+            photoAdapter.commitCropRect(rect);
+            return;
+        }
+
+        const box = interactionRegistry.getById(selectedId);
+        if (!box) return;
+        const adapter = adaptersByType[box.type];
+        if (!adapter) return;
+
+        e.preventDefault();
+        const startValue = adapter.getValue(selectedId);
+        if (!startValue) return;
+        const changes = adapter.computeChanges(startValue, dxPx, dyPx, getLastPreviewContext());
+        adapter.commit(selectedId, changes);
+    });
+}

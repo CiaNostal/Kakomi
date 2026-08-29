@@ -43,6 +43,39 @@ function extractExifFromFile(file) {
 }
 
 /**
+ * piexif.jsが返すASCII型Exif文字列（Make/Model/LensModel等）の文字化け対策。
+ *
+ * 対策は2段階:
+ * 1. NULパディングの除去 —— Exif規格上、ASCII型フィールドは固定バイト長で、実際の
+ *    文字列の後にNUL終端＋NULパディングが続く（例: "CampSnap"を32バイト枠に入れる場合、
+ *    "CampSnap" + \x00 が22回続く）。piexif.jsはこの固定長バイト列をそのまま
+ *    JS文字列化して返すため、末尾のNUL文字群を含んだまま描画・表示すると、
+ *    エディタやフォントによっては制御文字が可視化されて「特殊文字が混ざったような
+ *    文字化け」に見える。最初のNUL文字（コードポイント U+0000）以降を切り捨てて対処する。
+ * 2. UTF-8をLatin-1として誤読した文字化けの復元 —— 上記のフィールドは規格上ASCIIの
+ *    はずだが、実際には日本語などの非ASCII文字をUTF-8でエンコードして書き込む
+ *    カメラ・レンズ・編集ソフトも存在する。piexif.jsはバイト列を1バイトずつそのまま
+ *    JS文字コードにマッピングするだけで、マルチバイトのUTF-8シーケンスを再デコード
+ *    しないため、そのようなデータをそのまま表示すると文字化けする。escape()で
+ *    「1バイト=1文字」の文字列に戻してからdecodeURIComponent()でUTF-8として
+ *    再解釈することで復元する（純粋なASCII文字列に対しては実質的に何もしない
+ *    安全な変換）。
+ * @param {*} value - piexif.jsから取得した値（文字列以外はそのまま返す）
+ * @returns {*}
+ */
+function decodeExifString(value) {
+    if (typeof value !== 'string') return value;
+    const nulIndex = value.indexOf('\u0000');
+    const trimmed = nulIndex !== -1 ? value.slice(0, nulIndex) : value;
+    try {
+        return decodeURIComponent(escape(trimmed));
+    } catch (e) {
+        // UTF-8として解釈できないバイト列（Shift-JIS等）の場合はNUL除去のみ済ませて返す
+        return trimmed;
+    }
+}
+
+/**
  * piexif.jsのタグ定数を使って安全に値を取得するヘルパー
  * @param {Object} ifd - 0th または Exif IFD オブジェクト
  * @param {number} tag - piexif.TAGS.ImageIFD.xxx または piexif.TAGS.ExifIFD.xxx
@@ -84,13 +117,17 @@ function formatExifForDisplay(exifData) {
     const zerothIFD = exifData["0th"];
     if (zerothIFD) {
         const make = getTagValue(zerothIFD, ImageIFD_CONSTANTS.Make);
-        if (make) formatted.make = make;
+        if (make) formatted.make = decodeExifString(make);
 
         const model = getTagValue(zerothIFD, ImageIFD_CONSTANTS.Model);
-        if (model) formatted.model = model;
+        if (model) formatted.model = decodeExifString(model);
 
         const dateTime = getTagValue(zerothIFD, ImageIFD_CONSTANTS.DateTime);
-        if (dateTime) formatted.dateTime = String(dateTime).replace(/:/g, '/').replace(' ', ' ');
+        if (dateTime) {
+            // Exif の DateTime は "YYYY:MM:DD HH:MM:SS"。日付は "." 区切り、時刻は "HH:MM" までに整形する。
+            const m = String(dateTime).match(/^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2})/);
+            formatted.dateTime = m ? `${m[1]}.${m[2]}.${m[3]} ${m[4]}:${m[5]}` : String(dateTime);
+        }
     }
 
     // Exif IFD
@@ -120,7 +157,7 @@ function formatExifForDisplay(exifData) {
         }
 
         const lensModelVal = getTagValue(exifIFD, ExifIFD_CONSTANTS.LensModel);
-        if (lensModelVal) formatted.lens = lensModelVal;
+        if (lensModelVal) formatted.lens = decodeExifString(lensModelVal);
     }
 
     return formatted;
@@ -156,54 +193,139 @@ function embedExifToJpeg(jpegDataUrl, exifDataFromState) {
     }
 }
 
+// Exif の撮影設定行。key は formatExifForDisplay() の返すキー、icon は index.html の
+// スプライト <symbol id="i-*">、label は <dt> の title（ホバーでツールチップ表示）。
+const EXIF_ROW_DEFS = [
+    { key: 'fNumber', icon: 'i-aperture', label: '絞り' },
+    { key: 'exposureTime', icon: 'i-shutter', label: 'シャッタースピード' },
+    { key: 'iso', icon: 'i-iso', label: 'ISO感度' },
+    { key: 'focalLength', icon: 'i-focal', label: '焦点距離' },
+    { key: 'dateTime', icon: 'i-cal', label: '撮影日時' },
+];
+
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"]/g, (c) => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]
+    ));
+}
+
 /**
- * Exif情報を画面に表示する (変更なし、formatExifForDisplayの結果を使用)
- * @param {Object} exifData - Exifデータ (piexif.js形式)
- * @param {HTMLElement} container - 表示するコンテナ要素
+ * Exif情報を「情報」タブ（`#exifDataContainer`）に描画する（E-3 / フェーズ5）。
+ * Lightroom Web 風に、カメラ／レンズ名だけを小さく上に置き、撮影設定は
+ * 「アイコン＋値」だけの定義リストにする。項目名（絞り・SS 等）のテキストは出さず、
+ * `<dt>` の title 属性に入れてホバーでツールチップ表示させる。
+ * @param {Object|null} exifData - piexif.js 形式のExifデータ。null なら未読込メッセージ。
+ * @param {HTMLElement} container - `#exifDataContainer`
  */
 function displayExifInfo(exifData, container) {
     if (!container) return;
-    if (!exifData) { // Exifデータがない場合はコンテナをクリア
-        container.innerHTML = '<p>Exif情報はありません。</p>';
+
+    const formatted = exifData ? formatExifForDisplay(exifData) : {};
+    const rows = EXIF_ROW_DEFS.filter((def) => formatted[def.key]);
+
+    // カメラ名: Make と Model の両方があり Model が Make で始まらなければ連結、そうでなければ Model 優先。
+    let cameraName = '';
+    if (formatted.make && formatted.model) {
+        const makeHead = formatted.make.toLowerCase().split(/\s+/)[0];
+        cameraName = formatted.model.toLowerCase().startsWith(makeHead)
+            ? formatted.model
+            : `${formatted.make} ${formatted.model}`;
+    } else {
+        cameraName = formatted.model || formatted.make || '';
+    }
+    const camLine = [cameraName, formatted.lens].filter(Boolean).join(' · ');
+
+    if (rows.length === 0 && !camLine) {
+        container.innerHTML = exifData
+            ? '<p class="exif-empty">この写真に撮影情報は含まれていません。</p>'
+            : '<p class="exif-empty">写真を読み込むと撮影情報が表示されます。</p>';
         return;
     }
 
-    const formatted = formatExifForDisplay(exifData);
-
-    if (Object.keys(formatted).length === 0) {
-        container.innerHTML = '<p>主要なExif情報は見つかりませんでした。</p>';
-        return;
+    let html = '';
+    if (camLine) html += `<p class="exif-cam">${escapeHtml(camLine)}</p>`;
+    if (rows.length) {
+        html += '<dl class="exif-dl">';
+        for (const def of rows) {
+            html += `<dt title="${def.label}" aria-label="${def.label}">`
+                + `<svg aria-hidden="true"><use href="#${def.icon}"></use></svg></dt>`;
+            html += `<dd>${escapeHtml(formatted[def.key])}</dd>`;
+        }
+        html += '</dl>';
     }
-
-    let html = '<table class="exif-table">';
-
-    if (formatted.make || formatted.model) {
-        html += '<tr><th colspan="2">カメラ情報</th></tr>';
-        if (formatted.make) html += `<tr><td>メーカー名</td><td>${formatted.make}</td></tr>`;
-        if (formatted.model) html += `<tr><td>機種名</td><td>${formatted.model}</td></tr>`;
-    }
-
-    const shootingInfoKeys = ['fNumber', 'exposureTime', 'iso', 'focalLength'];
-    if (shootingInfoKeys.some(key => formatted[key])) {
-        html += '<tr><th colspan="2">撮影設定</th></tr>';
-        if (formatted.fNumber) html += `<tr><td>F値</td><td>${formatted.fNumber}</td></tr>`;
-        if (formatted.exposureTime) html += `<tr><td>シャッタースピード</td><td>${formatted.exposureTime}</td></tr>`;
-        if (formatted.iso) html += `<tr><td>ISO感度</td><td>${formatted.iso}</td></tr>`;
-        if (formatted.focalLength) html += `<tr><td>焦点距離</td><td>${formatted.focalLength}</td></tr>`;
-    }
-
-    if (formatted.lens) {
-        html += '<tr><th colspan="2">レンズ情報</th></tr>';
-        html += `<tr><td>レンズ</td><td>${formatted.lens}</td></tr>`;
-    }
-
-    if (formatted.dateTime) {
-        html += '<tr><th colspan="2">日時情報</th></tr>';
-        html += `<tr><td>撮影日時</td><td>${formatted.dateTime}</td></tr>`;
-    }
-
-    html += '</table>';
     container.innerHTML = html;
 }
 
-export { extractExifFromFile, formatExifForDisplay, embedExifToJpeg, displayExifInfo };
+/**
+ * Exif の1項目を、テキストオーバーレイ用の短い表示文字列へ整形する。
+ * key は uiDefinitions.js の `exifTagDefinitions[].key`（'FNumber' / 'ExposureTime' など）。
+ * 値が取れない場合は空文字。以前は uiController.js が持っていたが、
+ * テキストレイヤーの content 解決（utils/textContent.js）からも使うためこちらへ移した。
+ * @param {Object|null} exifDataFromState - piexif.js 形式の Exif データ
+ * @param {string} itemKey
+ * @returns {string}
+ */
+function getExifValue(exifDataFromState, itemKey) {
+    if (!exifDataFromState || typeof piexif === 'undefined') return '';
+    const zerothIFD = exifDataFromState['0th'];
+    const exifIFD = exifDataFromState['Exif'];
+    const ImageIFD = piexif.ImageIFD;
+    const ExifIFD = piexif.ExifIFD;
+    if (!zerothIFD && !exifIFD) return '';
+    switch (itemKey) {
+        case 'Make':
+            return (zerothIFD && ImageIFD && ImageIFD.Make !== undefined) ? decodeExifString(zerothIFD[ImageIFD.Make]) : '';
+        case 'Model':
+            return (zerothIFD && ImageIFD && ImageIFD.Model !== undefined) ? decodeExifString(zerothIFD[ImageIFD.Model]) : '';
+        case 'LensModel':
+            return (exifIFD && ExifIFD && ExifIFD.LensModel !== undefined) ? decodeExifString(exifIFD[ExifIFD.LensModel]) : '';
+        case 'FNumber': {
+            if (exifIFD && ExifIFD && ExifIFD.FNumber !== undefined) {
+                const fVal = exifIFD[ExifIFD.FNumber];
+                if (Array.isArray(fVal) && fVal.length === 2 && fVal[1] !== 0) return `f/${(fVal[0] / fVal[1]).toFixed(1)}`;
+            }
+            return '';
+        }
+        case 'ExposureTime': {
+            if (exifIFD && ExifIFD && ExifIFD.ExposureTime !== undefined) {
+                const etVal = exifIFD[ExifIFD.ExposureTime];
+                if (Array.isArray(etVal) && etVal.length === 2 && etVal[1] !== 0) {
+                    const et = etVal[0] / etVal[1];
+                    if (et >= 1) return `${et.toFixed(1)}s`;
+                    if (et >= 0.1) return `${et.toFixed(2)}s`;
+                    return `1/${Math.round(1 / et)}s`;
+                }
+            }
+            return '';
+        }
+        case 'ISOSpeedRatings': {
+            if (exifIFD && ExifIFD && ExifIFD.ISOSpeedRatings !== undefined) {
+                const iso = exifIFD[ExifIFD.ISOSpeedRatings];
+                return iso ? `${Array.isArray(iso) ? iso[0] : iso}` : '';
+            }
+            return '';
+        }
+        case 'FocalLength': {
+            if (exifIFD && ExifIFD && ExifIFD.FocalLength !== undefined) {
+                const flVal = exifIFD[ExifIFD.FocalLength];
+                if (Array.isArray(flVal) && flVal.length === 2 && flVal[1] !== 0) return `${Math.round(flVal[0] / flVal[1])}mm`;
+            }
+            return '';
+        }
+        case 'ExposureBiasValue': {
+            if (exifIFD && ExifIFD && ExifIFD.ExposureBiasValue !== undefined) {
+                const evVal = exifIFD[ExifIFD.ExposureBiasValue];
+                if (Array.isArray(evVal) && evVal.length === 2 && evVal[1] !== 0) {
+                    const ev = evVal[0] / evVal[1];
+                    if (ev === 0) return '0EV';
+                    return `${ev > 0 ? '+' : ''}${ev.toFixed(1)}EV`;
+                }
+            }
+            return '';
+        }
+        default:
+            return '';
+    }
+}
+
+export { extractExifFromFile, formatExifForDisplay, embedExifToJpeg, displayExifInfo, decodeExifString, getExifValue };

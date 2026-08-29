@@ -2,19 +2,38 @@
 // アプリケーションのエントリーポイント。各モジュールをインポートし、初期化処理を行います。
 
 import { getState, updateState, addStateChangeListener } from './stateManager.js';
-import { uiElements, initializeUIFromState, setupEventListeners } from './uiController.js'; // updateFrameSettingsVisibility を追加
+import { uiElements, initializeUIFromState, setupEventListeners, syncUIFromState, updateBgImageThumb } from './uiController.js'; // updateFrameSettingsVisibility を追加
 import { calculateLayout } from './layoutCalculator.js'; // 正しいレイアウト計算モジュール
-import { drawPreview } from './canvasRenderer.js';     // 現在の描画モジュール
-import { processImageFile, handleDownload } from './fileManager.js';
+import { drawPreview, clearContainerSizeCache } from './canvasRenderer.js';     // 現在の描画モジュール
+import { processImageFile, processBackgroundImageFile, handleDownload } from './fileManager.js';
 import { displayExifInfo } from './exifHandler.js';   // Exif表示用
-import { initializeTabs } from './tabManager.js';
+import { initializeTabs, onTabChange } from './tabManager.js';
+import { initCanvasInteraction } from './interaction/canvasInteraction.js';
+import { getCropHandles } from './interaction/photoCropStore.js';
+import * as selectionStore from './interaction/selectionStore.js';
+import * as photoEditModeStore from './interaction/photoEditModeStore.js';
+import { initHistory, recordStateChange, undo, redo, onHistoryChange, onSnapshotApplied } from './history/historyManager.js';
 
 /**
  * プレビューの再描画を要求します。
  * editStateが更新された後や、UIの変更がプレビューに影響する場合に呼び出されます。
  */
+/**
+ * E-7: 画像の有無で、キャンバスエリアに `.has-image` / `.no-image` を付け替える。
+ * CSS 側でキャンバスとドロップダイアログを出し分ける。
+ */
+export function updateImagePresenceUI() {
+    const area = uiElements.canvasArea;
+    if (!area) return;
+    const hasImage = !!getState().image;
+    area.classList.toggle('has-image', hasImage);
+    area.classList.toggle('no-image', !hasImage);
+}
+
 export async function requestRedraw() {
     const currentState = getState(); // 状態を一度だけ取得
+    updateImagePresenceUI();
+    updateBgImageThumb(currentState); // B-6: 「別画像」背景のサムネイルを editState.bgImage に同期
 
     if (!currentState.image) {
         if (uiElements.previewCtx && uiElements.previewCanvas) {
@@ -29,10 +48,13 @@ export async function requestRedraw() {
 
     const layoutInfo = calculateLayout(currentState);
 
+    // 派生データ（レイアウト計算結果）の書き戻しなのでsilent指定。
+    // これをsilentにしないと、requestRedraw自身がstateChangeListenerとして登録された際に
+    // updateState → 通知 → requestRedraw → updateState … の無限ループになる。
     updateState({
         photoDrawConfig: layoutInfo.photoDrawConfig,
         outputCanvasConfig: layoutInfo.outputCanvasConfig
-    });
+    }, { silent: true });
 
     // updateStateにより内部のeditStateは更新された。
     // 描画やExif表示には、この最新の状態（特にphotoDrawConfigとoutputCanvasConfigが反映されたもの）を使いたい。
@@ -50,6 +72,23 @@ export async function requestRedraw() {
     }
 }
 
+// テスト用フック: `?debug` 付きで開いたときだけ、現在の editState を読めるようにする。
+// 本番の挙動には一切影響しない（Playwright スモークが cropSettings 等を検査するのに使う）。
+if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug')) {
+    window.__kakomiGetState = getState;
+    // 写真の編集サブモード（'select' / 'crop'）。A-5 スモークが「キャンバス外クリックで
+    // クロップ確定」を検査するのに使う。
+    window.__kakomiGetPhotoEditMode = photoEditModeStore.getMode;
+    // B-6 スモーク用。editState.bgImage は HTMLImageElement で evaluate では直接読めないため、
+    // 有無と寸法だけを返す軽量フック。
+    window.__kakomiBgImageInfo = () => {
+        const bg = getState().bgImage;
+        return bg ? { width: bg.width, height: bg.height } : null;
+    };
+    // A-4 スモーク用。select モードの写真の四隅 ■ ／回転ハンドルの画面座標。
+    window.__kakomiGetCropHandles = getCropHandles;
+}
+
 // DOMContentLoadedイベントでアプリケーションを初期化
 document.addEventListener('DOMContentLoaded', () => {
     console.log("[Main] DOMContentLoaded: Initializing application...");
@@ -62,15 +101,63 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     initializeUIFromState();
-    setupEventListeners(requestRedraw); // requestRedrawをコールバックとして渡す
+    setupEventListeners(requestRedraw); // requestRedrawをコールバックとして渡す（既存のスライダー等はこの直接呼び出しのまま）
     initializeTabs();
 
-    // (オプション) stateManagerのリスナーとしてrequestRedrawを登録する場合の検討:
-    // addStateChangeListener(requestRedraw);
-    // この場合、uiController内の各イベントリスナーはredrawCallbackを呼ばず、updateStateのみを行う形になる。
-    // これにより、状態変更が一元的にrequestRedrawをトリガーするようになるが、
-    // updateStateがrequestRedraw内で呼ばれる場合（現状photoDrawConfigなどの保存で発生）の
-    // 無限ループや不要な再描画を防ぐ工夫が必要になる場合がある。現状はコールバック方式を維持。
+    // 状態変更リスナーを実戦投入する。
+    // Canvasドラッグ・矢印キーnudge・スクラブ数値入力など、新しく追加した入力経路は
+    // redrawCallbackを直接呼ばず、updateState()を呼ぶだけでここを通じて反映される。
+    // （既存のスライダー等はredrawCallbackの直接呼び出しも残っているため二重に走るが、
+    //   requestRedrawは冪等なので実害はない。）
+    addStateChangeListener(requestRedraw);
+    addStateChangeListener(syncUIFromState);
+    addStateChangeListener(recordStateChange);
+
+    // 選択状態（selectionStore）はeditStateとは別管理のため、通常のstateChangeListenerでは
+    // 再描画がトリガーされない。ドラッグを伴わない純粋なクリック選択（当たり判定の結果、
+    // 移動量ゼロでpointermoveが一度も発火しないケース）でも選択ハイライト・ハンドルが
+    // 即座に表示されるよう、選択変更でも明示的に再描画する。
+    selectionStore.onSelectionChange((id) => {
+        // 写真以外（またはnull）が選択されたら、写真のトリミング編集モードは解除する
+        if (id !== 'photo') photoEditModeStore.reset();
+        requestRedraw();
+    });
+
+    // select↔crop のモード切り替えは editState の変更を伴わないため、
+    // 明示的に再描画をトリガーする（selectionStore と同じ考え方）。
+    photoEditModeStore.onChange(() => {
+        requestRedraw();
+    });
+
+    // 「背景」「フレーム」タブでは写真本体ドラッグの意味が変わり、写真の選択・トリミングができない。
+    // レイアウトタブで選択したまま移ると四隅マーカーが出たまま操作不能に見えるため、
+    // これらのタブへ移ったら写真の選択を解除する（onSelectionChange 経由で crop モード解除・再描画も走る）。
+    onTabChange((tab) => {
+        if ((tab === 'tab-background' || tab === 'tab-frame' || tab === 'tab-info') && selectionStore.getSelectedId() === 'photo') {
+            selectionStore.setSelectedId(null);
+        }
+    });
+
+    if (uiElements.previewCanvas) {
+        initCanvasInteraction(uiElements.previewCanvas);
+    }
+
+    initHistory();
+    onHistoryChange(({ canUndo, canRedo }) => {
+        if (uiElements.undoButton) uiElements.undoButton.disabled = !canUndo;
+        if (uiElements.redoButton) uiElements.redoButton.disabled = !canRedo;
+    });
+    // undo/redoはcustomTexts配列の個数など非連続な変化を伴いうるため、
+    // 通常のドラッグ用の軽量同期ではなくUI全体を再構築する
+    onSnapshotApplied(() => {
+        initializeUIFromState();
+    });
+    if (uiElements.undoButton) uiElements.undoButton.addEventListener('click', undo);
+    if (uiElements.redoButton) uiElements.redoButton.addEventListener('click', redo);
+
+    // E-3(フェーズ5): 「情報」は他タブと並列の .tab-button + .tab-pane（#tab-info）になった。
+    // タブ切り替え・再クリック収納は tabManager.js が扱うため、ここでの個別配線は不要。
+    // Exif の中身は requestRedraw() → displayExifInfo(state.exifData, exifDataContainer) が更新する。
 
     if (uiElements.imageLoader) {
         uiElements.imageLoader.addEventListener('change', (event) => {
@@ -84,29 +171,98 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    if (uiElements.downloadButton) {
+    // E-7: 上部バーの「画像を開く」ボタン ／ ドロップダイアログの「クリックして選択」ラベルから
+    // 隠しファイル入力を開く（ラベルの for="imageLoader" でも開くが、ボタンは明示的に click する）。
+    if (uiElements.openImageButton && uiElements.imageLoader) {
+        uiElements.openImageButton.addEventListener('click', () => uiElements.imageLoader.click());
+    }
+
+    // B-6: 背景タイプ「別画像」の画像選択。processBackgroundImageFile が setBackgroundImage →
+    // requestRedraw までやる（前景写真と違い Exif 抽出・トリミング初期化はしない）。
+    if (uiElements.bgImageSelectButton && uiElements.bgImageLoader) {
+        uiElements.bgImageSelectButton.addEventListener('click', () => uiElements.bgImageLoader.click());
+        uiElements.bgImageLoader.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) processBackgroundImageFile(file, requestRedraw);
+            event.target.value = '';
+        });
+    }
+
+    // フェーズ4(E-5): ダウンロードは上部バー右。押すと画質ポップオーバーを開き、「書き出す」で実行。
+    if (uiElements.downloadButton && uiElements.downloadPopover) {
+        uiElements.downloadButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            uiElements.downloadPopover.classList.toggle('hidden');
+        });
+        if (uiElements.downloadConfirmButton) {
+            uiElements.downloadConfirmButton.addEventListener('click', () => {
+                uiElements.downloadPopover.classList.add('hidden');
+                handleDownload();
+            });
+        }
+        document.addEventListener('click', (e) => {
+            if (!uiElements.downloadPopover.classList.contains('hidden')
+                && !e.target.closest('.dl-group')) {
+                uiElements.downloadPopover.classList.add('hidden');
+            }
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') uiElements.downloadPopover.classList.add('hidden');
+        });
+    } else if (uiElements.downloadButton) {
         uiElements.downloadButton.addEventListener('click', handleDownload);
     }
 
-    if (uiElements.canvasContainer) {
-        uiElements.canvasContainer.addEventListener('dragover', (event) => {
+    // フェーズ4(E-1): 設定パネルの開閉でキャンバス「幅」が変わったときだけ、
+    // コンテナ寸法キャッシュを破棄して再描画する。
+    //
+    // 【既知の不具合 G-1 対策・多重防御】高さ変化には反応しない。縦長/正方形の出力比率のとき
+    // プレビューキャンバスは「高さ基準」で決まり、その要素がコンテナ高さをわずかに押し上げる →
+    // ResizeObserver が発火 → キャッシュ破棄 → 再描画で更に高くなる … という正のフィードバックで
+    // キャンバスがじわじわ拡大し続けた（`docs/session-log-2026-08-29-3.md` §13）。
+    // 根本原因の 1px border は `docs/session-log-2026-08-29-4.md` で `#previewCanvas` の
+    // outline 化（レイアウトボックスに乗せない）により解消済みだが、別経路で同種のループが
+    // 再発しないよう「幅の変化にだけ反応する」ガードはそのまま残す。閾値 1px 未満は無視。
+    if (typeof ResizeObserver !== 'undefined' && uiElements.canvasContainer) {
+        let roTimer = null;
+        let lastWidth = uiElements.canvasContainer.clientWidth;
+        const ro = new ResizeObserver(() => {
+            const w = uiElements.canvasContainer.clientWidth;
+            if (Math.abs(w - lastWidth) < 1) return;
+            lastWidth = w;
+            clearTimeout(roTimer);
+            roTimer = setTimeout(() => {
+                clearContainerSizeCache();
+                requestRedraw();
+                lastWidth = uiElements.canvasContainer.clientWidth;
+            }, 180);
+        });
+        ro.observe(uiElements.canvasContainer);
+    }
+
+    // E-7: ドロップ受付はキャンバスエリア全体（未読込でキャンバス枠が dashed のときも、
+    // 読み込み後に余白へドロップしたときも拾えるように）。`.dragover` の見た目は枠へ付ける。
+    const dropZone = uiElements.canvasArea || uiElements.canvasContainer;
+    if (dropZone) {
+        dropZone.addEventListener('dragover', (event) => {
             event.stopPropagation(); event.preventDefault();
             event.dataTransfer.dropEffect = 'copy';
-            uiElements.canvasContainer.classList.add('dragover');
+            dropZone.classList.add('dragover');
         });
-        uiElements.canvasContainer.addEventListener('dragleave', (event) => {
+        dropZone.addEventListener('dragleave', (event) => {
             event.stopPropagation(); event.preventDefault();
-            uiElements.canvasContainer.classList.remove('dragover');
+            if (event.target === dropZone) dropZone.classList.remove('dragover');
         });
-        uiElements.canvasContainer.addEventListener('drop', (event) => {
+        dropZone.addEventListener('drop', (event) => {
             event.stopPropagation(); event.preventDefault();
-            uiElements.canvasContainer.classList.remove('dragover');
+            dropZone.classList.remove('dragover');
             const files = event.dataTransfer.files;
             if (files.length > 0) {
-                // 同上
                 processImageFile(files[0], requestRedraw);
             }
         });
     }
+
+    updateImagePresenceUI(); // 初期表示（画像なし → ドロップダイアログ）
     console.log("[Main] Kakomi App Initialized.");
 });

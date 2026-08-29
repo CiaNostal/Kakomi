@@ -77,17 +77,48 @@ export const googleFonts = [
 ];
 
 /**
+ * Exif情報表示で選択できるタグの定義。
+ * keyはpiexif.jsのExif/0th IFD定数名に対応し、labelはUI表示用の日本語名。
+ * この配列の並び順は「利用可能な項目」リストの表示順であり、
+ * Exif トークンの items（ユーザーが選んだ項目とその並び順）とは独立している。
+ */
+export const exifTagDefinitions = [
+    { key: 'Make', label: 'メーカー名' },
+    { key: 'Model', label: '機種名' },
+    { key: 'LensModel', label: 'レンズ情報' },
+    { key: 'FNumber', label: 'F値' },
+    { key: 'ExposureTime', label: 'シャッタースピード' },
+    { key: 'ISOSpeedRatings', label: 'ISO感度' },
+    { key: 'FocalLength', label: '焦点距離' },
+    { key: 'ExposureBiasValue', label: '露出補正' },
+];
+
+/**
  * 各UIコントロールの設定値 (min, max, step, defaultValue)
  * これにより、HTMLからこれらの値を分離し、JavaScriptで一元管理します。
  * defaultValue は主にUI要素の初期表示に使われ、
  * stateManager.js の初期状態は別途 stateManager.js 内で定義されます。
  */
 export const controlsConfig = {
+    // レイアウト設定タブ - 構図調整（クロップ）
+    // アスペクト比はタイル型ピッカー（js/ui/ratioPicker.js）。選択肢と並び順は
+    // ratioPicker.js の RATIO_FAMILIES（正準順序）が唯一の情報源。
+    // 「切り抜き位置」「枠内位置」のスライダーは撤去済み（docs/roadmap.md A-1）。
+    // cropSettings.rect のパンと photoViewParams はデータとして保持し、プレビュー操作からのみ動かす。
+
     // レイアウト設定タブ
-    outputAspectRatio: { defaultValue: '1:1' }, // select要素のデフォルト選択値
-    baseMarginPercent: { defaultValue: 5, min: 0, max: 100, step: 0.5 }, // number input
-    photoPosX: { defaultValue: 0.5, min: 0, max: 1, step: 0.01 }, // range input
-    photoPosY: { defaultValue: 0.5, min: 0, max: 1, step: 0.01 }, // range input
+    baseMarginPercent: { defaultValue: 5, min: 0, max: 300, step: 0.5 }, // number input（写真短辺に対する%。大きめの余白も置けるよう上限300%）
+    // A-10: スライダーの見かけは「大きさ」（写真短辺がキャンバス短辺に占める割合%）。
+    // 内部は baseMarginPercent のまま。size = 100 / (1 + margin/45)。
+    // size=100 → margin=0（最大）、size=90 → margin=5（既定）、size=15（下限）→ margin=255。
+    // 下限 15 は marginToSize(300)≈13.0% より上なので、スライダー全域が実 margin に 1:1 対応する（不感帯なし）。
+    photoSize: { defaultValue: 90, min: 15, max: 100, step: 0.5 },
+    // A-4: クロップ後の写真をキャンバス内で回す角度（度）。保存キーは photoViewParams.rotation。
+    // 全周（-180〜180）。Shift ドラッグで 15° スナップ（回転ハンドル操作時）。
+    photoRotation: { defaultValue: 0, min: -180, max: 180, step: 1 },
+    // A-3: 切り抜き時の元画像の水平出し角度（度）。保存キーは cropSettings.rotation。
+    // Lightroom の角度補正と同じ ±45°。crop オーバーレイの余白ドラッグでも回せる。
+    cropRotation: { defaultValue: 0, min: -45, max: 45, step: 0.1 },
     // 背景編集タブ
     backgroundType: { defaultValue: 'color' }, // radio button のデフォルト選択値
     backgroundColor: { defaultValue: '#ffffff' }, // color input
@@ -95,43 +126,27 @@ export const controlsConfig = {
     bgBlur: { defaultValue: 3, min: 0, max: 50, step: 0.5 },  // range input
     bgBrightness: { defaultValue: 100, min: 0, max: 150, step: 1 }, // range input
     bgSaturation: { defaultValue: 100, min: 0, max: 150, step: 1 }, // range input
-    bgOffsetX: { defaultValue: 0, min: -500, max: 500, step: 2 }, // 背景Xオフセット%
-    bgOffsetY: { defaultValue: 0, min: -500, max: 500, step: 2 }, // 背景Yオフセット%
+    // 背景 X/Y オフセットのスライダーは撤去済み（docs/roadmap.md B-1）。
+    // 「背景」タブのプレビュードラッグ（backgroundAdapter）と「位置をリセット」ボタンで操作する。
 
     // 出力タブ
     jpgQuality: { defaultValue: 100, min: 1, max: 100, step: 1 }, // range input (UI表示用1-100)
 
-    // 文字入力タブ - 撮影日表示
-    textDateEnabled: { defaultValue: false }, // チェックボックス
-    textDateFormat: { defaultValue: 'YYYY/MM/DD' }, // select要素用
-    textDateFont: { defaultValue: googleFonts[0].displayName }, // ★Google Fontsリストの最初のフォントをデフォルトに
-    textDateSize: { defaultValue: 2, min: 0.1, max: 10, step: 0.1 }, // % (写真短辺比)
-    textDateColor: { defaultValue: '#FFFFFF' }, // カラーピッカー
-    textDatePosition: { defaultValue: 'bottom-right' }, // select要素用 (9箇所)
-    textDateOffsetX: { defaultValue: 0, min: -50, max: 50, step: 0.5 }, // %
-    textDateOffsetY: { defaultValue: 0, min: -50, max: 50, step: 0.5 }, // %
-
-    // 文字入力タブ - Exif情報表示
-    textExifEnabled: { defaultValue: false }, // チェックボックス
-    textExifFont: { defaultValue: googleFonts[0].displayName }, // ★Google Fontsリストの最初のフォントをデフォルトに
-    textExifSize: { defaultValue: 2, min: 0.1, max: 10, step: 0.1 }, // % (写真短辺比)
-    textExifColor: { defaultValue: '#000000' }, // カラーピッカー
-    textExifPosition: { defaultValue: 'bottom-left' }, // select要素用 (9箇所)
-    textExifOffsetX: { defaultValue: 0, min: -50, max: 50, step: 0.5 }, // %
-    textExifOffsetY: { defaultValue: 0, min: -50, max: 50, step: 0.5 }, // %
-
-    // 文字入力タブ - 自由テキスト用の設定
-    textFreeSize: { defaultValue: 5, min: 0.1, max: 50, step: 0.1 }, // % (写真短辺比)
-    textFreeOffsetX: { defaultValue: 0, min: -100, max: 100, step: 0.5 },
-    textFreeOffsetY: { defaultValue: 0, min: -100, max: 100, step: 0.5 },
-
-    // テキスト共通の透過度設定
-    textOpacity: { defaultValue: 1, min: 0, max: 1, step: 0.01 },
+    // テキストタブ（バケット4 / D-3）。撮影日 / Exif / 自由テキストを1本の layers[] に統合したため、
+    // サイズ・オフセット・不透明度の範囲もレイヤー共通の1セットにまとめた。
+    textLayerSize: { defaultValue: 5, min: 0.1, max: 50, step: 0.1 }, // % (写真短辺比)
+    textLayerOffsetX: { defaultValue: 0, min: -100, max: 100, step: 0.5 }, // % (写真短辺比)
+    textLayerOffsetY: { defaultValue: 0, min: -100, max: 100, step: 0.5 }, // % (写真短辺比)
+    textOpacity: { defaultValue: 1, min: 0, max: 1, step: 0.01 }, // 1=くっきり／0=透明。UIラベルは「不透明度」
 
     // フレーム加工タブ
-    frameCornerStyle: { defaultValue: 'none' }, // ラジオボタンまたはselect用
-    frameCornerRadiusPercent: { defaultValue: 0, min: 0, max: 50, step: 1 }, // %
-    frameSuperellipseN: { defaultValue: 4, min: 3, max: 40, step: 1 },    // 整数
+    frameCornerStyle: { defaultValue: 'rounded' }, // C-1: 2択（rounded / superellipse）。現状コードからの参照はないが整合のため
+    // C-1: 角丸／超楕円を1本の「丸み」スライダー（0-100、右ほど丸い）に統合。
+    // frameRoundness がスライダー要素の min/max/step/既定を駆動する（見かけ値）。
+    // frameCornerRadiusPercent / frameSuperellipseN は保存キーのクランプ・リセット用に残す。
+    frameRoundness: { defaultValue: 0, min: 0, max: 100, step: 1 }, // 見かけ値（0-100）
+    frameCornerRadiusPercent: { defaultValue: 0, min: 0, max: 50, step: 1 }, // %（保存キー）
+    frameSuperellipseN: { defaultValue: 40, min: 2, max: 40, step: 0.01 },    // 次数n（保存キー、連続値）
 
     frameShadowEnabled: { defaultValue: false }, // チェックボックス
     frameShadowType: { defaultValue: 'drop' },   // ラジオボタンまたはselect用 ('none', 'drop', 'inner')

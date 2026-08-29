@@ -1,0 +1,175 @@
+// js/interaction/adapters/photoAdapter.js
+/**
+ * photoAdapter.js
+ * 写真本体（枠内でのスライド位置）をドラッグ/nudgeで動かせるようにするアダプタ。
+ *
+ * photoViewParams.offsetX/offsetYは「可動範囲(movable width/height)に対する0.0〜1.0の割合」
+ * という単位系（layoutCalculator.jsのcalculateLayoutを参照）。これはtextAdapterの
+ * 「写真短辺基準の%」とは異なる単位系のため、ここではoutputCanvasConfigとphotoDrawConfigから
+ * 可動範囲を求め、プレビューpxの移動量をこの割合に変換している。
+ */
+import { getState, updateState } from '../../stateManager.js';
+import { controlsConfig } from '../../uiDefinitions.js';
+import { resolveCropRect, resolveCropAspectValue, clampRectToRotatedImage } from '../../utils/cropRect.js';
+
+// select モードの四隅 ■ ハンドルのドラッグ感度。
+// 掴んだ隅を「中心→隅の方向」へ写真短辺ぶん動かすと、baseMarginPercent が
+// 100% * この係数 だけ減る（外へ引く＝余白減＝写真が大きく）。手触りに応じて調整してよい。
+const MARGIN_RESIZE_FACTOR = 1.0;
+
+function clamp01(v) {
+    return Math.min(1, Math.max(0, v));
+}
+
+const photoAdapter = {
+    type: 'photo',
+
+    getValue() {
+        const { offsetX, offsetY } = getState().photoViewParams;
+        return { offsetX, offsetY };
+    },
+
+    computeChanges(startValue, dxPx, dyPx, ctx) {
+        const state = getState();
+        const { destWidth, destHeight } = state.photoDrawConfig;
+        const outputWidth = state.outputCanvasConfig.width;
+        const outputHeight = state.outputCanvasConfig.height;
+        const scale = (ctx && ctx.scale) || 1;
+
+        // A-4: offsetX/Y は「回転後の外接矩形」を可動範囲内で動かす割合（layoutCalculator と対応）。
+        const rot = (state.photoViewParams.rotation || 0) * Math.PI / 180;
+        const absCos = Math.abs(Math.cos(rot));
+        const absSin = Math.abs(Math.sin(rot));
+        const bboxWidth = destWidth * absCos + destHeight * absSin;
+        const bboxHeight = destWidth * absSin + destHeight * absCos;
+
+        // 可動範囲（出力解像度基準）をプレビューpx空間に変換
+        const movableWidthPreview = (outputWidth - bboxWidth) * scale;
+        const movableHeightPreview = (outputHeight - bboxHeight) * scale;
+
+        let offsetX = startValue.offsetX;
+        let offsetY = startValue.offsetY;
+        if (movableWidthPreview > 0) {
+            offsetX = clamp01(startValue.offsetX + dxPx / movableWidthPreview);
+        }
+        if (movableHeightPreview > 0) {
+            offsetY = clamp01(startValue.offsetY + dyPx / movableHeightPreview);
+        }
+        return { offsetX, offsetY };
+    },
+
+    commit(id, changes) {
+        updateState({ photoViewParams: { offsetX: changes.offsetX, offsetY: changes.offsetY } });
+    },
+
+    /** A-4: 回転ハンドルのドラッグ開始値。写真の現在の回転角（度）。 */
+    getRotation() {
+        return getState().photoViewParams.rotation || 0;
+    },
+
+    /**
+     * A-4: 回転ハンドルのドラッグによる写真の回転を反映する。
+     * 角度は (-180, 180] に正規化して 0.1° 単位に丸める（textAdapter.commitRotate と同じ扱い）。
+     * @param {number} newRotationDeg
+     */
+    commitRotate(newRotationDeg) {
+        let deg = newRotationDeg % 360;
+        if (deg > 180) deg -= 360;
+        if (deg <= -180) deg += 360;
+        updateState({ photoViewParams: { rotation: Math.round(deg * 10) / 10 } });
+    },
+
+    /**
+     * 現在のクロップ矩形（元画像に対する割合 { x, y, w, h }）を取得する。
+     * crop モードのハンドルドラッグ／パンの開始値として使う。
+     */
+    getCropRect() {
+        const state = getState();
+        // A-3: 水平出し角度が付いているときは「画面に見えている（画像内に収まる）矩形」を返す。
+        // cropSettings.rect は水平出しで縮小せず“望むサイズ”のまま保持し、描画・当たり判定の入口で
+        // clampRectToRotatedImage を通す方式（Model B）。回転を戻せば元のサイズへ復帰する。
+        const raw = resolveCropRect(state.cropSettings, state.originalWidth, state.originalHeight);
+        const rotation = state.cropSettings.rotation || 0;
+        return rotation
+            ? clampRectToRotatedImage(raw, rotation, state.originalWidth, state.originalHeight)
+            : raw;
+    },
+
+    /** A-3: 縮小前の“望む”クロップ矩形（cropSettings.rect そのもの）。回転リサイズ後の書き戻しに使う。 */
+    getDesiredCropRect() {
+        const state = getState();
+        return resolveCropRect(state.cropSettings, state.originalWidth, state.originalHeight);
+    },
+
+    /**
+     * crop モードのハンドルドラッグに課す比率制約を取得する。
+     * @returns {{aspectValue: number|null, imgAspectValue: number}}
+     *   aspectValue: 望むクロップ比率（幅/高さ、元画像ピクセル基準）。'free' なら null。
+     *   imgAspectValue: 元画像の 幅/高さ。
+     */
+    getCropConstraint() {
+        const state = getState();
+        const imgAspectValue = (state.originalWidth > 0 && state.originalHeight > 0)
+            ? state.originalWidth / state.originalHeight : 1;
+        return {
+            aspectValue: resolveCropAspectValue(state.cropSettings.aspectRatio, state.originalWidth, state.originalHeight),
+            imgAspectValue
+        };
+    },
+
+    /** select モードの四隅 ■ ハンドルのドラッグ開始時点の baseMarginPercent。 */
+    getMarginPercent() {
+        return getState().baseMarginPercent;
+    },
+
+    /**
+     * select モードの四隅 ■ ハンドルのドラッグによる「写真の拡大縮小」を baseMarginPercent の
+     * 増減として反映する。中心→掴んだ隅の方向への符号付き移動量 projPx（プレビュー px）を使う。
+     * projPx > 0（外へ引く）で余白減、< 0（内へ押す）で余白増。
+     *
+     * 旧実装は「中心からの距離比」を使っていたため、(a) マウス移動量と拡大縮小量が対応せず、
+     * (b) 中心を通り越すと距離が再び増えて余白が逆に減る、という問題があった。符号付き投影量に
+     * 変えることで単調（通り越しても反転しない）かつ移動量に比例した挙動になる。
+     * @param {number} startMargin - ドラッグ開始時点の baseMarginPercent
+     * @param {number} projPx - 中心→隅方向への符号付き移動量（プレビュー px、ドラッグ開始点からの差分）
+     * @param {number} startShortSidePx - ドラッグ開始時点のプレビュー上の写真短辺（px）
+     */
+    commitMarginResizeByDrag(startMargin, projPx, startShortSidePx) {
+        const { min, max } = controlsConfig.baseMarginPercent;
+        const deltaPct = projPx * (100 / Math.max(1, startShortSidePx)) * MARGIN_RESIZE_FACTOR;
+        const raw = startMargin - deltaPct;
+        const newMargin = Math.round(Math.min(max, Math.max(min, raw)) * 10) / 10;
+        updateState({ baseMarginPercent: newMargin });
+    },
+
+    /**
+     * crop モードで算出した新しいクロップ矩形を反映する。
+     * 比率制約・[0,1]・傾いた画像への収まり（A-3）は呼び出し側（canvasInteraction.js）が
+     * `resizeCropRect` ＋ `clampCropResizeToRotatedImage` / `clampCropPanToRotatedImage` で
+     * 済ませた前提。ここではそのまま書くだけ（rect は“見えているサイズ”＝以後それが望むサイズ）。
+     * @param {{x:number,y:number,w:number,h:number}} rect
+     */
+    commitCropRect(rect) {
+        updateState({ cropSettings: { rect: { x: rect.x, y: rect.y, w: rect.w, h: rect.h } } });
+    },
+
+    /** A-3: 現在の水平出し角度（度）。角度スライダー／オーバーレイ回転ドラッグの開始値。 */
+    getCropRotation() {
+        return getState().cropSettings.rotation || 0;
+    },
+
+    /**
+     * A-3: 水平出し角度を反映する。±45° にクランプするだけで **rect は変えない**（Model B）。
+     * クロップ窓が傾いた元画像からはみ出すぶんは、描画・当たり判定の入口で
+     * `clampRectToRotatedImage`（中心固定縮小）が吸収する。rect を保持することで、
+     * 「マウスを離さず逆方向に回すと元のサイズへ戻る」（Lightroom Web の挙動）になる。
+     * @param {number} newRotationDeg
+     */
+    commitCropRotation(newRotationDeg) {
+        const { min, max } = controlsConfig.cropRotation;
+        const deg = Math.round(Math.min(max, Math.max(min, newRotationDeg)) * 10) / 10;
+        updateState({ cropSettings: { rotation: deg } });
+    }
+};
+
+export default photoAdapter;

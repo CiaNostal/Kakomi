@@ -1,5 +1,6 @@
 // js/textRenderer.js
 import { googleFonts } from './uiDefinitions.js'; // Google Fontsリストをインポート
+import { resolveContentText } from './utils/textContent.js'; // content（文字列＋動的トークン）の解決
 
 /**
  * text.js
@@ -91,40 +92,20 @@ export async function drawText(ctx, currentState, canvasWidth, canvasHeight, bas
 
     const textTasks = [];
 
-    // 撮影日の表示タスク準備
-    if (currentState.textSettings.date.enabled) {
-        const exifDateTime = currentState.exifData ? currentState.exifData["0th"]?.[piexif.ImageIFD.DateTime] : null;
-        if (exifDateTime) {
-            const settings = currentState.textSettings.date;
-            const text = getFormattedDate(exifDateTime, settings.format);
-            if (text) textTasks.push({ settings, text });
-        }
+    // テキストレイヤー（撮影日・Exif・自由テキストを統合した可変長配列。バケット4 / D-1・D-3）。
+    // content を Exif 解決した1本の文字列にしてから、従来どおり drawSingleText で描画する。
+    // id は当たり判定・ハンドル配置に使う（レイヤーの uuid）。
+    for (const layer of currentState.textSettings.layers || []) {
+        if (!layer.enabled) continue;
+        const text = resolveContentText(layer.content, currentState.exifData);
+        if (text && text.trim() !== '') textTasks.push({ settings: layer, text, id: layer.id });
     }
 
-    // Exif情報の表示タスク準備
-    if (currentState.textSettings.exif.enabled && currentState.exifData) {
-        const settings = currentState.textSettings.exif;
-        const text = settings.customText || '';
-        if (text.trim() !== '') textTasks.push({ settings, text });
-    }
-
-    // 自由テキストの表示タスク準備
-    if (currentState.textSettings.freeText.enabled) {
-        const settings = currentState.textSettings.freeText;
-        const text = settings.text || '';
-        if (text.trim() !== '') textTasks.push({ settings, text });
-    }
-
-    // 自由テキスト2の表示タスク準備
-    if (currentState.textSettings.freeText2.enabled) {
-        const settings = currentState.textSettings.freeText2;
-        const text = settings.text || '';
-        if (text.trim() !== '') textTasks.push({ settings, text });
-    }
-
-    // すべてのテキスト描画タスクを実行
+    // すべてのテキスト描画タスクを実行。
+    // customTextsのレイヤー（id持ち）は、ドラッグ操作の当たり判定用にbboxを収集して返す。
+    const registrations = [];
     for (const task of textTasks) {
-        const { settings, text } = task;
+        const { settings, text, id } = task;
         const fontObject = googleFonts.find(f => f.displayName === settings.font);
 
         if (!fontObject) {
@@ -136,17 +117,21 @@ export async function drawText(ctx, currentState, canvasWidth, canvasHeight, bas
             await loadSingleGoogleFont(fontObject.apiName);
             const fontCheckString = `${fontObject.fontWeightForCanvas} 1em "${fontObject.fontFamilyForCanvas}"`;
             await document.fonts.load(fontCheckString, text);
-            drawSingleText(ctx, settings, text, fontObject, basePhotoShortSideForTextPx, canvasWidth, canvasHeight);
+            const bbox = drawSingleText(ctx, settings, text, fontObject, basePhotoShortSideForTextPx, canvasWidth, canvasHeight);
+            if (id && bbox) {
+                registrations.push({ id, type: 'text', ...bbox });
+            }
         } catch (error) {
             console.error(`[TextRenderer] Failed to load or draw with font ${fontObject.apiName}:`, error);
         }
     }
+    return registrations;
 }
 
 /**
  * 単一のテキストブロックを描画する共通関数
  * @param {CanvasRenderingContext2D} ctx
- * @param {Object} settings - textSettings.date, .exif, .freeText のいずれか
+ * @param {Object} settings - テキストレイヤー（textSettings.layers[]）の1要素（解決済みの文字列を別途渡す）
  * @param {string} textToDraw - 描画する実際の文字列
  * @param {Object} fontObject
  * @param {number} basePhotoShortSidePx
@@ -155,7 +140,7 @@ export async function drawText(ctx, currentState, canvasWidth, canvasHeight, bas
  */
 function drawSingleText(ctx, settings, textToDraw, fontObject, basePhotoShortSidePx, canvasWidth, canvasHeight) {
     const fontSizePx = (settings.size / 100) * basePhotoShortSidePx;
-    if (fontSizePx <= 0) return;
+    if (fontSizePx <= 0) return null;
 
     ctx.save();
     ctx.font = `${fontObject.fontWeightForCanvas} ${fontSizePx}px "${fontObject.fontFamilyForCanvas}"`;
@@ -202,6 +187,28 @@ function drawSingleText(ctx, settings, textToDraw, fontObject, basePhotoShortSid
         y += visualCorrection;
     }
 
+    // 当たり判定・回転ハンドル配置用のバウンディングボックス（左上原点）を、
+    // 実際の描画基準点(x, y)から逆算する。回転はこのボックスの中心を軸に適用するため、
+    // 描画（fillText）より先に計算しておく必要がある。
+    let boxLeft;
+    if (textAlign === 'left') boxLeft = x;
+    else if (textAlign === 'center') boxLeft = x - maxWidth / 2;
+    else boxLeft = x - maxWidth; // right
+
+    let boxTop;
+    if (textBaseline === 'top') boxTop = y;
+    else if (textBaseline === 'middle') boxTop = y - textBlockHeight / 2;
+    else boxTop = y - textBlockHeight; // bottom
+
+    const rotation = settings.rotation || 0;
+    if (rotation) {
+        const centerX = boxLeft + maxWidth / 2;
+        const centerY = boxTop + textBlockHeight / 2;
+        ctx.translate(centerX, centerY);
+        ctx.rotate(rotation * Math.PI / 180);
+        ctx.translate(-centerX, -centerY);
+    }
+
     if (textBaseline === 'bottom') {
         const reversedLines = [...lines].reverse();
         reversedLines.forEach((line, index) => {
@@ -215,6 +222,8 @@ function drawSingleText(ctx, settings, textToDraw, fontObject, basePhotoShortSid
         });
     }
     ctx.restore();
+
+    return { x: boxLeft, y: boxTop, width: maxWidth, height: textBlockHeight, rotation };
 }
 
 function calculateTextPosition(position, offsetXPercent, offsetYPercent, textWidth, textHeight, photoShortSidePx, canvasWidth, canvasHeight, textAlign = 'left', textBaseline = 'top') {
@@ -265,24 +274,6 @@ function calculateTextPosition(position, offsetXPercent, offsetYPercent, textWid
         x: baseX + offsetXPx,
         y: baseY + offsetYPx
     };
-}
-
-function getFormattedDate(exifDateTimeString, displayFormat = 'YYYY/MM/DD') {
-    if (!exifDateTimeString || typeof exifDateTimeString !== 'string') return '';
-    if (!displayFormat || typeof displayFormat !== 'string') return '';
-    const parts = exifDateTimeString.split(' ');
-    if (parts.length === 0) return '';
-    const dateParts = parts[0].split(':');
-    if (dateParts.length !== 3) return '';
-    const year = dateParts[0];
-    const month = dateParts[1];
-    const day = dateParts[2];
-    let result = displayFormat;
-    result = result.replace('YYYY', year);
-    result = result.replace('YY', year.slice(-2));
-    result = result.replace('MM', month);
-    result = result.replace('DD', day);
-    return result;
 }
 
 export { loadSingleGoogleFont as loadGoogleFonts };

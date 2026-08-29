@@ -1,83 +1,346 @@
 <!DOCTYPE html>
 <html lang="ja">
-<!-- v1.9 -->
+<!-- v2.0 -->
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kakomi</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
     <link rel="stylesheet" href="style.css">
     <script src="https://unpkg.com/piexifjs"></script>
+    <!-- Cloudflare Web Analytics（Cookie なし・個人データ収集なし。GitHub Pages 公開ページのアクセス計測用） -->
+    <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js"
+        data-cf-beacon='{"token": "572355e12bc345e980bb7a4b272c20a5"}'></script>
+    <!-- End Cloudflare Web Analytics -->
 </head>
 
 <body>
+    <svg width="0" height="0" style="position:absolute">
+        <defs>
+            <symbol id="i-layout" viewBox="0 0 24 24">
+                <path d="M4 4h10v16H4z M17 4h3v6h-3z M17 13h3v7h-3z" fill="none" stroke="currentColor"
+                    stroke-width="1.6" stroke-linejoin="round" />
+            </symbol>
+            <symbol id="i-bg" viewBox="0 0 24 24">
+                <rect x="3" y="4" width="18" height="16" rx="1.5" fill="none" stroke="currentColor"
+                    stroke-width="1.6" />
+                <circle cx="8.5" cy="9.5" r="1.6" fill="none" stroke="currentColor" stroke-width="1.6" />
+                <path d="M4 17l5-5 3.5 3.5L16 11l4 5" fill="none" stroke="currentColor" stroke-width="1.6"
+                    stroke-linejoin="round" stroke-linecap="round" />
+            </symbol>
+            <symbol id="i-frame" viewBox="0 0 24 24">
+                <rect x="4" y="4" width="16" height="16" rx="4" fill="none" stroke="currentColor"
+                    stroke-width="1.6" />
+                <rect x="8" y="8" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"
+                    opacity="0.6" />
+            </symbol>
+            <symbol id="i-text" viewBox="0 0 24 24">
+                <path d="M5 6h14 M12 6v12" fill="none" stroke="currentColor" stroke-width="1.6"
+                    stroke-linecap="round" />
+            </symbol>
+            <symbol id="i-output" viewBox="0 0 24 24">
+                <path d="M12 4v10 M8 10l4 4 4-4 M5 18h14" fill="none" stroke="currentColor" stroke-width="1.6"
+                    stroke-linecap="round" stroke-linejoin="round" />
+            </symbol>
+            <symbol id="i-preset" viewBox="0 0 24 24">
+                <path d="M7 4h10v16l-5-3.5L7 20z" fill="none" stroke="currentColor" stroke-width="1.6"
+                    stroke-linejoin="round" />
+            </symbol>
+            <symbol id="i-corner" viewBox="0 0 24 24">
+                <path d="M4 14V8a4 4 0 0 1 4-4h6" fill="none" stroke="currentColor" stroke-width="1.6"
+                    stroke-linecap="round" />
+                <path d="M4 14h6v6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                    opacity="0.4" />
+            </symbol>
+            <symbol id="i-corner-none" viewBox="0 0 24 24">
+                <rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" />
+            </symbol>
+            <symbol id="i-corner-round" viewBox="0 0 24 24">
+                <rect x="5" y="5" width="14" height="14" rx="5" fill="none" stroke="currentColor"
+                    stroke-width="1.6" />
+            </symbol>
+            <symbol id="i-corner-super" viewBox="0 0 24 24">
+                <path d="M5 12c0-5 2-7 7-7s7 2 7 7-2 7-7 7-7-2-7-7z" fill="none" stroke="currentColor"
+                    stroke-width="1.6" />
+            </symbol>
+            <symbol id="i-shadow" viewBox="0 0 24 24">
+                <rect x="7" y="7" width="12" height="12" rx="2" fill="none" stroke="currentColor"
+                    stroke-width="1.6" />
+                <rect x="4" y="4" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"
+                    opacity="0.4" />
+            </symbol>
+            <symbol id="i-border" viewBox="0 0 24 24">
+                <rect x="4.5" y="4.5" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" />
+            </symbol>
+            <symbol id="i-info" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.6" />
+                <path d="M12 11v5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                <circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none" />
+            </symbol>
+            <!-- セクション見出し脇の「操作方法」開閉（.op-hint）用の ? アイコン -->
+            <symbol id="i-help" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.6" />
+                <path d="M9.7 9.3a2.5 2.5 0 0 1 4.8 1c0 1.7-2.1 2-2.1 3.5" fill="none"
+                    stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+                <circle cx="12.3" cy="16.6" r="0.95" fill="currentColor" stroke="none" />
+            </symbol>
+            <!-- 「リセット」ボタン（E-11）: ほぼ一周する反時計回りの矢印。上部バーの Undo(↶) とは
+                 「浅い弧」と「ほぼ全周」で差をつける。 -->
+            <symbol id="i-reset" viewBox="0 0 24 24">
+                <path d="M5.2 8.4A7.2 7.2 0 1 1 4.9 13.4" fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round" />
+                <path d="M4.4 4.6l0.9 4.1 4.1-0.9" fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </symbol>
+            <!-- Exif 各項目のアイコン（E-3。値だけを見せ、項目名は dt の title 属性でツールチップ表示） -->
+            <symbol id="i-aperture" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"
+                    stroke-linejoin="round" />
+                <path d="M12 3l4.5 7.8M21 12h-9M16.5 21L12 12M3 12h9M7.5 3L12 12M3 12l4.5 7.8" fill="none"
+                    stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+            </symbol>
+            <symbol id="i-shutter" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6" />
+                <path d="M12 3v9l7 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            </symbol>
+            <symbol id="i-iso" viewBox="0 0 24 24">
+                <rect x="3" y="6" width="18" height="12" rx="2" fill="none" stroke="currentColor"
+                    stroke-width="1.6" />
+                <path d="M7 15V9M17 9h-3v6h3M10.5 9h3v3h-3z" fill="none" stroke="currentColor" stroke-width="1.6"
+                    stroke-linecap="round" stroke-linejoin="round" />
+            </symbol>
+            <symbol id="i-focal" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6" />
+                <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6" />
+                <path d="M12 3.5v3M12 17.5v3" fill="none" stroke="currentColor" stroke-width="1.6"
+                    stroke-linecap="round" />
+            </symbol>
+            <symbol id="i-cal" viewBox="0 0 24 24">
+                <rect x="3.5" y="5" width="17" height="15" rx="2" fill="none" stroke="currentColor"
+                    stroke-width="1.6" />
+                <path d="M3.5 10h17M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="1.6"
+                    stroke-linecap="round" />
+            </symbol>
+            <!-- 背景タイプ（B-5）: 単色＝塗りつぶし / 拡大ぼかし＝破線円 -->
+            <symbol id="i-fill" viewBox="0 0 24 24">
+                <rect x="4" y="4" width="16" height="16" rx="3" fill="currentColor" stroke="none" />
+            </symbol>
+            <symbol id="i-blur" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"
+                    stroke-dasharray="1.5 3" />
+                <circle cx="12" cy="12" r="3.5" fill="none" stroke="currentColor" stroke-width="1.6" />
+            </symbol>
+            <!-- B-6 背景タイプ「別画像」: 枠の中に山と太陽（写真を1枚敷くイメージ） -->
+            <symbol id="i-bg-photo" viewBox="0 0 24 24">
+                <rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="none" stroke="currentColor"
+                    stroke-width="1.6" />
+                <circle cx="9" cy="9.5" r="1.6" fill="currentColor" stroke="none" />
+                <path d="M4 17l4.5-5 3 3L15 11l5 6" fill="none" stroke="currentColor" stroke-width="1.6"
+                    stroke-linecap="round" stroke-linejoin="round" />
+            </symbol>
+            <!-- A-12 二重四角: 実線＝いま操作する対象 / 丸ドット点線＝相手側。ブランドマーク（二重四角）が親。 -->
+            <symbol id="i-canvas" viewBox="0 0 24 24">
+                <rect x="3" y="3" width="18" height="18" rx="2.5" fill="none" stroke="currentColor"
+                    stroke-width="1.7" />
+                <rect x="8.5" y="8.5" width="7" height="7" rx="1.5" fill="none" stroke="currentColor"
+                    stroke-width="1.6" stroke-linecap="round" stroke-dasharray="0.1 3" />
+            </symbol>
+            <symbol id="i-photo-crop" viewBox="0 0 24 24">
+                <rect x="3" y="3" width="18" height="18" rx="2.5" fill="none" stroke="currentColor"
+                    stroke-width="1.6" stroke-linecap="round" stroke-dasharray="0.1 3" />
+                <rect x="7.5" y="7.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor"
+                    stroke-width="1.7" />
+            </symbol>
+            <symbol id="i-size-place" viewBox="0 0 24 24">
+                <rect x="3" y="3" width="18" height="18" rx="2.5" fill="none" stroke="currentColor"
+                    stroke-width="1.7" />
+                <rect x="5.5" y="5.5" width="9.5" height="9.5" rx="1.5" fill="none" stroke="currentColor"
+                    stroke-width="1.7" />
+            </symbol>
+            <!-- A-14 縦横入れ替え: 四角形の右上に回転矢印（Lightroom のクロップ縦横比スワップに合わせる） -->
+            <symbol id="i-rotate" viewBox="0 0 24 24">
+                <rect x="3" y="9" width="12" height="12" rx="2" fill="none" stroke="currentColor"
+                    stroke-width="1.7" />
+                <path d="M10 5h6a3 3 0 0 1 3 3v6" fill="none" stroke="currentColor" stroke-width="1.7"
+                    stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M16 2l3.3 3-3.3 3" fill="none" stroke="currentColor" stroke-width="1.7"
+                    stroke-linecap="round" stroke-linejoin="round" />
+            </symbol>
+        </defs>
+    </svg>
     <div class="app-container">
         <header class="app-header">
-            <h1>Kakomi</h1>
+            <div class="app-brand"><span class="brand-mark"></span>Kakomi</div>
+            <div class="header-actions">
+                <button type="button" id="openImageButton" class="icon-btn" title="画像を開く"><span
+                        class="hdr-icon"><svg>
+                            <use href="#i-bg"></use>
+                        </svg></span></button>
+                <button type="button" id="undoButton" class="icon-btn" title="元に戻す (Ctrl+Z)" disabled>↶</button>
+                <button type="button" id="redoButton" class="icon-btn" title="やり直す (Ctrl+Shift+Z)" disabled>↷</button>
+                <div class="dl-group">
+                    <button id="downloadButton" disabled>
+                        <span class="dl-icon"><svg>
+                                <use href="#i-output"></use>
+                            </svg></span>ダウンロード
+                    </button>
+                    <div id="downloadPopover" class="dl-popover hidden">
+                        <div class="dl-pop-row">
+                            <label for="jpgQuality">JPG画質</label>
+                            <input type="range" id="jpgQuality">
+                            <span id="jpgQualityValue">100</span>
+                        </div>
+                        <p class="dl-pop-note">元写真の解像度のまま JPEG で書き出します。</p>
+                        <button type="button" id="downloadConfirmButton" class="dl-pop-go">書き出す</button>
+                    </div>
+                </div>
+            </div>
         </header>
 
-        <main class="main-content">
-            <aside class="controls-area">
-                <nav class="tab-navigation">
-                    <button class="tab-button active" data-tab="tab-layout">レイアウト設定</button>
-                    <button class="tab-button" data-tab="tab-background">背景編集</button>
-                    <button class="tab-button" data-tab="tab-frame">フレーム加工</button>
-                    <button class="tab-button" data-tab="tab-text">文字入力</button>
-                    <button class="tab-button" data-tab="tab-output">出力</button>
-                </nav>
+        <main class="app-shell">
+            <nav class="tab-navigation">
+                <button class="tab-button rail-item active" data-tab="tab-layout"><span class="tab-icon"><svg><use
+                                href="#i-layout"></use></svg></span>レイアウト</button>
+                <button class="tab-button rail-item" data-tab="tab-background"><span class="tab-icon"><svg><use
+                                href="#i-bg"></use></svg></span>背景</button>
+                <button class="tab-button rail-item" data-tab="tab-frame"><span class="tab-icon"><svg><use
+                                href="#i-frame"></use></svg></span>フレーム</button>
+                <button class="tab-button rail-item" data-tab="tab-text"><span class="tab-icon"><svg><use
+                                href="#i-text"></use></svg></span>テキスト</button>
+                <div class="rail-spacer"></div>
+                <button class="tab-button rail-item" data-tab="tab-preset"><span class="tab-icon"><svg><use
+                                href="#i-preset"></use></svg></span>プリセット</button>
+                <!-- E-3(フェーズ5): 「情報」も他タブと並列の .tab-button + .tab-pane にした。
+                     tabManager.js が .tab-button を一括で扱うので、タブ切り替えも E-1 の
+                     アクティブタブ再クリック収納も自動で効く。以前の独立トグル
+                     (#exifToggleButton) と #exifFloatCard は廃止。 -->
+                <button class="tab-button rail-item" data-tab="tab-info"><span class="tab-icon"><svg><use
+                                href="#i-info"></use></svg></span>情報</button>
+            </nav>
 
-                <div class="tab-content-area">
+            <div class="tab-content-area">
                     <div id="tab-layout" class="tab-pane active">
                         <fieldset>
-                            <legend>出力フォーマット</legend>
-                            <div class="form-row-simple">
-                                <label for="outputAspectRatio">アスペクト比:</label>
-                                <select id="outputAspectRatio">
-                                    <option value="1:1">1:1 (正方形)</option>
-                                    <option value="4:5">4:5 (Instagram縦)</option>
-                                    <option value="1.91:1">1.91:1 (Instagram横)</option>
-                                    <option value="16:9">16:9 (ワイド)</option>
-                                    <option value="3:4">3:4</option>
-                                    <option value="89:127">L判縦 (89×127)</option>
-                                    <option value="custom">カスタム</option>
-                                </select>
-                            </div>
-                            <div id="customAspectRatioContainer" class="form-row-simple">
-                                <label for="customAspectRatioWidth">幅:</label>
+                            <legend>
+                                <svg class="legend-icon" aria-hidden="true"><use href="#i-canvas"></use></svg>
+                                <span class="legend-text">キャンバス</span>
+                                <span class="legend-tools">
+                                    <button type="button" id="outputRotateButton" class="ratio-rotate-btn"
+                                        title="縦横を入れ替え" aria-label="キャンバスの縦横を入れ替え">
+                                        <svg aria-hidden="true"><use href="#i-rotate"></use></svg>
+                                    </button>
+                                </span>
+                            </legend>
+                            <div id="outputAspectRatioPicker" class="ratio-picker"></div>
+                            <div id="customAspectRatioContainer" class="ratio-custom-row hidden">
+                                <label for="customAspectRatioWidth">幅</label>
                                 <input type="number" id="customAspectRatioWidth" min="0.01" step="any" value="1">
-                                <button type="button" id="swapAspectRatio" title="縦横比を反転">⇄</button>
-                                <label for="customAspectRatioHeight">高さ:</label>
+                                <label for="customAspectRatioHeight">高さ</label>
                                 <input type="number" id="customAspectRatioHeight" min="0.01" step="any" value="1">
                             </div>
+                        </fieldset>
+
+                        <fieldset id="cropSection">
+                            <legend>
+                                <svg class="legend-icon" aria-hidden="true"><use href="#i-photo-crop"></use></svg>
+                                <span class="legend-text">写真のトリミング</span>
+                                <details class="op-hint">
+                                    <summary aria-label="操作方法"><svg aria-hidden="true"><use href="#i-help"></use></svg></summary>
+                                    <ul>
+                                        <li><b>パネルをクリック</b><span>トリミング開始</span></li>
+                                        <li><b>枠をドラッグ</b><span>切り抜き範囲</span></li>
+                                        <li><b>写真をドラッグ</b><span>切り抜き位置</span></li>
+                                        <li><b>余白をドラッグ</b><span>水平出し（Shift: 1°）</span></li>
+                                        <li><b>Enter / 外側</b><span>確定</span></li>
+                                    </ul>
+                                </details>
+                                <span class="legend-tools">
+                                    <button type="button" id="cropRotateButton" class="ratio-rotate-btn"
+                                        title="縦横を入れ替え" aria-label="トリミングの縦横を入れ替え">
+                                        <svg aria-hidden="true"><use href="#i-rotate"></use></svg>
+                                    </button>
+                                    <button type="button" id="resetCrop" class="reset-btn" title="切り抜きをリセット"
+                                        aria-label="切り抜きをリセット">
+                                        <svg aria-hidden="true"><use href="#i-reset"></use></svg>
+                                    </button>
+                                </span>
+                            </legend>
+                            <div id="cropAspectRatioPicker" class="ratio-picker"></div>
+                            <div id="cropCustomAspectRatioContainer" class="ratio-custom-row hidden">
+                                <label for="cropCustomAspectRatioWidth">幅</label>
+                                <input type="number" id="cropCustomAspectRatioWidth" min="0.01" step="any" value="1">
+                                <label for="cropCustomAspectRatioHeight">高さ</label>
+                                <input type="number" id="cropCustomAspectRatioHeight" min="0.01" step="any" value="1">
+                            </div>
                             <div class="form-row-slider">
-                                <label for="baseMarginPercent">余白 (%):</label>
-                                <input type="range" id="baseMarginPercent">
-                                <span id="baseMarginPercentValue">5%</span>
+                                <label for="cropRotation">水平:</label>
+                                <input type="range" id="cropRotation">
+                                <span id="cropRotationValue">0°</span>
                             </div>
                         </fieldset>
 
                         <fieldset>
-                            <legend>写真位置調整</legend>
+                            <legend>
+                                <svg class="legend-icon" aria-hidden="true"><use href="#i-size-place"></use></svg>
+                                <span class="legend-text">大きさと配置</span>
+                                <details class="op-hint">
+                                    <summary aria-label="操作方法"><svg aria-hidden="true"><use href="#i-help"></use></svg></summary>
+                                    <ul>
+                                        <li><b>写真をドラッグ</b><span>配置</span></li>
+                                        <li><b>四隅の ■</b><span>大きさ</span></li>
+                                        <li><b>上の丸ハンドル</b><span>角度（Shift: 15°）</span></li>
+                                    </ul>
+                                </details>
+                                <span class="legend-tools">
+                                    <button type="button" id="resetPhotoPlacement" class="reset-btn"
+                                        title="大きさと配置をリセット" aria-label="大きさと配置をリセット">
+                                        <svg aria-hidden="true"><use href="#i-reset"></use></svg>
+                                    </button>
+                                </span>
+                            </legend>
                             <div class="form-row-slider">
-                                <label for="photoPosX">横位置:</label>
-                                <input type="range" id="photoPosX"> <span id="photoPosXValue">中央</span>
+                                <label for="baseMarginPercent">大きさ:</label>
+                                <input type="range" id="baseMarginPercent">
+                                <span id="baseMarginPercentValue">90%</span>
                             </div>
                             <div class="form-row-slider">
-                                <label for="photoPosY">縦位置:</label>
-                                <input type="range" id="photoPosY"> <span id="photoPosYValue">中央</span>
+                                <label for="photoRotation">角度:</label>
+                                <input type="range" id="photoRotation">
+                                <span id="photoRotationValue">0°</span>
                             </div>
                         </fieldset>
                     </div>
                     <div id="tab-background" class="tab-pane">
                         <fieldset>
                             <legend>背景タイプ</legend>
-                            <div class="radio-group">
-                                <input type="radio" id="bgTypeColor" name="backgroundType" value="color">
-                                <label for="bgTypeColor">単色背景</label>
-                            </div>
-                            <div class="radio-group">
-                                <input type="radio" id="bgTypeImageBlur" name="backgroundType" value="imageBlur">
-                                <label for="bgTypeImageBlur">拡大ぼかし背景 (元画像を使用)</label>
+                            <div class="corner-segmented">
+                                <label class="segment">
+                                    <input type="radio" id="bgTypeColor" name="backgroundType" value="color">
+                                    <span class="segment-icon"><svg>
+                                            <use href="#i-fill"></use>
+                                        </svg></span>
+                                    単色
+                                </label>
+                                <label class="segment">
+                                    <input type="radio" id="bgTypeImageBlur" name="backgroundType"
+                                        value="imageBlur">
+                                    <span class="segment-icon"><svg>
+                                            <use href="#i-blur"></use>
+                                        </svg></span>
+                                    ぼかし
+                                </label>
+                                <label class="segment">
+                                    <input type="radio" id="bgTypeImage" name="backgroundType"
+                                        value="bgImage">
+                                    <span class="segment-icon"><svg>
+                                            <use href="#i-bg-photo"></use>
+                                        </svg></span>
+                                    別画像
+                                </label>
                             </div>
                         </fieldset>
 
@@ -90,7 +353,16 @@
                         </fieldset>
 
                         <fieldset id="imageBlurSettingsContainer" class="hidden">
-                            <legend>拡大ぼかし背景設定</legend>
+                            <legend>画像背景の設定</legend>
+                            <!-- B-6: 「別画像」タイプのときだけ表示。ぼかしタイプでは前景写真を使うので不要。 -->
+                            <div id="bgImagePickerRow" class="bg-image-picker hidden">
+                                <button type="button" id="bgImageSelectButton" class="bg-image-select-btn">
+                                    背景画像を選択
+                                </button>
+                                <img id="bgImageThumb" class="bg-image-thumb hidden" alt="選択中の背景画像">
+                                <input type="file" id="bgImageLoader" accept="image/*">
+                            </div>
+                            <p class="subsection-heading">見え方</p>
                             <div class="form-row-slider">
                                 <label for="bgScale">拡大倍率:</label>
                                 <input type="range" id="bgScale">
@@ -100,6 +372,8 @@
                                 <label for="bgBlur">ぼかし強度 (%):</label>
                                 <input type="range" id="bgBlur"> <span id="bgBlurValue">3.0%</span>
                             </div>
+
+                            <p class="subsection-heading with-rule">色調</p>
                             <div class="form-row-slider">
                                 <label for="bgBrightness">明るさ (%):</label>
                                 <input type="range" id="bgBrightness">
@@ -110,488 +384,218 @@
                                 <input type="range" id="bgSaturation">
                                 <span id="bgSaturationValue">100%</span>
                             </div>
-                            <div class="form-row-slider">
-                                <label for="bgOffsetX">Xオフセット (%):</label>
-                                <input type="range" id="bgOffsetX">
-                                <span id="bgOffsetXValue">0%</span>
-                            </div>
-                            <div class="form-row-slider">
-                                <label for="bgOffsetY">Yオフセット (%):</label>
-                                <input type="range" id="bgOffsetY">
-                                <span id="bgOffsetYValue">0%</span>
+
+                            <div class="subsection-heading with-rule op-head">
+                                <span>位置</span>
+                                <details class="op-hint">
+                                    <summary aria-label="操作方法"><svg aria-hidden="true"><use href="#i-help"></use></svg></summary>
+                                    <ul>
+                                        <li><b>キャンバスをドラッグ</b><span>背景を移動</span></li>
+                                        <li><b>矢印キー</b><span>微調整（Shiftで大きく）</span></li>
+                                    </ul>
+                                </details>
+                                <span class="legend-tools">
+                                    <button type="button" id="resetBgOffset" class="reset-btn"
+                                        title="背景の位置をリセット" aria-label="背景の位置をリセット">
+                                        <svg aria-hidden="true"><use href="#i-reset"></use></svg>
+                                    </button>
+                                </span>
                             </div>
                         </fieldset>
                     </div>
                     <div id="tab-frame" class="tab-pane">
-                        <fieldset>
-                            <legend>角</legend>
-                            <div class="form-row-simple">
-                                <div class="radio-group">
-                                    <input type="radio" id="frameCornerStyleNone" name="frameCornerStyle" value="none">
-                                    <label for="frameCornerStyleNone">なし</label>
-                                </div>
-                                <div class="radio-group">
+                        <div class="frame-card">
+                            <div class="frame-card-head">
+                                <span class="frame-icon"><svg>
+                                        <use href="#i-corner"></use>
+                                    </svg></span>
+                                <span class="frame-card-title">角のスタイル</span>
+                            </div>
+                            <!-- C-1: 角のスタイルは「角丸 / 超楕円」の2択。「なし」は廃止（丸み0 が実質「なし」）。 -->
+                            <div class="corner-segmented">
+                                <label class="segment">
                                     <input type="radio" id="frameCornerStyleRounded" name="frameCornerStyle"
                                         value="rounded">
-                                    <label for="frameCornerStyleRounded">角丸</label>
-                                </div>
-                                <div class="radio-group">
+                                    <span class="segment-icon"><svg>
+                                            <use href="#i-corner-round"></use>
+                                        </svg></span>
+                                    角丸
+                                </label>
+                                <label class="segment">
                                     <input type="radio" id="frameCornerStyleSuperellipse" name="frameCornerStyle"
                                         value="superellipse">
-                                    <label for="frameCornerStyleSuperellipse">超楕円</label>
-                                </div>
+                                    <span class="segment-icon"><svg>
+                                            <use href="#i-corner-super"></use>
+                                        </svg></span>
+                                    超楕円
+                                </label>
                             </div>
-                        </fieldset>
-
-                        <fieldset id="frameCornerRoundedSettingsContainer">
-                            <legend>角丸 設定</legend>
-                            <div class="form-row-slider">
-                                <label for="frameCornerRadiusPercent">半径 (%):</label>
-                                <input type="range" id="frameCornerRadiusPercent">
-                                <span id="frameCornerRadiusPercentValue">0%</span>
-                            </div>
-                        </fieldset>
-
-                        <fieldset id="frameCornerSuperellipseSettingsContainer">
-                            <legend>超楕円 設定</legend>
-                            <div class="form-row-slider">
-                                <label for="frameSuperellipseN">次数 n:</label>
-                                <input type="range" id="frameSuperellipseN">
-                                <span id="frameSuperellipseNValue">4</span>
-                            </div>
-                        </fieldset>
-
-                        <fieldset>
-                            <legend>影</legend>
-                            <div class="form-row-simple">
-                                <label for="frameShadowEnabled">影を有効にする:</label>
-                                <input type="checkbox" id="frameShadowEnabled">
-                            </div>
-                            <div id="frameShadowSettingsContainer">
-                                <div class="form-row-simple">
-                                    <label>影のタイプ:</label>
-                                    <div class="radio-group">
-                                        <input type="radio" id="frameShadowTypeDrop" name="frameShadowType"
-                                            value="drop">
-                                        <label for="frameShadowTypeDrop">外側</label>
-                                    </div>
-                                    <div class="radio-group">
-                                        <input type="radio" id="frameShadowTypeInner" name="frameShadowType"
-                                            value="inner">
-                                        <label for="frameShadowTypeInner">内側</label>
+                            <!-- C-1: 角丸・超楕円で共通の「丸み」スライダー（0-100、右ほど丸い）。
+                                 モードで丸め方の関数を切り替える（uiController.js roundnessToRadius / roundnessToN）。 -->
+                            <div class="accordion open">
+                                <div class="accordion-inner">
+                                    <div class="accordion-body">
+                                        <div class="form-row-slider">
+                                            <label for="frameRoundness">丸み:</label>
+                                            <input type="range" id="frameRoundness">
+                                            <span id="frameRoundnessValue">0</span>
+                                        </div>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
 
-                                <div class="form-row-slider">
-                                    <label for="frameShadowOffsetX">オフセットX (%):</label>
-                                    <input type="range" id="frameShadowOffsetX">
-                                    <span id="frameShadowOffsetXValue">0%</span>
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="frameShadowOffsetY">オフセットY (%):</label>
-                                    <input type="range" id="frameShadowOffsetY">
-                                    <span id="frameShadowOffsetYValue">0%</span>
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="frameShadowBlur">ぼかし (%):</label>
-                                    <input type="range" id="frameShadowBlur">
-                                    <span id="frameShadowBlurValue">5%</span>
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="frameShadowEffectRange">効果の範囲 (%):</label> <input type="range"
-                                        id="frameShadowEffectRange"> <span id="frameShadowEffectRangeValue">0%</span>
-                                </div>
-                                <div class="form-row-simple">
-                                    <label for="frameShadowColor">色:</label>
-                                    <input type="color" id="frameShadowColor">
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="frameShadowOpacity">不透明度:</label>
-                                    <input type="range" id="frameShadowOpacity">
-                                    <span id="frameShadowOpacityValue">0.5</span>
+                        <div class="frame-card">
+                            <div class="frame-card-head">
+                                <span class="frame-icon"><svg>
+                                        <use href="#i-shadow"></use>
+                                    </svg></span>
+                                <span class="frame-card-title">影</span>
+                                <label class="switch">
+                                    <input type="checkbox" id="frameShadowEnabled">
+                                    <span class="switch-track"></span>
+                                    <span class="switch-thumb"></span>
+                                </label>
+                            </div>
+                            <div id="frameShadowSettingsContainer" class="accordion">
+                                <div class="accordion-inner">
+                                    <div class="accordion-body">
+                                        <div class="form-row-simple">
+                                            <label>影のタイプ:</label>
+                                            <div class="radio-group">
+                                                <input type="radio" id="frameShadowTypeDrop" name="frameShadowType"
+                                                    value="drop">
+                                                <label for="frameShadowTypeDrop">外側</label>
+                                            </div>
+                                            <div class="radio-group">
+                                                <input type="radio" id="frameShadowTypeInner" name="frameShadowType"
+                                                    value="inner">
+                                                <label for="frameShadowTypeInner">内側</label>
+                                            </div>
+                                        </div>
+                                        <div class="form-row-slider">
+                                            <label for="frameShadowOffsetX">オフセットX (%):</label>
+                                            <input type="range" id="frameShadowOffsetX">
+                                            <span id="frameShadowOffsetXValue">0%</span>
+                                        </div>
+                                        <div class="form-row-slider">
+                                            <label for="frameShadowOffsetY">オフセットY (%):</label>
+                                            <input type="range" id="frameShadowOffsetY">
+                                            <span id="frameShadowOffsetYValue">0%</span>
+                                        </div>
+                                        <div class="form-row-slider">
+                                            <label for="frameShadowBlur">ぼかし (%):</label>
+                                            <input type="range" id="frameShadowBlur">
+                                            <span id="frameShadowBlurValue">5%</span>
+                                        </div>
+                                        <div class="form-row-slider">
+                                            <label for="frameShadowEffectRange">効果の範囲 (%):</label>
+                                            <input type="range" id="frameShadowEffectRange">
+                                            <span id="frameShadowEffectRangeValue">0%</span>
+                                        </div>
+                                        <div class="form-row-simple">
+                                            <label for="frameShadowColor">色:</label>
+                                            <input type="color" id="frameShadowColor">
+                                        </div>
+                                        <div class="form-row-slider">
+                                            <label for="frameShadowOpacity">不透明度:</label>
+                                            <input type="range" id="frameShadowOpacity">
+                                            <span id="frameShadowOpacityValue">0.5</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        </fieldset>
+                        </div>
 
-                        <fieldset>
-                            <legend>縁取り／線</legend>
-                            <div class="form-row-simple">
-                                <label for="frameBorderEnabled">縁取りを有効にする:</label>
-                                <input type="checkbox" id="frameBorderEnabled">
+                        <div class="frame-card">
+                            <div class="frame-card-head">
+                                <span class="frame-icon"><svg>
+                                        <use href="#i-border"></use>
+                                    </svg></span>
+                                <span class="frame-card-title">縁取り／線</span>
+                                <label class="switch">
+                                    <input type="checkbox" id="frameBorderEnabled">
+                                    <span class="switch-track"></span>
+                                    <span class="switch-thumb"></span>
+                                </label>
                             </div>
-                            <div id="frameBorderDetailSettingsContainer">
-                                <div class="form-row-slider">
-                                    <label for="frameBorderWidth">線の太さ (%):</label>
-                                    <input type="range" id="frameBorderWidth">
-                                    <span id="frameBorderWidthValue">1%</span>
-                                </div>
-                                <div class="form-row-simple">
-                                    <label for="frameBorderColor">線の色:</label>
-                                    <input type="color" id="frameBorderColor">
-                                </div>
-                                <!-- <div class="form-row-simple">
+                            <div id="frameBorderDetailSettingsContainer" class="accordion">
+                                <div class="accordion-inner">
+                                    <div class="accordion-body">
+                                        <div class="form-row-slider">
+                                            <label for="frameBorderWidth">線の太さ (%):</label>
+                                            <input type="range" id="frameBorderWidth">
+                                            <span id="frameBorderWidthValue">1%</span>
+                                        </div>
+                                        <div class="form-row-simple">
+                                            <label for="frameBorderColor">線の色:</label>
+                                            <input type="color" id="frameBorderColor">
+                                        </div>
+                                        <!-- <div class="form-row-simple">
                                     <label for="frameBorderStyle">線のスタイル:</label>
                                     <select id="frameBorderStyle">
                                         <option value="solid">実線</option>
                                         <option value="dashed">破線</option>
                                     </select>
                                 </div> -->
+                                    </div>
+                                </div>
                             </div>
-                        </fieldset>
+                        </div>
                     </div>
                     <div id="tab-text" class="tab-pane">
                         <fieldset>
-                            <legend>撮影日</legend>
-                            <div class="form-row-simple">
-                                <label for="textDateEnabled">表示する:</label>
-                                <input type="checkbox" id="textDateEnabled">
-                            </div>
-
-                            <div id="textDateSettingsContainer">
-                                <div class="form-row-simple">
-                                    <label for="textDateFormat">区切り形式:</label>
-                                    <select id="textDateFormat">
-                                        <option value="YYYY.MM.DD">YYYY.MM.DD</option>
-                                        <option value="YYYY/MM/DD">YYYY/MM/DD</option>
-                                        <option value="YY/MM/DD">YY/MM/DD</option>
-                                        <option value="YY.MM.DD">YY.MM.DD</option>
-                                        <option value="YYYY年MM月DD日">YYYY年MM月DD日</option>
-                                    </select>
-                                </div>
-                                <div class="form-row-simple">
-                                    <label for="textDateFont">フォント:</label>
-                                    <select id="textDateFont">
-                                    </select>
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="textDateSize">サイズ (%):</label>
-                                    <input type="range" id="textDateSize">
-                                    <span id="textDateSizeValue">5%</span>
-                                </div>
-                                <div class="form-row-simple">
-                                    <label for="textDateColor">文字色:</label>
-                                    <input type="color" id="textDateColor">
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="textDateOpacity">透過度:</label>
-                                    <input type="range" id="textDateOpacity">
-                                    <span id="textDateOpacityValue">1.00</span>
-                                </div>
-                                <div class="form-row-simple">
-                                    <label for="textDatePosition">表示位置:</label>
-                                    <select id="textDatePosition">
-                                        <option value="top-left">左上</option>
-                                        <option value="top-center">中央上</option>
-                                        <option value="top-right">右上</option>
-                                        <option value="bottom-left">左下</option>
-                                        <option value="bottom-center">中央下</option>
-                                        <option value="bottom-right">右下</option>
-                                    </select>
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="textDateOffsetX">横オフセット (%):</label>
-                                    <input type="range" id="textDateOffsetX">
-                                    <span id="textDateOffsetXValue">2%</span>
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="textDateOffsetY">縦オフセット (%):</label>
-                                    <input type="range" id="textDateOffsetY">
-                                    <span id="textDateOffsetYValue">2%</span>
-                                </div>
-                            </div>
-                        </fieldset>
-
-                        <fieldset>
-                            <legend>Exif情報</legend>
-                            <div class="form-row-simple">
-                                <label for="textExifEnabled">表示する:</label>
-                                <input type="checkbox" id="textExifEnabled">
-                            </div>
-
-                            <div id="textExifSettingsContainer">
-                                <fieldset>
-                                    <legend>表示項目</legend>
-                                    <div class="form-row-simple">
-                                        <input type="checkbox" id="textExifItemMake" value="Make"><label
-                                            for="textExifItemMake">メーカー名</label>
-                                    </div>
-                                    <div class="form-row-simple">
-                                        <input type="checkbox" id="textExifItemModel" value="Model"><label
-                                            for="textExifItemModel">機種名</label>
-                                    </div>
-                                    <div class="form-row-simple">
-                                        <input type="checkbox" id="textExifItemLensModel" value="LensModel">
-                                        <label for="textExifItemLensModel">レンズ情報</label>
-                                    </div>
-                                    <div class="form-row-simple">
-                                        <input type="checkbox" id="textExifItemFNumber" value="FNumber"><label
-                                            for="textExifItemFNumber">F値</label>
-                                    </div>
-                                    <div class="form-row-simple">
-                                        <input type="checkbox" id="textExifItemExposureTime" value="ExposureTime"><label
-                                            for="textExifItemExposureTime">シャッタースピード</label>
-                                    </div>
-                                    <div class="form-row-simple">
-                                        <input type="checkbox" id="textExifItemISOSpeedRatings"
-                                            value="ISOSpeedRatings"><label
-                                            for="textExifItemISOSpeedRatings">ISO感度</label>
-                                    </div>
-                                    <div class="form-row-simple">
-                                        <input type="checkbox" id="textExifItemFocalLength" value="FocalLength"><label
-                                            for="textExifItemFocalLength">焦点距離</label>
-                                    </div>
-                                </fieldset>
-
-                                <fieldset>
-                                    <legend>表示テキスト</legend>
-                                    <div class="form-row-simple">
-                                        <textarea id="textExifCustomTextArea" rows="3"
-                                            style="width: 100%; font-family: monospace; padding: 0.3rem; border-radius: 4px; border: 1px solid #ccd0d5;"></textarea>
-                                    </div>
-                                </fieldset>
-
-                                <fieldset>
-                                    <legend>水平方向の配置</legend>
-                                    <div class="form-row-simple" style="justify-content: space-around;">
-                                        <div class="radio-group"><input type="radio" id="textExifAlignLeft"
-                                                name="textExifAlign" value="left"><label
-                                                for="textExifAlignLeft">左寄せ</label></div>
-                                        <div class="radio-group"><input type="radio" id="textExifAlignCenter"
-                                                name="textExifAlign" value="center"><label
-                                                for="textExifAlignCenter">中央</label></div>
-                                        <div class="radio-group"><input type="radio" id="textExifAlignRight"
-                                                name="textExifAlign" value="right"><label
-                                                for="textExifAlignRight">右寄せ</label></div>
-                                    </div>
-                                </fieldset>
-
-                                <div class="form-row-simple">
-                                    <label for="textExifFont">フォント:</label>
-                                    <select id="textExifFont">
-                                    </select>
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="textExifSize">サイズ (%):</label>
-                                    <input type="range" id="textExifSize">
-                                    <span id="textExifSizeValue">2%</span>
-                                </div>
-                                <div class="form-row-simple">
-                                    <label for="textExifColor">文字色:</label>
-                                    <input type="color" id="textExifColor">
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="textExifOpacity">透過度:</label>
-                                    <input type="range" id="textExifOpacity">
-                                    <span id="textExifOpacityValue">1.00</span>
-                                </div>
-                                <div class="form-row-simple">
-                                    <label for="textExifPosition">表示位置:</label>
-                                    <select id="textExifPosition">
-                                        <option value="top-left">左上</option>
-                                        <option value="top-center">中央上</option>
-                                        <option value="top-right">右上</option>
-                                        <!-- <option value="middle-left">左中央</option>
-                                        <option value="middle-center">中央</option>
-                                        <option value="middle-right">右中央</option> -->
-                                        <option value="bottom-left">左下</option>
-                                        <option value="bottom-center">中央下</option>
-                                        <option value="bottom-right">右下</option>
-                                    </select>
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="textExifOffsetX">横オフセット (%):</label>
-                                    <input type="range" id="textExifOffsetX">
-                                    <span id="textExifOffsetXValue">2%</span>
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="textExifOffsetY">縦オフセット (%):</label>
-                                    <input type="range" id="textExifOffsetY">
-                                    <span id="textExifOffsetYValue">2%</span>
-                                </div>
-                            </div>
-                        </fieldset>
-                        <fieldset>
-                            <legend>自由テキスト</legend>
-                            <div class="form-row-simple">
-                                <label for="textFreeEnabled">表示する:</label>
-                                <input type="checkbox" id="textFreeEnabled">
-                            </div>
-
-                            <div id="textFreeSettingsContainer">
-                                <fieldset>
-                                    <legend>表示テキスト</legend>
-                                    <div class="form-row-simple">
-                                        <textarea id="textFreeCustomTextArea" rows="3"
-                                            style="width: 100%; font-family: monospace; padding: 0.3rem; border-radius: 4px; border: 1px solid #ccd0d5;"></textarea>
-                                    </div>
-                                </fieldset>
-
-                                <fieldset>
-                                    <legend>水平方向の配置</legend>
-                                    <div class="form-row-simple" style="justify-content: space-around;">
-                                        <div class="radio-group"><input type="radio" id="textFreeAlignLeft"
-                                                name="textFreeAlign" value="left"><label
-                                                for="textFreeAlignLeft">左寄せ</label></div>
-                                        <div class="radio-group"><input type="radio" id="textFreeAlignCenter"
-                                                name="textFreeAlign" value="center"><label
-                                                for="textFreeAlignCenter">中央</label></div>
-                                        <div class="radio-group"><input type="radio" id="textFreeAlignRight"
-                                                name="textFreeAlign" value="right"><label
-                                                for="textFreeAlignRight">右寄せ</label></div>
-                                    </div>
-                                </fieldset>
-
-                                <div class="form-row-simple">
-                                    <label for="textFreeFont">フォント:</label>
-                                    <select id="textFreeFont">
-                                    </select>
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="textFreeSize">サイズ (%):</label>
-                                    <input type="range" id="textFreeSize">
-                                    <span id="textFreeSizeValue">4%</span>
-                                </div>
-                                <div class="form-row-simple">
-                                    <label for="textFreeColor">文字色:</label>
-                                    <input type="color" id="textFreeColor">
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="textFreeOpacity">透過度:</label>
-                                    <input type="range" id="textFreeOpacity">
-                                    <span id="textFreeOpacityValue">1.00</span>
-                                </div>
-                                <div class="form-row-simple">
-                                    <label for="textFreePosition">表示位置:</label>
-                                    <select id="textFreePosition">
-                                        <option value="top-left">左上</option>
-                                        <option value="top-center">中央上</option>
-                                        <option value="top-right">右上</option>
-                                        <!-- <option value="middle-left">左中央</option>
-                                        <option value="middle-center">中央</option>
-                                        <option value="middle-right">右中央</option> -->
-                                        <option value="bottom-left">左下</option>
-                                        <option value="bottom-center">中央下</option>
-                                        <option value="bottom-right">右下</option>
-                                    </select>
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="textFreeOffsetX">横オフセット (%):</label>
-                                    <input type="range" id="textFreeOffsetX">
-                                    <span id="textFreeOffsetXValue">0%</span>
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="textFreeOffsetY">縦オフセット (%):</label>
-                                    <input type="range" id="textFreeOffsetY">
-                                    <span id="textFreeOffsetYValue">0%</span>
-                                </div>
-                            </div>
-                        </fieldset>
-                        <fieldset>
-                            <legend>自由テキスト2</legend>
-                            <div class="form-row-simple">
-                                <label for="textFree2Enabled">表示する:</label>
-                                <input type="checkbox" id="textFree2Enabled">
-                            </div>
-
-                            <div id="textFree2SettingsContainer">
-                                <fieldset>
-                                    <legend>表示テキスト</legend>
-                                    <div class="form-row-simple">
-                                        <textarea id="textFree2CustomTextArea" rows="3"
-                                            style="width: 100%; font-family: monospace; padding: 0.3rem; border-radius: 4px; border: 1px solid #ccd0d5;"></textarea>
-                                    </div>
-                                </fieldset>
-
-                                <fieldset>
-                                    <legend>水平方向の配置</legend>
-                                    <div class="form-row-simple" style="justify-content: space-around;">
-                                        <div class="radio-group"><input type="radio" id="textFree2AlignLeft"
-                                                name="textFree2Align" value="left"><label
-                                                for="textFree2AlignLeft">左寄せ</label></div>
-                                        <div class="radio-group"><input type="radio" id="textFree2AlignCenter"
-                                                name="textFree2Align" value="center"><label
-                                                for="textFree2AlignCenter">中央</label></div>
-                                        <div class="radio-group"><input type="radio" id="textFree2AlignRight"
-                                                name="textFree2Align" value="right"><label
-                                                for="textFree2AlignRight">右寄せ</label></div>
-                                    </div>
-                                </fieldset>
-
-                                <div class="form-row-simple">
-                                    <label for="textFree2Font">フォント:</label>
-                                    <select id="textFree2Font">
-                                    </select>
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="textFree2Size">サイズ (%):</label>
-                                    <input type="range" id="textFree2Size">
-                                    <span id="textFree2SizeValue">4%</span>
-                                </div>
-                                <div class="form-row-simple">
-                                    <label for="textFree2Color">文字色:</label>
-                                    <input type="color" id="textFree2Color">
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="textFree2Opacity">透過度:</label>
-                                    <input type="range" id="textFree2Opacity">
-                                    <span id="textFree2OpacityValue">1.00</span>
-                                </div>
-                                <div class="form-row-simple">
-                                    <label for="textFree2Position">表示位置:</label>
-                                    <select id="textFree2Position">
-                                        <option value="top-left">左上</option>
-                                        <option value="top-center">中央上</option>
-                                        <option value="top-right">右上</option>
-                                        <!-- <option value="middle-left">左中央</option>
-                                        <option value="middle-center">中央</option>
-                                        <option value="middle-right">右中央</option> -->
-                                        <option value="bottom-left">左下</option>
-                                        <option value="bottom-center">中央下</option>
-                                        <option value="bottom-right">右下</option>
-                                    </select>
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="textFree2OffsetX">横オフセット (%):</label>
-                                    <input type="range" id="textFree2OffsetX">
-                                    <span id="textFree2OffsetXValue">0%</span>
-                                </div>
-                                <div class="form-row-slider">
-                                    <label for="textFree2OffsetY">縦オフセット (%):</label>
-                                    <input type="range" id="textFree2OffsetY">
-                                    <span id="textFree2OffsetYValue">0%</span>
-                                </div>
-                            </div>
+                            <legend>テキスト</legend>
+                            <!-- バケット4 / D-1・D-3: レイヤー一覧（#textLayersList）→「＋ テキストを追加」で
+                                 作成フォーム、選択で編集フォーム（どちらも uiController.buildTextEditor が組む）。 -->
+                            <div class="text-layers-list" id="textLayersList"></div>
+                            <button type="button" id="addTextLayerButton" class="add-custom-text-button">＋
+                                テキストを追加</button>
+                            <div id="textLayerSettingsPanel" class="custom-text-settings-panel"></div>
                         </fieldset>
                     </div>
-                    <div id="tab-output" class="tab-pane">
+                    <div id="tab-preset" class="tab-pane">
                         <fieldset>
-                            <legend>JPG画質設定</legend>
-                            <div class="form-row-slider">
-                                <label for="jpgQuality">JPG画質 (1-100):</label>
-                                <input type="range" id="jpgQuality">
-                                <span id="jpgQualityValue">100</span>
+                            <legend>プリセットを保存</legend>
+                            <!-- F-3 / F-5: 保存する項目のチェックは uiController.renderPresetSectionChecks() が
+                                 PRESET_SECTIONS から縦リストで組み立てる（親5セクション＋背景／フレーム／テキストの子）。
+                                 E-8 の用語（キャンバス／写真のトリミング）＋ A-12 の二重四角アイコンもそこで付く。 -->
+                            <div class="preset-tree" id="presetSectionChecks"></div>
+                            <div class="form-row-simple">
+                                <input type="text" id="presetNameInput" placeholder="プリセット名" style="flex: 1;">
+                                <button type="button" id="savePresetButton"
+                                    title="チェックした項目だけを保存します（写真自体は含まれません）">保存</button>
                             </div>
                         </fieldset>
-                        <button id="downloadButton" disabled>JPEGとしてダウンロード</button>
+                        <fieldset>
+                            <legend>保存済み</legend>
+                            <div id="presetsList" class="presets-list"></div>
+                        </fieldset>
+                    </div>
+                    <div id="tab-info" class="tab-pane">
+                        <fieldset>
+                            <legend>情報</legend>
+                            <!-- Exif 表示（E-3）。exifHandler.js の displayExifInfo() が中身を組む。
+                                 カメラ／レンズ名だけ小さく上に、撮影設定はアイコン＋値だけ。 -->
+                            <div id="exifDataContainer">
+                                <p class="exif-empty">写真を読み込むと撮影情報が表示されます。</p>
+                            </div>
+                        </fieldset>
                     </div>
                 </div>
-            </aside>
 
-            <section class="preview-exif-area">
-                <div class="preview-section">
-                    <h2>プレビュー</h2>
-                    <div class="image-loader-container">
-                        <label for="imageLoader">画像ファイルを選択 または ドラッグ＆ドロップ:</label>
+            <section class="canvas-area">
+                <div class="canvas-container">
+                    <canvas id="previewCanvas"></canvas>
+                    <!-- E-7: 画像未読込時はキャンバス中央にこのドロップダイアログ。読み込むと消えてキャンバスが出る。
+                         ドロップは .canvas-area 全体で受け付ける（main.js）。 -->
+                    <div class="image-loader-container" id="imageDropDialog">
+                        <span class="drop-icon"><svg>
+                                <use href="#i-bg"></use>
+                            </svg></span>
+                        <p class="drop-title">画像をドラッグ＆ドロップ</p>
+                        <label class="drop-pick" for="imageLoader">またはクリックして選択</label>
                         <input type="file" id="imageLoader" accept="image/*">
-                    </div>
-                    <div class="canvas-container">
-                        <canvas id="previewCanvas"></canvas>
-                    </div>
-                </div>
-                <div class="exif-section">
-                    <h2>Exif情報</h2>
-                    <div id="exifDataContainer">
-                        <p>ここにExif情報が表示されます。</p>
                     </div>
                 </div>
             </section>
