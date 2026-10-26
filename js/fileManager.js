@@ -141,9 +141,21 @@ export async function handleDownload() {
 
         } catch (err) {
             console.error('画像のダウンロード処理中にエラーが発生しました:', err);
-            alert('画像のダウンロード処理中にエラーが発生しました。コンソールを確認してください。');
+            alert(exportTooLargeMessage(currentState));
         }
     } else {
-        alert('出力用Canvasの生成に失敗しました。');
+        alert(exportTooLargeMessage(currentState));
     }
+}
+
+// 書き出し失敗時のメッセージ。到達経路（JPEG 変換の失敗・Exif 埋め込み時の読み込み失敗・
+// 出力用 Canvas のコンテキスト取得失敗）はいずれも出力画像の大きさ（iOS Safari のキャンバス
+// 面積上限やメモリ上限）が原因なので、出力サイズを添えてそれを伝える。
+function exportTooLargeMessage(currentState) {
+    const { width, height } = currentState.outputCanvasConfig || {};
+    const size = (width > 0 && height > 0)
+        ? `（${Math.round(width)}×${Math.round(height)} px、約${Math.round(width * height / 10000).toLocaleString()}万画素）`
+        : '';
+    return `画像を書き出せませんでした。出力サイズ${size}が大きすぎて、この端末では処理できない可能性があります。\n` +
+        'キャンバスの比率や写真の大きさを見直すか、パソコンなど別の端末でお試しください。';
 }
